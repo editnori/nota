@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../hooks/useStore'
 import { loadQuestions, getQuestion } from '../lib/questions'
-import { X, Plus, MessageSquare } from 'lucide-react'
+import { X, Plus, MessageSquare, Check } from 'lucide-react'
 
 interface Props {
   noteId: string
@@ -9,7 +9,7 @@ interface Props {
 
 export function AnnotationList({ noteId }: Props) {
   const { annotations, removeAnnotation, updateAnnotation } = useStore()
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editingComment, setEditingComment] = useState<{ id: string, text: string } | null>(null)
   const [addingQuestionTo, setAddingQuestionTo] = useState<string | null>(null)
   const noteAnnotations = annotations.filter(a => a.noteId === noteId)
   const questions = loadQuestions()
@@ -29,8 +29,21 @@ export function AnnotationList({ noteId }: Props) {
     }
   }
 
-  function handleCommentChange(annId: string, comment: string) {
-    updateAnnotation(annId, { comment: comment || undefined })
+  function startEditingComment(annId: string, currentComment: string) {
+    setEditingComment({ id: annId, text: currentComment || '' })
+  }
+
+  function submitComment() {
+    if (editingComment) {
+      updateAnnotation(editingComment.id, { 
+        comment: editingComment.text.trim() || undefined 
+      })
+      setEditingComment(null)
+    }
+  }
+
+  function cancelComment() {
+    setEditingComment(null)
   }
 
   if (noteAnnotations.length === 0) {
@@ -53,8 +66,8 @@ export function AnnotationList({ noteId }: Props) {
       </div>
       <div className="space-y-2">
         {noteAnnotations.map(ann => {
-          const isExpanded = expandedId === ann.id
           const isAddingQuestion = addingQuestionTo === ann.id
+          const isEditingComment = editingComment?.id === ann.id
           const availableQuestions = questions.filter(q => !ann.questions.includes(q.id))
           
           return (
@@ -112,22 +125,50 @@ export function AnnotationList({ noteId }: Props) {
                     "{ann.text}"
                   </div>
                   
-                  {(ann.comment || isExpanded) && (
+                  {/* Show existing comment */}
+                  {ann.comment && !isEditingComment && (
+                    <div 
+                      className="mt-2 text-[10px] text-maple-500 italic bg-white p-1.5 rounded border border-maple-100 cursor-pointer hover:border-maple-300"
+                      onClick={() => startEditingComment(ann.id, ann.comment || '')}
+                      title="Click to edit"
+                    >
+                      {ann.comment}
+                    </div>
+                  )}
+                  
+                  {/* Comment editor */}
+                  {isEditingComment && (
                     <div className="mt-2">
                       <textarea
-                        value={ann.comment || ''}
-                        onChange={e => handleCommentChange(ann.id, e.target.value)}
+                        value={editingComment.text}
+                        onChange={e => setEditingComment({ ...editingComment, text: e.target.value })}
                         placeholder="Add a comment..."
-                        className="w-full text-[10px] p-1.5 bg-white border border-maple-200 rounded resize-none focus:outline-none focus:border-maple-400"
+                        className="w-full text-[10px] p-1.5 bg-white border border-maple-300 rounded resize-none focus:outline-none focus:border-maple-400"
                         rows={2}
+                        autoFocus
                       />
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          onClick={submitComment}
+                          className="flex items-center gap-1 text-[9px] px-2 py-1 bg-maple-800 text-white rounded hover:bg-maple-700"
+                        >
+                          <Check size={10} />
+                          Save
+                        </button>
+                        <button
+                          onClick={cancelComment}
+                          className="text-[9px] px-2 py-1 text-maple-500 hover:text-maple-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
                 <div className="flex flex-col gap-1">
-                  {!ann.comment && !isExpanded && (
+                  {!ann.comment && !isEditingComment && (
                     <button
-                      onClick={() => setExpandedId(ann.id)}
+                      onClick={() => startEditingComment(ann.id, '')}
                       className="p-1 text-maple-300 hover:text-maple-500 hover:bg-maple-100 rounded"
                       title="Add comment"
                     >

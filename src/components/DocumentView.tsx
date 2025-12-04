@@ -1,6 +1,6 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useStore } from '../hooks/useStore'
-import { getQuestion } from '../lib/questions'
+import { getQuestion, loadQuestions } from '../lib/questions'
 import { ChevronLeft, ChevronRight, SkipForward } from 'lucide-react'
 
 interface Props {
@@ -8,8 +8,9 @@ interface Props {
 }
 
 export function DocumentView({ onCreateAnnotation }: Props) {
-  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex } = useStore()
+  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, updateAnnotation } = useStore()
   const docRef = useRef<HTMLDivElement>(null)
+  const [activeSpan, setActiveSpan] = useState<{ annotationIds: string[], position: { x: number, y: number } } | null>(null)
 
   const note = notes[currentNoteIndex]
   const noteAnnotations = note ? annotations.filter(a => a.noteId === note.id) : []
@@ -41,6 +42,27 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     sel.removeAllRanges()
   }, [onCreateAnnotation])
 
+  function handleSpanClick(e: React.MouseEvent, annotationIds: string[]) {
+    e.stopPropagation()
+    const rect = (e.target as HTMLElement).getBoundingClientRect()
+    setActiveSpan({
+      annotationIds,
+      position: { x: rect.left, y: rect.bottom + 4 }
+    })
+  }
+
+  function handleAddQuestionToSpan(questionId: string) {
+    if (!activeSpan) return
+    
+    activeSpan.annotationIds.forEach(annId => {
+      const ann = annotations.find(a => a.id === annId)
+      if (ann && !ann.questions.includes(questionId)) {
+        updateAnnotation(annId, { questions: [...ann.questions, questionId] })
+      }
+    })
+    setActiveSpan(null)
+  }
+
   if (!note) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -53,9 +75,10 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   }
 
   const segments = buildSegments(note.text, noteAnnotations)
+  const questions = loadQuestions()
 
   return (
-    <div className="flex-1 flex flex-col min-w-0">
+    <div className="flex-1 flex flex-col min-w-0" onClick={() => setActiveSpan(null)}>
       <div className="h-10 bg-white border-b border-maple-200 flex items-center px-3 gap-2">
         <div className="flex items-center bg-maple-100 rounded-full shrink-0">
           <button
@@ -113,28 +136,93 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                   return <span key={i}>{seg.text}</span>
                 }
                 
-                const q = getQuestion(seg.questions[0])
-                const color = q?.color || '#888'
+                const colors = seg.questions.map(qid => getQuestion(qid)?.color || '#888')
+                const primaryColor = colors[0]
+                
+                // Create gradient border for multiple questions
+                const borderStyle = colors.length > 1
+                  ? `linear-gradient(90deg, ${colors.join(', ')})`
+                  : primaryColor
                 
                 return (
-                  <mark
-                    key={i}
-                    className="rounded px-0.5 py-0.5"
-                    style={{
-                      backgroundColor: `${color}25`,
-                      borderBottom: `2px solid ${color}`,
-                      color: 'inherit'
-                    }}
-                    title={seg.questions.map(qid => getQuestion(qid)?.name || qid).join(', ')}
-                  >
-                    {seg.text}
-                  </mark>
+                  <span key={i} className="relative inline">
+                    <mark
+                      className="rounded px-0.5 py-0.5 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-maple-400"
+                      style={{
+                        backgroundColor: `${primaryColor}20`,
+                        borderBottom: colors.length > 1 ? 'none' : `2px solid ${primaryColor}`,
+                        color: 'inherit'
+                      }}
+                      title={`${seg.questions.map(qid => getQuestion(qid)?.name || qid).join(' + ')}\n(click to add more)`}
+                      onClick={(e) => handleSpanClick(e, seg.annotationIds)}
+                    >
+                      {seg.text}
+                      {colors.length > 1 && (
+                        <span 
+                          className="absolute bottom-0 left-0 right-0 h-0.5"
+                          style={{ background: borderStyle }}
+                        />
+                      )}
+                    </mark>
+                    {/* Show question indicators */}
+                    {colors.length > 0 && (
+                      <span className="inline-flex gap-px ml-0.5 align-middle">
+                        {colors.map((color, ci) => (
+                          <span
+                            key={ci}
+                            className="w-1.5 h-1.5 rounded-full inline-block"
+                            style={{ backgroundColor: color }}
+                            title={getQuestion(seg.questions[ci])?.name}
+                          />
+                        ))}
+                      </span>
+                    )}
+                  </span>
                 )
               })}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Question picker popup for adding to existing span */}
+      {activeSpan && (
+        <div
+          className="fixed z-50 bg-white border border-maple-200 rounded-lg shadow-lg p-2 max-w-xs"
+          style={{ left: activeSpan.position.x, top: activeSpan.position.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="text-[10px] text-maple-500 mb-2">Add another question:</div>
+          <div className="flex flex-wrap gap-1">
+            {questions.map(q => {
+              // Check if all annotations already have this question
+              const allHave = activeSpan.annotationIds.every(annId => {
+                const ann = annotations.find(a => a.id === annId)
+                return ann?.questions.includes(q.id)
+              })
+              
+              if (allHave) return null
+              
+              return (
+                <button
+                  key={q.id}
+                  onClick={() => handleAddQuestionToSpan(q.id)}
+                  className="text-[9px] px-2 py-1 rounded text-white hover:opacity-80"
+                  style={{ backgroundColor: q.color }}
+                >
+                  {q.hotkey}. {q.name}
+                </button>
+              )
+            })}
+          </div>
+          <button
+            onClick={() => setActiveSpan(null)}
+            className="mt-2 text-[10px] text-maple-400 hover:text-maple-600"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -143,11 +231,12 @@ interface Segment {
   type: 'plain' | 'highlight'
   text: string
   questions: string[]
+  annotationIds: string[]
 }
 
-function buildSegments(text: string, annotations: { start: number; end: number; questions: string[] }[]): Segment[] {
+function buildSegments(text: string, annotations: { id: string; start: number; end: number; questions: string[] }[]): Segment[] {
   if (annotations.length === 0) {
-    return [{ type: 'plain', text, questions: [] }]
+    return [{ type: 'plain', text, questions: [], annotationIds: [] }]
   }
 
   const points = new Set<number>([0, text.length])
@@ -167,10 +256,11 @@ function buildSegments(text: string, annotations: { start: number; end: number; 
     const covering = annotations.filter(a => a.start <= start && a.end >= end)
     
     if (covering.length === 0) {
-      segments.push({ type: 'plain', text: segText, questions: [] })
+      segments.push({ type: 'plain', text: segText, questions: [], annotationIds: [] })
     } else {
       const questions = [...new Set(covering.flatMap(a => a.questions))]
-      segments.push({ type: 'highlight', text: segText, questions })
+      const annotationIds = covering.map(a => a.id)
+      segments.push({ type: 'highlight', text: segText, questions, annotationIds })
     }
   }
 
