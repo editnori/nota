@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { X, Search, ChevronRight, Ban, Plus } from 'lucide-react'
+import { X, Search, ChevronRight, Ban, Plus, Trash2 } from 'lucide-react'
 import { loadQuestions } from '../lib/questions'
 import type { Note } from '../lib/types'
 
@@ -31,13 +31,14 @@ export interface Match {
 interface Props {
   notes: Note[]
   onApply: (noteIds: Set<string>, matches?: Match[]) => void
+  onDeleteNonMatching?: (noteIdsToKeep: Set<string>) => void
   onClose: () => void
 }
 
 const PATTERNS_KEY = 'nota_filter_patterns'
 const STATE_KEY = 'nota_filter_state'
 
-export function SmartFilter({ notes, onApply, onClose }: Props) {
+export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Props) {
   const questions = loadQuestions()
   
   const [patterns, setPatterns] = useState<Record<string, { terms: string[]; regex: string[]; negation: boolean }>>(() => {
@@ -361,12 +362,28 @@ export function SmartFilter({ notes, onApply, onClose }: Props) {
         <div className="flex items-center justify-between px-3 py-2 border-t border-maple-200 dark:border-maple-700 bg-maple-50 dark:bg-maple-700/50">
           <span className="text-[11px]">
             <b className="text-maple-700 dark:text-maple-200">{matchingNotes.size}</b>
-            <span className="text-maple-400"> notes</span>
+            <span className="text-maple-400"> / {notes.length} notes</span>
             {excludedCount > 0 && <span className="text-maple-400"> ({excludedCount} excluded)</span>}
           </span>
-          <button onClick={apply} className="flex items-center gap-1 px-3 py-1 text-[11px] bg-maple-700 text-white rounded">
-            <Search size={11} /> Apply
-          </button>
+          <div className="flex items-center gap-2">
+            {onDeleteNonMatching && matchingNotes.size > 0 && matchingNotes.size < notes.length && (
+              <button 
+                onClick={() => {
+                  if (confirm(`Delete ${notes.length - matchingNotes.size} non-matching notes? This cannot be undone.`)) {
+                    onDeleteNonMatching(matchingNotes)
+                    onClose()
+                  }
+                }} 
+                className="flex items-center gap-1 px-2 py-1 text-[10px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                title="Permanently delete notes that don't match filter"
+              >
+                <Trash2 size={10} /> Delete {notes.length - matchingNotes.size}
+              </button>
+            )}
+            <button onClick={apply} className="flex items-center gap-1 px-3 py-1 text-[11px] bg-maple-700 text-white rounded">
+              <Search size={11} /> Filter
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useStore } from './hooks/useStore'
 import { useKeyboard } from './hooks/useKeyboard'
 import { Header } from './components/Header'
@@ -49,16 +49,15 @@ export default function App() {
       })
       
       if (imported.length > 0) {
-        await new Promise(r => setTimeout(r, 50))
         if (notes.length > 0) {
           addNotes(imported)
         } else {
           setNotes(imported)
         }
-        setTimeout(() => setImporting(false), 1000)
+        setTimeout(() => setImporting(false), 500)
       } else {
         setImporting(true, 'No valid files found')
-        setTimeout(() => setImporting(false), 1500)
+        setTimeout(() => setImporting(false), 1000)
       }
     } catch (err) {
       console.error('Import error:', err)
@@ -67,17 +66,28 @@ export default function App() {
     }
   }
 
+  // Track drag enter/leave count to handle nested elements
+  const dragCountRef = React.useRef(0)
+
+  function handleDragEnter(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCountRef.current++
+    if (dragCountRef.current === 1) {
+      setIsDragging(true)
+    }
+  }
+
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault()
     e.stopPropagation()
-    setIsDragging(true)
   }
 
   function handleDragLeave(e: React.DragEvent) {
     e.preventDefault()
     e.stopPropagation()
-    // Only set false if we're leaving the main container
-    if (e.currentTarget === e.target) {
+    dragCountRef.current--
+    if (dragCountRef.current === 0) {
       setIsDragging(false)
     }
   }
@@ -145,7 +155,8 @@ export default function App() {
   return (
     <div 
       className="h-screen flex flex-col bg-maple-50 dark:bg-maple-900 relative"
-      onDrop={handleDrop}
+      onDrop={(e) => { dragCountRef.current = 0; handleDrop(e) }}
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
     >

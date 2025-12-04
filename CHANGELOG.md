@@ -2,14 +2,28 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.33] - 2025-12-04
+
+### Fixed
+- **Drag-drop folders works again**: 
+  - Fixed using dragEnter/dragLeave counter pattern
+  - Properly tracks nested element drag events
+  - Drop overlay shows correctly
+
+### Added
+- **Delete non-matching notes in Smart Filter**:
+  - New "Delete X" button when filter has matches
+  - Permanently removes notes that don't match current filter
+  - Confirmation required before deletion
+
+### Improved
+- Faster import (removed unnecessary delays)
+- Smart Filter shows "X / Y notes" count
+
 ## [0.0.32] - 2025-12-04
 
 ### Fixed
-- **Windows installer now shows Nota icon**: 
-  - Generated all required PNG sizes (16, 32, 48, 64, 128, 256)
-  - Rebuilt icon.ico with multiple embedded sizes
-  - Added NSIS-specific icon configuration
-  - Installer .exe should now display the orange "N" logo
+- Windows installer icon (all PNG sizes + NSIS config)
 
 ## [0.0.31] - 2025-12-04
 

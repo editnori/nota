@@ -15,7 +15,7 @@ interface MatchLocation {
 }
 
 export function NotesList() {
-  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, addBulkAnnotations, filteredNoteIds, setFilteredNoteIds } = useStore()
+  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, addBulkAnnotations, filteredNoteIds, setFilteredNoteIds, setNotes } = useStore()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'done' | 'todo'>('all')
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
@@ -192,6 +192,13 @@ export function NotesList() {
   }
 
   function clearSmartFilter() {
+    setFilteredNoteIds(null)
+    setPage(0)
+  }
+
+  function handleDeleteNonMatching(noteIdsToKeep: Set<string>) {
+    const keptNotes = notes.filter(n => noteIdsToKeep.has(n.id))
+    setNotes(keptNotes)
     setFilteredNoteIds(null)
     setPage(0)
   }
@@ -385,6 +392,7 @@ export function NotesList() {
         <SmartFilter
           notes={notes}
           onApply={handleSmartFilterApply}
+          onDeleteNonMatching={handleDeleteNonMatching}
           onClose={() => setShowSmartFilter(false)}
         />
       )}
