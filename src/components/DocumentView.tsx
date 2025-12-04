@@ -27,7 +27,7 @@ interface OverlapPrompt {
 }
 
 export function DocumentView({ onCreateAnnotation }: Props) {
-  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, updateAnnotation, removeAnnotation, fontSize, setFontSize, highlightedAnnotation } = useStore()
+  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, updateAnnotation, removeAnnotation, fontSize, setFontSize, highlightedAnnotation, getAnnotationsForNote, annotationsByNote } = useStore()
   const docRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [activeSpan, setActiveSpan] = useState<{ annotationIds: string[] } | null>(null)
@@ -43,18 +43,25 @@ export function DocumentView({ onCreateAnnotation }: Props) {
 
   const note = notes[currentNoteIndex]
   
-  // Memoize for performance with large datasets
+  // Use indexed lookup for O(1) access - only depends on note.id and annotationsByNote
   const noteAnnotations = useMemo(() => {
     if (!note) return []
-    return annotations.filter(a => a.noteId === note.id)
-  }, [note, annotations])
+    return getAnnotationsForNote(note.id)
+  }, [note?.id, getAnnotationsForNote, annotationsByNote])
   
-  // Find notes with annotations for navigation
-  const { nextUnannotatedIndex, hasUnannotated } = useMemo(() => {
-    const annotatedNoteIds = new Set<string>()
-    for (const a of annotations) {
-      annotatedNoteIds.add(a.noteId)
+  // Build annotation ID -> annotation map for O(1) lookups in handlers
+  const annotationMap = useMemo(() => {
+    const map = new Map<string, typeof annotations[0]>()
+    for (const a of noteAnnotations) {
+      map.set(a.id, a)
     }
+    return map
+  }, [noteAnnotations])
+  
+  // Find notes with annotations for navigation - use index keys for O(1)
+  const { nextUnannotatedIndex, hasUnannotated } = useMemo(() => {
+    // Use the index directly - keys are noteIds that have annotations
+    const annotatedNoteIds = annotationsByNote
     
     let nextIdx = -1
     for (let i = currentNoteIndex + 1; i < notes.length; i++) {
@@ -64,10 +71,17 @@ export function DocumentView({ onCreateAnnotation }: Props) {
       }
     }
     
-    const hasUnannotated = notes.some(n => !annotatedNoteIds.has(n.id))
+    // Check if any note is unannotated
+    let hasUnannotated = false
+    for (const n of notes) {
+      if (!annotatedNoteIds.has(n.id)) {
+        hasUnannotated = true
+        break
+      }
+    }
     
     return { nextUnannotatedIndex: nextIdx, hasUnannotated }
-  }, [annotations, notes, currentNoteIndex])
+  }, [annotationsByNote, notes, currentNoteIndex])
 
   // Scroll to highlighted annotation when it changes - with smooth animation
   useEffect(() => {
@@ -180,7 +194,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   function handleOverlapExtend() {
     if (!overlapPrompt || !note) return
     
-    const existing = annotations.find(a => a.id === overlapPrompt.overlappingId)
+    const existing = annotationMap.get(overlapPrompt.overlappingId)
     if (!existing) return
     
     // Extend to cover both (keep same questions)
@@ -199,7 +213,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   function handleOverlapMerge() {
     if (!overlapPrompt || !note) return
     
-    const existing = annotations.find(a => a.id === overlapPrompt.overlappingId)
+    const existing = annotationMap.get(overlapPrompt.overlappingId)
     if (!existing) return
     
     const { selectedQuestion } = useStore.getState()
@@ -247,7 +261,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     
     // Edit the first annotation's span
     const annId = annotationIds[0]
-    const ann = annotations.find(a => a.id === annId)
+    const ann = annotationMap.get(annId)
     if (!ann) return
     
     const rect = (e.target as HTMLElement).getBoundingClientRect()
@@ -266,7 +280,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     if (!activeSpan) return
     
     activeSpan.annotationIds.forEach(annId => {
-      const ann = annotations.find(a => a.id === annId)
+      const ann = annotationMap.get(annId)
       if (!ann) return
       
       if (ann.questions.includes(questionId)) {
@@ -318,7 +332,11 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     )
   }
 
-  const segments = buildSegments(note.text, noteAnnotations, annotations)
+  // Memoize segment building for performance
+  const segments = useMemo(() => {
+    return buildSegments(note.text, noteAnnotations)
+  }, [note.text, noteAnnotations])
+  
   const questions = loadQuestions()
 
   return (
@@ -479,13 +497,13 @@ export function DocumentView({ onCreateAnnotation }: Props) {
             {questions.map(q => {
               // Check if any annotation has this question
               const hasQuestion = activeSpan.annotationIds.some(annId => {
-                const ann = annotations.find(a => a.id === annId)
+                const ann = annotationMap.get(annId)
                 return ann?.questions.includes(q.id)
               })
               
               // Check if this is the only question (can't remove last one)
               const isOnlyQuestion = hasQuestion && activeSpan.annotationIds.every(annId => {
-                const ann = annotations.find(a => a.id === annId)
+                const ann = annotationMap.get(annId)
                 return ann?.questions.length === 1 && ann.questions[0] === q.id
               })
               
@@ -535,7 +553,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
 
       {/* Overlap/Adjacent prompt */}
       {overlapPrompt && (() => {
-        const existing = annotations.find(a => a.id === overlapPrompt.overlappingId)
+        const existing = annotationMap.get(overlapPrompt.overlappingId)
         const { selectedQuestion } = useStore.getState()
         const selectedQ = selectedQuestion ? getQuestion(selectedQuestion) : null
         const canMerge = selectedQ && existing && selectedQuestion && !existing.questions.includes(selectedQuestion)
@@ -715,44 +733,65 @@ interface Segment {
   isSuggested: boolean
 }
 
+// Optimized segment building - annotations already have source field
 function buildSegments(
   text: string, 
-  noteAnnotations: { id: string; start: number; end: number; questions: string[] }[],
-  allAnnotations: { id: string; source?: string }[]
+  noteAnnotations: { id: string; start: number; end: number; questions: string[]; source?: string }[]
 ): Segment[] {
   if (noteAnnotations.length === 0) {
     return [{ type: 'plain', text, questions: [], annotationIds: [], isSuggested: false }]
   }
 
-  const points = new Set<number>([0, text.length])
+  // Build points array directly (faster than Set for small arrays)
+  const points: number[] = [0, text.length]
   for (const a of noteAnnotations) {
-    points.add(Math.max(0, a.start))
-    points.add(Math.min(text.length, a.end))
+    const start = Math.max(0, a.start)
+    const end = Math.min(text.length, a.end)
+    if (!points.includes(start)) points.push(start)
+    if (!points.includes(end)) points.push(end)
   }
 
-  const sorted = Array.from(points).sort((a, b) => a - b)
+  points.sort((a, b) => a - b)
   const segments: Segment[] = []
 
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const start = sorted[i]
-    const end = sorted[i + 1]
+  for (let i = 0; i < points.length - 1; i++) {
+    const start = points[i]
+    const end = points[i + 1]
     const segText = text.slice(start, end)
 
-    const covering = noteAnnotations.filter(a => a.start <= start && a.end >= end)
+    // Find covering annotations
+    const covering: typeof noteAnnotations = []
+    for (const a of noteAnnotations) {
+      if (a.start <= start && a.end >= end) {
+        covering.push(a)
+      }
+    }
     
     if (covering.length === 0) {
       segments.push({ type: 'plain', text: segText, questions: [], annotationIds: [], isSuggested: false })
     } else {
-      const questions = [...new Set(covering.flatMap(a => a.questions))]
-      const annotationIds = covering.map(a => a.id)
+      // Collect unique questions
+      const questionsSet = new Set<string>()
+      const annotationIds: string[] = []
+      let isSuggested = false
       
-      // Check if any of the covering annotations are suggested
-      const isSuggested = covering.some(c => {
-        const fullAnn = allAnnotations.find(a => a.id === c.id)
-        return fullAnn?.source === 'suggested'
+      for (const c of covering) {
+        annotationIds.push(c.id)
+        for (const q of c.questions) {
+          questionsSet.add(q)
+        }
+        if (c.source === 'suggested') {
+          isSuggested = true
+        }
+      }
+      
+      segments.push({ 
+        type: 'highlight', 
+        text: segText, 
+        questions: Array.from(questionsSet), 
+        annotationIds, 
+        isSuggested 
       })
-      
-      segments.push({ type: 'highlight', text: segText, questions, annotationIds, isSuggested })
     }
   }
 

@@ -2,14 +2,26 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.36] - 2025-12-04
+
+### Performance (DocumentView optimization)
+- **DocumentView uses indexed lookups**: 
+  - `noteAnnotations` from `getAnnotationsForNote()` O(1)
+  - `annotationMap` for O(1) lookups in all handlers
+  - `annotationsByNote` for unannotated note navigation
+- **Memoized segment building**: `buildSegments()` now in `useMemo()`
+- **Optimized buildSegments**: 
+  - No more `allAnnotations.find()` - uses `source` directly
+  - Inline loops instead of filter/flatMap
+- **All handlers use Map.get()**: No more `annotations.find()` calls
+
 ## [0.0.35] - 2025-12-04
 
 ### Performance (continued 30k+ optimization)
-- **Annotation index by note**: `annotationsByNote` Map for O(1) lookup
-  - `getAnnotationsForNote(noteId)` instant access
-  - No more filtering 30k annotations to find 5 for current note
-- **Index auto-maintained**: All annotation CRUD operations update index
-- **AnnotationList uses index**: Memoized sorted view from indexed data
+- Annotation index by note: `annotationsByNote` Map
+- `getAnnotationsForNote(noteId)` for instant access
+- Index auto-maintained on CRUD
+- AnnotationList uses indexed data
 
 ## [0.0.34] - 2025-12-04
 
