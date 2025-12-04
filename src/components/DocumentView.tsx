@@ -10,7 +10,9 @@ interface Props {
 export function DocumentView({ onCreateAnnotation }: Props) {
   const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, updateAnnotation, fontSize, setFontSize, highlightedAnnotation } = useStore()
   const docRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [activeSpan, setActiveSpan] = useState<{ annotationIds: string[], position: { x: number, y: number } } | null>(null)
+  const [glowingMarkId, setGlowingMarkId] = useState<string | null>(null)
 
   const note = notes[currentNoteIndex]
   
@@ -40,22 +42,36 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     return { nextUnannotatedIndex: nextIdx, hasUnannotated }
   }, [annotations, notes, currentNoteIndex])
 
-  // Scroll to highlighted annotation when it changes
+  // Scroll to highlighted annotation when it changes - with smooth animation
   useEffect(() => {
-    if (highlightedAnnotation && docRef.current) {
-      const ann = noteAnnotations.find(a => a.id === highlightedAnnotation)
-      if (ann) {
-        // Find the mark element that contains this annotation
-        const marks = docRef.current.querySelectorAll('mark')
-        marks.forEach(mark => {
-          const ids = mark.getAttribute('data-ann-ids')
-          if (ids && ids.includes(highlightedAnnotation)) {
-            mark.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          }
-        })
-      }
+    if (highlightedAnnotation && docRef.current && scrollContainerRef.current) {
+      // Small delay to allow DOM to render
+      requestAnimationFrame(() => {
+        const mark = docRef.current?.querySelector(`mark[data-ann-ids*="${highlightedAnnotation}"]`)
+        if (mark && scrollContainerRef.current) {
+          // Calculate position for smooth centered scroll
+          const container = scrollContainerRef.current
+          const markRect = mark.getBoundingClientRect()
+          const containerRect = container.getBoundingClientRect()
+          
+          // Calculate target scroll position to center the element
+          const targetScroll = container.scrollTop + markRect.top - containerRect.top - containerRect.height / 2 + markRect.height / 2
+          
+          // Smooth scroll
+          container.scrollTo({
+            top: Math.max(0, targetScroll),
+            behavior: 'smooth'
+          })
+          
+          // After scroll completes, trigger glow
+          setTimeout(() => {
+            setGlowingMarkId(highlightedAnnotation)
+            setTimeout(() => setGlowingMarkId(null), 2000)
+          }, 300)
+        }
+      })
     }
-  }, [highlightedAnnotation, noteAnnotations])
+  }, [highlightedAnnotation])
 
   const handleTextSelect = useCallback(() => {
     const sel = window.getSelection()
@@ -97,7 +113,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
         updateAnnotation(annId, { questions: [...ann.questions, questionId] })
       }
     })
-    setActiveSpan(null)
+    // Don't close popup - let user click multiple questions
   }
 
   if (!note) {
@@ -178,7 +194,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 bg-maple-50 dark:bg-maple-900">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 bg-maple-50 dark:bg-maple-900">
         <div className="max-w-3xl mx-auto">
           <div className="bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-700 rounded-xl shadow-sm p-6">
             <div
@@ -196,7 +212,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                 const colors = seg.questions.map(qid => getQuestion(qid)?.color || '#888')
                 const primaryColor = colors[0]
                 const isSuggested = seg.isSuggested
-                const isHighlighted = seg.annotationIds.includes(highlightedAnnotation || '')
+                const isGlowing = seg.annotationIds.some(id => id === glowingMarkId)
                 
                 // Create gradient border for multiple questions
                 const borderStyle = colors.length > 1
@@ -208,7 +224,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                     <mark
                       data-ann-ids={seg.annotationIds.join(',')}
                       className={`rounded px-0.5 py-0.5 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-maple-400 transition-all ${
-                        isHighlighted ? 'ring-2 ring-maple-500 animate-pulse' : ''
+                        isGlowing ? 'animate-glow' : ''
                       }`}
                       style={{
                         backgroundColor: `${primaryColor}${isSuggested ? '15' : '20'}`,
@@ -248,14 +264,14 @@ export function DocumentView({ onCreateAnnotation }: Props) {
         </div>
       </div>
 
-      {/* Question picker popup for adding to existing span */}
+      {/* Question picker popup for adding to existing span - stays open until clicked away */}
       {activeSpan && (
         <div
           className="fixed z-50 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg p-2 max-w-xs"
           style={{ left: activeSpan.position.x, top: activeSpan.position.y }}
           onClick={e => e.stopPropagation()}
         >
-          <div className="text-[10px] text-maple-500 dark:text-maple-400 mb-2">Add another question:</div>
+          <div className="text-[10px] text-maple-500 dark:text-maple-400 mb-2">Add questions to this span:</div>
           <div className="flex flex-wrap gap-1">
             {questions.map(q => {
               // Check if all annotations already have this question
@@ -264,14 +280,16 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                 return ann?.questions.includes(q.id)
               })
               
-              if (allHave) return null
-              
               return (
                 <button
                   key={q.id}
                   onClick={() => handleAddQuestionToSpan(q.id)}
-                  className="text-[9px] px-2 py-1 rounded text-white hover:opacity-80"
+                  disabled={allHave}
+                  className={`text-[9px] px-2 py-1 rounded text-white transition-all ${
+                    allHave ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-80 hover:scale-105'
+                  }`}
                   style={{ backgroundColor: q.color }}
+                  title={allHave ? 'Already tagged' : `Add "${q.name}"`}
                 >
                   {q.hotkey}. {q.name}
                 </button>
@@ -282,7 +300,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
             onClick={() => setActiveSpan(null)}
             className="mt-2 text-[10px] text-maple-400 dark:text-maple-500 hover:text-maple-600 dark:hover:text-maple-300"
           >
-            Cancel
+            Done
           </button>
         </div>
       )}

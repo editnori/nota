@@ -226,13 +226,17 @@ export function Header() {
   }
 
   async function handleClearEverything() {
-    const confirmMsg = `This will permanently delete:\n- ${notes.length} notes\n- ${annotations.length} annotations\n\nAre you sure? This cannot be undone.`
-    if (confirm(confirmMsg)) {
-      if (confirm('Final confirmation: Delete everything?')) {
-        await clearSession()
-      }
-    }
     setShowClearMenu(false)
+    
+    // First confirmation
+    const confirmMsg = `This will permanently delete:\n- ${notes.length} notes\n- ${annotations.length} annotations\n\nAre you sure? This cannot be undone.`
+    if (!confirm(confirmMsg)) return
+    
+    // Second confirmation
+    if (!confirm('Final confirmation: Delete everything?')) return
+    
+    // Only clear after both confirmations
+    await clearSession()
   }
 
   return (

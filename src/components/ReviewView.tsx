@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useStore } from '../hooks/useStore'
 import { useDebounce } from '../hooks/useDebounce'
 import { loadQuestions, getQuestion } from '../lib/questions'
-import { X, ExternalLink, Search, Wand2, Loader2 } from 'lucide-react'
+import { X, ExternalLink, Search, Wand2, Loader2, MessageSquare } from 'lucide-react'
 
 const PAGE_SIZE = 50
 
@@ -10,11 +10,13 @@ export function ReviewView() {
   const { notes, annotations, removeAnnotation, setMode, setCurrentNoteIndex, addBulkAnnotations, setHighlightedAnnotation, highlightedAnnotation } = useStore()
   const [selectedQ, setSelectedQ] = useState<string | null>(null)
   const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'auto'>('all')
+  const [commentFilter, setCommentFilter] = useState<'all' | 'with' | 'without'>('all')
   const [searchText, setSearchText] = useState('')
   const [showBulkTag, setShowBulkTag] = useState(false)
   const [bulkSearch, setBulkSearch] = useState('')
   const [excludedMatches, setExcludedMatches] = useState<Set<string>>(new Set())
   const [page, setPage] = useState(0)
+  const [highlightedCard, setHighlightedCard] = useState<string | null>(null)
   const questions = loadQuestions()
 
   // Debounce searches
@@ -48,6 +50,13 @@ export function ReviewView() {
       filtered = filtered.filter(a => a.source === 'suggested')
     }
     
+    // Comment filter
+    if (commentFilter === 'with') {
+      filtered = filtered.filter(a => a.comment && a.comment.trim().length > 0)
+    } else if (commentFilter === 'without') {
+      filtered = filtered.filter(a => !a.comment || a.comment.trim().length === 0)
+    }
+    
     // Question filter
     if (selectedQ) {
       filtered = filtered.filter(a => a.questions.includes(selectedQ))
@@ -56,11 +65,14 @@ export function ReviewView() {
     // Text search
     if (debouncedSearchText.trim()) {
       const lower = debouncedSearchText.toLowerCase()
-      filtered = filtered.filter(a => a.text.toLowerCase().includes(lower))
+      filtered = filtered.filter(a => 
+        a.text.toLowerCase().includes(lower) ||
+        (a.comment && a.comment.toLowerCase().includes(lower))
+      )
     }
     
     return filtered
-  }, [annotations, selectedQ, sourceFilter, debouncedSearchText])
+  }, [annotations, selectedQ, sourceFilter, commentFilter, debouncedSearchText])
 
   // Pagination
   const totalPages = Math.ceil(filteredAnnotations.length / PAGE_SIZE)
@@ -156,8 +168,21 @@ export function ReviewView() {
     setShowBulkTag(false)
   }
 
+  // Scroll to card when highlighted
+  useEffect(() => {
+    if (highlightedCard) {
+      const el = document.getElementById(`ann-card-${highlightedCard}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+      const timer = setTimeout(() => setHighlightedCard(null), 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [highlightedCard])
+
   const manualCount = annotations.filter(a => a.source !== 'suggested').length
   const suggestedCount = annotations.filter(a => a.source === 'suggested').length
+  const withCommentCount = annotations.filter(a => a.comment && a.comment.trim().length > 0).length
 
   return (
     <div className="flex-1 flex">
@@ -188,6 +213,31 @@ export function ReviewView() {
                 {f}
               </button>
             ))}
+          </div>
+
+          {/* Comment filter */}
+          <div className="flex text-[9px] border border-maple-200 dark:border-maple-600 rounded overflow-hidden">
+            <button
+              onClick={() => { setCommentFilter('all'); setPage(0) }}
+              className={`flex-1 py-1 ${commentFilter === 'all' ? 'bg-maple-800 dark:bg-maple-600 text-white' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'}`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => { setCommentFilter('with'); setPage(0) }}
+              className={`flex-1 py-1 flex items-center justify-center gap-0.5 ${commentFilter === 'with' ? 'bg-maple-800 dark:bg-maple-600 text-white' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'}`}
+              title="Has comment"
+            >
+              <MessageSquare size={9} />
+              {withCommentCount}
+            </button>
+            <button
+              onClick={() => { setCommentFilter('without'); setPage(0) }}
+              className={`flex-1 py-1 ${commentFilter === 'without' ? 'bg-maple-800 dark:bg-maple-600 text-white' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'}`}
+              title="No comment"
+            >
+              None
+            </button>
           </div>
         </div>
         
@@ -365,7 +415,7 @@ export function ReviewView() {
         {pagedAnnotations.length === 0 ? (
           <div className="flex items-center justify-center h-64">
             <p className="text-[11px] text-maple-400 dark:text-maple-500">
-              {searchText || selectedQ || sourceFilter !== 'all' ? 'No matches' : 'No annotations yet'}
+              {searchText || selectedQ || sourceFilter !== 'all' || commentFilter !== 'all' ? 'No matches' : 'No annotations yet'}
             </p>
           </div>
         ) : (
@@ -376,14 +426,15 @@ export function ReviewView() {
               const before = note?.text.slice(Math.max(0, ann.start - ctx), ann.start) || ''
               const after = note?.text.slice(ann.end, ann.end + ctx) || ''
               const isSuggested = ann.source === 'suggested'
-              const isHighlighted = highlightedAnnotation === ann.id
+              const isHighlighted = highlightedCard === ann.id
 
               return (
                 <div 
+                  id={`ann-card-${ann.id}`}
                   key={ann.id} 
                   className={`bg-white dark:bg-maple-800 border rounded-lg p-3 transition-all duration-300 ${
                     isSuggested ? 'border-maple-300 dark:border-maple-600 border-dashed' : 'border-maple-200 dark:border-maple-700'
-                  } ${isHighlighted ? 'ring-2 ring-maple-400 animate-pulse' : ''}`}
+                  } ${isHighlighted ? 'animate-ring ring-2 ring-amber-400' : ''}`}
                 >
                   <div className="flex items-start gap-2 mb-2">
                     <div className="flex flex-wrap gap-1 flex-1">
@@ -402,6 +453,11 @@ export function ReviewView() {
                       {isSuggested && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-maple-100 dark:bg-maple-700 text-maple-500 dark:text-maple-400 border border-maple-200 dark:border-maple-600 border-dashed">
                           auto
+                        </span>
+                      )}
+                      {ann.comment && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 flex items-center gap-0.5">
+                          <MessageSquare size={9} />
                         </span>
                       )}
                     </div>
@@ -437,7 +493,7 @@ export function ReviewView() {
 
                   <div className="mt-1.5 text-[9px] text-maple-400 dark:text-maple-500">
                     {ann.noteId}
-                    {ann.comment && <span className="ml-2 italic">"{ann.comment}"</span>}
+                    {ann.comment && <span className="ml-2 italic text-amber-600 dark:text-amber-400">"{ann.comment}"</span>}
                   </div>
                 </div>
               )

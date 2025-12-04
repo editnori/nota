@@ -104,7 +104,12 @@ export async function importTXT(files: File[], noteType?: string): Promise<Note[
   return notes
 }
 
-export async function importFolder(items: FileSystemEntry[]): Promise<Note[]> {
+type ProgressCallback = (filename: string) => void
+
+export async function importFolder(
+  items: FileSystemEntry[], 
+  onProgress?: ProgressCallback
+): Promise<Note[]> {
   const notes: Note[] = []
   
   async function processEntry(entry: FileSystemEntry, noteType?: string): Promise<void> {
@@ -113,6 +118,8 @@ export async function importFolder(items: FileSystemEntry[]): Promise<Note[]> {
       const file = await new Promise<File>((resolve, reject) => {
         fileEntry.file(resolve, reject)
       })
+      
+      onProgress?.(file.name)
       
       if (file.name.endsWith('.txt')) {
         const rawText = await file.text()
@@ -150,11 +157,18 @@ export async function importFolder(items: FileSystemEntry[]): Promise<Note[]> {
       // folder name becomes note type
       const folderNoteType = dirEntry.name
       
-      const entries = await new Promise<FileSystemEntry[]>((resolve, reject) => {
-        reader.readEntries(resolve, reject)
-      })
+      // readEntries may not return all entries at once, need to call repeatedly
+      let allEntries: FileSystemEntry[] = []
+      let batch: FileSystemEntry[]
       
-      for (const subEntry of entries) {
+      do {
+        batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+          reader.readEntries(resolve, reject)
+        })
+        allEntries = allEntries.concat(batch)
+      } while (batch.length > 0)
+      
+      for (const subEntry of allEntries) {
         await processEntry(subEntry, folderNoteType)
       }
     }
@@ -168,7 +182,10 @@ export async function importFolder(items: FileSystemEntry[]): Promise<Note[]> {
 }
 
 // Import from DataTransferItemList (for drag-drop)
-export async function importFromDataTransfer(items: DataTransferItemList): Promise<Note[]> {
+export async function importFromDataTransfer(
+  items: DataTransferItemList,
+  onProgress?: ProgressCallback
+): Promise<Note[]> {
   const entries: FileSystemEntry[] = []
   
   for (let i = 0; i < items.length; i++) {
@@ -185,7 +202,7 @@ export async function importFromDataTransfer(items: DataTransferItemList): Promi
     return []
   }
   
-  return importFolder(entries)
+  return importFolder(entries, onProgress)
 }
 
 function normalizeNote(raw: Record<string, unknown>): Note {

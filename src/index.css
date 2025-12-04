@@ -51,19 +51,46 @@ body {
   outline: none;
 }
 
-/* Pulse animation for highlighting items */
-@keyframes pulse-ring {
+/* Glow animation for highlighting items - like Windows Ctrl+Click finder */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0), 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+  10% {
+    box-shadow: 0 0 20px 8px rgba(251, 191, 36, 0.8), 0 0 40px 16px rgba(251, 191, 36, 0.4);
+  }
+  30% {
+    box-shadow: 0 0 15px 6px rgba(251, 191, 36, 0.6), 0 0 30px 12px rgba(251, 191, 36, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px 8px rgba(251, 191, 36, 0.8), 0 0 40px 16px rgba(251, 191, 36, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 15px 6px rgba(251, 191, 36, 0.6), 0 0 30px 12px rgba(251, 191, 36, 0.3);
+  }
+  90% {
+    box-shadow: 0 0 20px 8px rgba(251, 191, 36, 0.8), 0 0 40px 16px rgba(251, 191, 36, 0.4);
+  }
+}
+
+.animate-glow {
+  animation: glow-pulse 2s ease-in-out;
+  border-radius: 4px;
+}
+
+/* Ring animation for cards */
+@keyframes ring-pulse {
   0% {
     box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7);
   }
-  70% {
-    box-shadow: 0 0 0 10px rgba(251, 191, 36, 0);
+  50% {
+    box-shadow: 0 0 0 8px rgba(251, 191, 36, 0.3);
   }
   100% {
     box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
   }
 }
 
-.animate-pulse-ring {
-  animation: pulse-ring 1s ease-out;
+.animate-ring {
+  animation: ring-pulse 1.5s ease-out;
 }

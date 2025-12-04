@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useStore } from './hooks/useStore'
 import { useKeyboard } from './hooks/useKeyboard'
 import { Header } from './components/Header'
@@ -9,7 +9,7 @@ import { FormatView } from './components/FormatView'
 import { QuestionPicker } from './components/QuestionPicker'
 import { AnnotationList } from './components/AnnotationList'
 import { importFromDataTransfer } from './lib/importers'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Upload } from 'lucide-react'
 
 export default function App() {
   const { 
@@ -17,6 +17,7 @@ export default function App() {
     addNotes, setNotes, isLoaded, darkMode, 
     isImporting, importProgress, setImporting 
   } = useStore()
+  const [isDragging, setIsDragging] = useState(false)
 
   const currentNote = notes[currentNoteIndex]
   
@@ -31,13 +32,19 @@ export default function App() {
   // Handle drag-drop folders
   async function handleDrop(e: React.DragEvent) {
     e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
     
     if (e.dataTransfer.items.length === 0) return
     
     setImporting(true, 'Reading files...')
     
     try {
-      const imported = await importFromDataTransfer(e.dataTransfer.items)
+      let count = 0
+      const imported = await importFromDataTransfer(e.dataTransfer.items, (progress) => {
+        count++
+        setImporting(true, `Processing: ${progress} (${count} files)`)
+      })
       
       if (imported.length > 0) {
         setImporting(true, `Loading ${imported.length} notes...`)
@@ -66,6 +73,17 @@ export default function App() {
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    // Only set false if we're leaving the main container
+    if (e.currentTarget === e.target) {
+      setIsDragging(false)
+    }
   }
   
   const handleTagSelection = useCallback((questionId: string) => {
@@ -133,6 +151,7 @@ export default function App() {
       className="h-screen flex flex-col bg-maple-50 dark:bg-maple-900 relative"
       onDrop={handleDrop}
       onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
     >
       <Header />
       
@@ -155,10 +174,21 @@ export default function App() {
         {mode === 'format' && <FormatView />}
       </div>
 
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 bg-maple-600/20 dark:bg-maple-400/20 flex items-center justify-center z-50 pointer-events-none border-4 border-dashed border-maple-500 dark:border-maple-400 m-2 rounded-xl">
+          <div className="bg-white dark:bg-maple-800 rounded-xl p-8 shadow-2xl text-center">
+            <Upload className="w-12 h-12 text-maple-600 dark:text-maple-300 mx-auto mb-3" />
+            <p className="text-lg font-medium text-maple-700 dark:text-maple-200">Drop files or folders here</p>
+            <p className="text-sm text-maple-500 dark:text-maple-400 mt-1">TXT, JSON, JSONL files supported</p>
+          </div>
+        </div>
+      )}
+
       {/* Global import progress overlay */}
       {isImporting && (
         <div className="absolute inset-0 bg-maple-900/30 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-maple-800 rounded-xl p-6 shadow-lg text-center min-w-[200px]">
+          <div className="bg-white dark:bg-maple-800 rounded-xl p-6 shadow-lg text-center min-w-[250px]">
             <Loader2 className="w-8 h-8 animate-spin text-maple-600 dark:text-maple-300 mx-auto mb-3" />
             <p className="text-sm text-maple-600 dark:text-maple-300">{importProgress}</p>
           </div>
