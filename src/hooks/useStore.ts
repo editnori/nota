@@ -2,6 +2,12 @@ import { create } from 'zustand'
 import type { Note, Annotation, Mode } from '../lib/types'
 import { loadSession, saveSession, clearStorage } from '../lib/storage'
 
+interface UndoAction {
+  type: 'add' | 'remove' | 'update'
+  annotation: Annotation
+  previousState?: Partial<Annotation>
+}
+
 interface State {
   notes: Note[]
   annotations: Annotation[]
@@ -10,10 +16,14 @@ interface State {
   selectedQuestion: string | null
   lastSaved: number | null
   isLoaded: boolean
+  undoStack: UndoAction[]
+  fontSize: number
+  darkMode: boolean
   
   setNotes: (notes: Note[]) => void
   addNotes: (notes: Note[]) => void
   addAnnotation: (ann: Omit<Annotation, 'id' | 'createdAt'>) => void
+  addBulkAnnotations: (anns: Omit<Annotation, 'id' | 'createdAt' | 'source'>[]) => void
   removeAnnotation: (id: string) => void
   updateAnnotation: (id: string, updates: Partial<Annotation>) => void
   setCurrentNoteIndex: (index: number) => void
@@ -21,8 +31,12 @@ interface State {
   setSelectedQuestion: (q: string | null) => void
   clearNoteAnnotations: (noteId: string) => void
   clearAllAnnotations: () => void
+  clearSuggestedAnnotations: () => void
   clearSession: () => Promise<void>
   initSession: () => Promise<void>
+  undo: () => void
+  setFontSize: (size: number) => void
+  setDarkMode: (dark: boolean) => void
 }
 
 // Debounced save to avoid too many writes
@@ -42,6 +56,22 @@ function debouncedSave(state: State) {
   return Date.now()
 }
 
+// Load preferences from localStorage
+function loadPreferences() {
+  try {
+    const fontSize = localStorage.getItem('nota_fontSize')
+    const darkMode = localStorage.getItem('nota_darkMode')
+    return {
+      fontSize: fontSize ? parseInt(fontSize) : 13,
+      darkMode: darkMode === 'true'
+    }
+  } catch {
+    return { fontSize: 13, darkMode: false }
+  }
+}
+
+const prefs = loadPreferences()
+
 export const useStore = create<State>((set, get) => ({
   notes: [],
   annotations: [],
@@ -50,6 +80,9 @@ export const useStore = create<State>((set, get) => ({
   selectedQuestion: null,
   lastSaved: null,
   isLoaded: false,
+  undoStack: [],
+  fontSize: prefs.fontSize,
+  darkMode: prefs.darkMode,
 
   initSession: async () => {
     const data = await loadSession()
@@ -84,25 +117,53 @@ export const useStore = create<State>((set, get) => ({
     const annotation: Annotation = {
       ...ann,
       id,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      source: ann.source || 'manual'
     }
-    set(s => ({ annotations: [...s.annotations, annotation] }))
+    set(s => ({ 
+      annotations: [...s.annotations, annotation],
+      undoStack: [...s.undoStack.slice(-19), { type: 'add', annotation }]
+    }))
+    const ts = debouncedSave(get())
+    set({ lastSaved: ts })
+  },
+
+  addBulkAnnotations: (anns) => {
+    const newAnnotations: Annotation[] = anns.map((ann, i) => ({
+      ...ann,
+      id: `ann_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
+      createdAt: Date.now(),
+      source: 'suggested' as const
+    }))
+    set(s => ({ 
+      annotations: [...s.annotations, ...newAnnotations]
+    }))
     const ts = debouncedSave(get())
     set({ lastSaved: ts })
   },
 
   removeAnnotation: (id) => {
-    set(s => ({ annotations: s.annotations.filter(a => a.id !== id) }))
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
+    const ann = get().annotations.find(a => a.id === id)
+    if (ann) {
+      set(s => ({ 
+        annotations: s.annotations.filter(a => a.id !== id),
+        undoStack: [...s.undoStack.slice(-19), { type: 'remove', annotation: ann }]
+      }))
+      const ts = debouncedSave(get())
+      set({ lastSaved: ts })
+    }
   },
 
   updateAnnotation: (id, updates) => {
-    set(s => ({
-      annotations: s.annotations.map(a => a.id === id ? { ...a, ...updates } : a)
-    }))
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
+    const ann = get().annotations.find(a => a.id === id)
+    if (ann) {
+      set(s => ({
+        annotations: s.annotations.map(a => a.id === id ? { ...a, ...updates } : a),
+        undoStack: [...s.undoStack.slice(-19), { type: 'update', annotation: ann, previousState: updates }]
+      }))
+      const ts = debouncedSave(get())
+      set({ lastSaved: ts })
+    }
   },
 
   setCurrentNoteIndex: (index) => {
@@ -135,6 +196,12 @@ export const useStore = create<State>((set, get) => ({
     set({ lastSaved: ts })
   },
 
+  clearSuggestedAnnotations: () => {
+    set(s => ({ annotations: s.annotations.filter(a => a.source !== 'suggested') }))
+    const ts = debouncedSave(get())
+    set({ lastSaved: ts })
+  },
+
   clearSession: async () => {
     await clearStorage()
     set({
@@ -143,8 +210,51 @@ export const useStore = create<State>((set, get) => ({
       currentNoteIndex: 0,
       mode: 'annotate',
       selectedQuestion: null,
-      lastSaved: null
+      lastSaved: null,
+      undoStack: []
     })
+  },
+
+  undo: () => {
+    const { undoStack, annotations } = get()
+    if (undoStack.length === 0) return
+
+    const action = undoStack[undoStack.length - 1]
+    
+    if (action.type === 'add') {
+      // Undo add = remove
+      set(s => ({
+        annotations: s.annotations.filter(a => a.id !== action.annotation.id),
+        undoStack: s.undoStack.slice(0, -1)
+      }))
+    } else if (action.type === 'remove') {
+      // Undo remove = add back
+      set(s => ({
+        annotations: [...s.annotations, action.annotation],
+        undoStack: s.undoStack.slice(0, -1)
+      }))
+    } else if (action.type === 'update') {
+      // Undo update = restore previous state
+      set(s => ({
+        annotations: s.annotations.map(a => 
+          a.id === action.annotation.id ? action.annotation : a
+        ),
+        undoStack: s.undoStack.slice(0, -1)
+      }))
+    }
+    
+    const ts = debouncedSave(get())
+    set({ lastSaved: ts })
+  },
+
+  setFontSize: (size) => {
+    localStorage.setItem('nota_fontSize', size.toString())
+    set({ fontSize: size })
+  },
+
+  setDarkMode: (dark) => {
+    localStorage.setItem('nota_darkMode', dark.toString())
+    set({ darkMode: dark })
   }
 }))
 

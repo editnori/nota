@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useStore } from './hooks/useStore'
 import { useKeyboard } from './hooks/useKeyboard'
 import { Header } from './components/Header'
@@ -10,9 +10,18 @@ import { QuestionPicker } from './components/QuestionPicker'
 import { AnnotationList } from './components/AnnotationList'
 
 export default function App() {
-  const { notes, mode, currentNoteIndex, selectedQuestion, addAnnotation, isLoaded } = useStore()
+  const { notes, mode, currentNoteIndex, selectedQuestion, addAnnotation, isLoaded, darkMode } = useStore()
 
   const currentNote = notes[currentNoteIndex]
+  
+  // Apply dark mode to document
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [darkMode])
   
   const handleTagSelection = useCallback((questionId: string) => {
     const sel = window.getSelection()
@@ -38,7 +47,8 @@ export default function App() {
         start,
         end,
         text,
-        questions: [questionId]
+        questions: [questionId],
+        source: 'manual'
       })
       sel.removeAllRanges()
     }
@@ -53,7 +63,8 @@ export default function App() {
         start,
         end,
         text,
-        questions: [selectedQuestion]
+        questions: [selectedQuestion],
+        source: 'manual'
       })
     }
   }, [currentNote, selectedQuestion, addAnnotation])
@@ -63,17 +74,17 @@ export default function App() {
   // Show loading while session is being restored
   if (!isLoaded) {
     return (
-      <div className="h-screen flex items-center justify-center bg-maple-50">
+      <div className="h-screen flex items-center justify-center bg-maple-50 dark:bg-maple-900">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-maple-300 border-t-maple-600 rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-maple-500">Loading session...</p>
+          <p className="text-sm text-maple-500 dark:text-maple-400">Loading session...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen flex flex-col bg-maple-50">
+    <div className="h-screen flex flex-col bg-maple-50 dark:bg-maple-900">
       <Header />
       
       <div className="flex-1 flex min-h-0">
@@ -81,7 +92,7 @@ export default function App() {
           <>
             <NotesList />
             <DocumentView onCreateAnnotation={handleCreateAnnotation} />
-            <aside className="w-64 bg-white border-l border-maple-200 flex flex-col overflow-hidden">
+            <aside className="w-64 bg-white dark:bg-maple-800 border-l border-maple-200 dark:border-maple-700 flex flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto">
                 <QuestionPicker onSelect={handleTagSelection} />
                 {currentNote && <AnnotationList noteId={currentNote.id} />}

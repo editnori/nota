@@ -1,13 +1,17 @@
 import { useStore } from '../hooks/useStore'
 import { exportJSON, exportCSV, downloadFile, exportSession, importSession } from '../lib/exporters'
-import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown } from 'lucide-react'
+import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown, Moon, Sun } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { importJSON, importJSONL, importTXT } from '../lib/importers'
 import { SettingsModal } from './SettingsModal'
 import { loadQuestions } from '../lib/questions'
 
 export function Header() {
-  const { notes, annotations, mode, setMode, setNotes, addNotes, clearSession, clearNoteAnnotations, clearAllAnnotations, currentNoteIndex, lastSaved } = useStore()
+  const { 
+    notes, annotations, mode, setMode, setNotes, addNotes, 
+    clearSession, clearNoteAnnotations, clearAllAnnotations, clearSuggestedAnnotations,
+    currentNoteIndex, lastSaved, darkMode, setDarkMode 
+  } = useStore()
   const [showSettings, setShowSettings] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showImportMenu, setShowImportMenu] = useState(false)
@@ -21,6 +25,7 @@ export function Header() {
   const currentNoteAnnotationCount = currentNote 
     ? annotations.filter(a => a.noteId === currentNote.id).length 
     : 0
+  const suggestedCount = annotations.filter(a => a.source === 'suggested').length
 
   useEffect(() => {
     if (lastSaved) {
@@ -183,6 +188,13 @@ export function Header() {
     setShowClearMenu(false)
   }
 
+  function handleClearSuggested() {
+    if (confirm(`Clear ${suggestedCount} suggested annotations? Manual annotations will be kept.`)) {
+      clearSuggestedAnnotations()
+    }
+    setShowClearMenu(false)
+  }
+
   function handleClearAllAnnotations() {
     if (confirm(`Clear all ${annotations.length} annotations? Notes will be kept.`)) {
       clearAllAnnotations()
@@ -201,19 +213,19 @@ export function Header() {
   }
 
   return (
-    <header className="h-12 bg-white border-b border-maple-200 flex items-center px-4 gap-4">
+    <header className="h-12 bg-white dark:bg-maple-900 border-b border-maple-200 dark:border-maple-700 flex items-center px-4 gap-4">
       <div className="flex items-center gap-2">
         <img src="/favicon.svg" alt="" className="w-5 h-5" />
-        <span className="text-sm font-medium text-maple-800">Nota</span>
+        <span className="text-sm font-medium text-maple-800 dark:text-maple-100">Nota</span>
       </div>
 
-      <div className="flex items-center gap-0.5 ml-4 bg-maple-100 p-0.5 rounded-full">
+      <div className="flex items-center gap-0.5 ml-4 bg-maple-100 dark:bg-maple-800 p-0.5 rounded-full">
         <button
           onClick={() => setMode('annotate')}
           className={`px-3 py-1 text-xs rounded-full transition-all ${
             mode === 'annotate'
-              ? 'bg-white text-maple-800 shadow-sm'
-              : 'text-maple-500 hover:text-maple-700'
+              ? 'bg-white dark:bg-maple-700 text-maple-800 dark:text-maple-100 shadow-sm'
+              : 'text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200'
           }`}
         >
           Annotate
@@ -222,8 +234,8 @@ export function Header() {
           onClick={() => setMode('review')}
           className={`px-3 py-1 text-xs rounded-full transition-all ${
             mode === 'review'
-              ? 'bg-white text-maple-800 shadow-sm'
-              : 'text-maple-500 hover:text-maple-700'
+              ? 'bg-white dark:bg-maple-700 text-maple-800 dark:text-maple-100 shadow-sm'
+              : 'text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200'
           }`}
         >
           Review
@@ -232,8 +244,8 @@ export function Header() {
           onClick={() => setMode('format')}
           className={`px-3 py-1 text-xs rounded-full transition-all ${
             mode === 'format'
-              ? 'bg-white text-maple-800 shadow-sm'
-              : 'text-maple-500 hover:text-maple-700'
+              ? 'bg-white dark:bg-maple-700 text-maple-800 dark:text-maple-100 shadow-sm'
+              : 'text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200'
           }`}
         >
           Format
@@ -243,7 +255,7 @@ export function Header() {
       <div className="flex-1" />
 
       {saveIndicator && (
-        <div className="flex items-center gap-1 text-xs text-green-600">
+        <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
           <Check size={14} />
           <span>Saved</span>
         </div>
@@ -256,29 +268,29 @@ export function Header() {
       <div className="relative">
         <button
           onClick={(e) => { e.stopPropagation(); setShowImportMenu(!showImportMenu); setShowExportMenu(false); setShowClearMenu(false) }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 hover:bg-maple-50 rounded-full border border-maple-200"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 dark:text-maple-300 hover:bg-maple-50 dark:hover:bg-maple-800 rounded-full border border-maple-200 dark:border-maple-600"
         >
           <Upload size={14} />
           Import
         </button>
         {showImportMenu && (
-          <div className="absolute right-0 top-full mt-1 bg-white border border-maple-200 rounded-lg shadow-lg z-50 overflow-hidden min-w-[160px]" onClick={e => e.stopPropagation()}>
+          <div className="absolute right-0 top-full mt-1 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg z-50 overflow-hidden min-w-[160px]" onClick={e => e.stopPropagation()}>
             <button
               onClick={() => { fileInputRef.current?.click(); setShowImportMenu(false) }}
-              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50"
+              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 dark:text-maple-200"
             >
               Import Files
             </button>
             <button
               onClick={() => { folderInputRef.current?.click(); setShowImportMenu(false) }}
-              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50"
+              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 dark:text-maple-200"
             >
               Import Folder
             </button>
-            <div className="h-px bg-maple-100" />
+            <div className="h-px bg-maple-100 dark:bg-maple-700" />
             <button
               onClick={() => { sessionInputRef.current?.click(); setShowImportMenu(false) }}
-              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 text-amber-700"
+              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 text-amber-700 dark:text-amber-400"
             >
               Load Shared Session
             </button>
@@ -289,29 +301,29 @@ export function Header() {
       <div className="relative">
         <button
           onClick={(e) => { e.stopPropagation(); setShowExportMenu(!showExportMenu); setShowImportMenu(false); setShowClearMenu(false) }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 hover:bg-maple-50 rounded-full border border-maple-200"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 dark:text-maple-300 hover:bg-maple-50 dark:hover:bg-maple-800 rounded-full border border-maple-200 dark:border-maple-600"
         >
           <Download size={14} />
           Export
         </button>
         {showExportMenu && (
-          <div className="absolute right-0 top-full mt-1 bg-white border border-maple-200 rounded-lg shadow-lg z-50 overflow-hidden min-w-[180px]" onClick={e => e.stopPropagation()}>
+          <div className="absolute right-0 top-full mt-1 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg z-50 overflow-hidden min-w-[180px]" onClick={e => e.stopPropagation()}>
             <button
               onClick={handleExportJSON}
-              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50"
+              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 dark:text-maple-200"
             >
               Export Annotations (JSON)
             </button>
             <button
               onClick={handleExportCSV}
-              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50"
+              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 dark:text-maple-200"
             >
               Export Annotations (CSV)
             </button>
-            <div className="h-px bg-maple-100" />
+            <div className="h-px bg-maple-100 dark:bg-maple-700" />
             <button
               onClick={handleShareSession}
-              className="flex items-center gap-2 w-full px-4 py-2 text-xs text-left hover:bg-amber-50 text-amber-700"
+              className="flex items-center gap-2 w-full px-4 py-2 text-xs text-left hover:bg-amber-50 dark:hover:bg-maple-700 text-amber-700 dark:text-amber-400"
             >
               <Share2 size={12} />
               Share Full Session
@@ -321,8 +333,16 @@ export function Header() {
       </div>
 
       <button
+        onClick={() => setDarkMode(!darkMode)}
+        className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-800 rounded-full"
+        title={darkMode ? 'Light mode' : 'Dark mode'}
+      >
+        {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+      </button>
+
+      <button
         onClick={() => setShowSettings(true)}
-        className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-maple-500 hover:bg-maple-50 rounded-full"
+        className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-800 rounded-full"
       >
         <Settings size={16} />
       </button>
@@ -330,32 +350,40 @@ export function Header() {
       <div className="relative">
         <button
           onClick={(e) => { e.stopPropagation(); setShowClearMenu(!showClearMenu); setShowImportMenu(false); setShowExportMenu(false) }}
-          className="flex items-center gap-0.5 px-2 py-1.5 text-xs text-maple-400 hover:text-red-500 hover:bg-red-50 rounded-full"
+          className="flex items-center gap-0.5 px-2 py-1.5 text-xs text-maple-400 dark:text-maple-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full"
         >
           <Trash2 size={14} />
           <ChevronDown size={10} />
         </button>
         {showClearMenu && (
-          <div className="absolute right-0 top-full mt-1 bg-white border border-maple-200 rounded-lg shadow-lg z-50 overflow-hidden min-w-[200px]" onClick={e => e.stopPropagation()}>
+          <div className="absolute right-0 top-full mt-1 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg z-50 overflow-hidden min-w-[220px]" onClick={e => e.stopPropagation()}>
             <button
               onClick={handleClearCurrentNote}
               disabled={!currentNote || currentNoteAnnotationCount === 0}
-              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 dark:text-maple-200 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Clear this note ({currentNoteAnnotationCount})
             </button>
+            {suggestedCount > 0 && (
+              <button
+                onClick={handleClearSuggested}
+                className="block w-full px-4 py-2 text-xs text-left hover:bg-amber-50 dark:hover:bg-maple-700 text-amber-700 dark:text-amber-400"
+              >
+                Clear suggested only ({suggestedCount})
+              </button>
+            )}
             <button
               onClick={handleClearAllAnnotations}
               disabled={annotations.length === 0}
-              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 dark:text-maple-200 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Clear all annotations ({annotations.length})
             </button>
-            <div className="h-px bg-maple-100" />
+            <div className="h-px bg-maple-100 dark:bg-maple-700" />
             <button
               onClick={handleClearEverything}
               disabled={notes.length === 0 && annotations.length === 0}
-              className="block w-full px-4 py-2 text-xs text-left text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="block w-full px-4 py-2 text-xs text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Clear everything...
             </button>

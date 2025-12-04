@@ -15,8 +15,8 @@ export function QuestionPicker({ onSelect }: Props) {
   }
 
   return (
-    <div className="p-3 border-b border-maple-100">
-      <div className="text-[10px] uppercase tracking-wide text-maple-500 mb-3">
+    <div className="p-3 border-b border-maple-100 dark:border-maple-700">
+      <div className="text-[10px] uppercase tracking-wide text-maple-500 dark:text-maple-400 mb-3">
         Select question (or press 1-0)
       </div>
       <div className="space-y-1.5">
@@ -28,8 +28,8 @@ export function QuestionPicker({ onSelect }: Props) {
               onClick={() => handleClick(q.id)}
               className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all ${
                 isSelected 
-                  ? 'ring-2 ring-offset-1' 
-                  : 'hover:bg-maple-50'
+                  ? 'ring-2 ring-offset-1 dark:ring-offset-maple-800' 
+                  : 'hover:bg-maple-50 dark:hover:bg-maple-700'
               }`}
               style={{
                 backgroundColor: isSelected ? `${q.color}15` : undefined,
@@ -45,11 +45,13 @@ export function QuestionPicker({ onSelect }: Props) {
               <div className="flex-1 min-w-0">
                 <div 
                   className="text-[12px] font-medium"
-                  style={{ color: isSelected ? q.color : '#44403c' }}
+                  style={{ color: isSelected ? q.color : undefined }}
                 >
-                  {q.name}
+                  <span className={isSelected ? '' : 'text-maple-700 dark:text-maple-200'}>
+                    {q.name}
+                  </span>
                 </div>
-                <div className="text-[10px] text-maple-400 truncate">{q.hint}</div>
+                <div className="text-[10px] text-maple-400 dark:text-maple-500 truncate">{q.hint}</div>
               </div>
               {isSelected && (
                 <span 
@@ -65,8 +67,8 @@ export function QuestionPicker({ onSelect }: Props) {
       </div>
       
       {selectedQuestion && (
-        <div className="mt-3 p-2 bg-maple-50 rounded-lg">
-          <p className="text-[10px] text-maple-500 text-center">
+        <div className="mt-3 p-2 bg-maple-50 dark:bg-maple-700 rounded-lg">
+          <p className="text-[10px] text-maple-500 dark:text-maple-400 text-center">
             Highlight text to tag with selected question
           </p>
         </div>

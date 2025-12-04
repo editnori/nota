@@ -17,6 +17,7 @@ export interface Annotation {
   questions: string[]
   comment?: string
   createdAt: number
+  source?: 'manual' | 'suggested'  // manual = Ryan's work, suggested = bulk/pattern
 }
 
 export interface Question {

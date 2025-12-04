@@ -70,11 +70,11 @@ export function FormatView() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <div className="p-4 border-b border-maple-200 bg-white">
+      <div className="p-4 border-b border-maple-200 dark:border-maple-700 bg-white dark:bg-maple-800">
         <div className="max-w-6xl mx-auto flex items-center gap-4">
           <div>
-            <h2 className="text-sm font-medium text-maple-800">Format Notes</h2>
-            <p className="text-xs text-maple-500">Upload raw clinical notes to clean and format them</p>
+            <h2 className="text-sm font-medium text-maple-800 dark:text-maple-100">Format Notes</h2>
+            <p className="text-xs text-maple-500 dark:text-maple-400">Upload raw clinical notes to clean and format them</p>
           </div>
           
           <div className="flex-1" />
@@ -101,7 +101,7 @@ export function FormatView() {
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 border border-maple-200 rounded-lg hover:bg-maple-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 dark:text-maple-300 border border-maple-200 dark:border-maple-600 rounded-lg hover:bg-maple-50 dark:hover:bg-maple-700"
           >
             <Upload size={14} />
             Add Files
@@ -109,7 +109,7 @@ export function FormatView() {
 
           <button
             onClick={() => folderInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 border border-maple-200 rounded-lg hover:bg-maple-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 dark:text-maple-300 border border-maple-200 dark:border-maple-600 rounded-lg hover:bg-maple-50 dark:hover:bg-maple-700"
           >
             <FileText size={14} />
             Add Folder
@@ -119,7 +119,7 @@ export function FormatView() {
             <button
               onClick={processFiles}
               disabled={processing}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs text-white bg-maple-800 rounded-lg hover:bg-maple-700 disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs text-white bg-maple-800 dark:bg-maple-600 rounded-lg hover:bg-maple-700 dark:hover:bg-maple-500 disabled:opacity-50"
             >
               {processing ? <Loader2 size={14} className="animate-spin" /> : null}
               Format {inputFiles.length} files
@@ -136,7 +136,7 @@ export function FormatView() {
               </button>
               <button
                 onClick={downloadAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 border border-maple-200 rounded-lg hover:bg-maple-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 dark:text-maple-300 border border-maple-200 dark:border-maple-600 rounded-lg hover:bg-maple-50 dark:hover:bg-maple-700"
               >
                 <Download size={14} />
                 Download All
@@ -147,7 +147,7 @@ export function FormatView() {
           {(inputFiles.length > 0 || processed.length > 0) && (
             <button
               onClick={clearAll}
-              className="px-3 py-1.5 text-xs text-maple-500 hover:text-red-500 hover:bg-red-50 rounded-lg"
+              className="px-3 py-1.5 text-xs text-maple-500 dark:text-maple-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
             >
               Clear
             </button>
@@ -155,39 +155,39 @@ export function FormatView() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden bg-maple-50 dark:bg-maple-900">
         {inputFiles.length === 0 && processed.length === 0 ? (
           <div 
             className="h-full flex items-center justify-center"
-            onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('bg-maple-100') }}
-            onDragLeave={e => { e.currentTarget.classList.remove('bg-maple-100') }}
-            onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('bg-maple-100'); handleFiles(e.dataTransfer.files) }}
+            onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('bg-maple-100', 'dark:bg-maple-800') }}
+            onDragLeave={e => { e.currentTarget.classList.remove('bg-maple-100', 'dark:bg-maple-800') }}
+            onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('bg-maple-100', 'dark:bg-maple-800'); handleFiles(e.dataTransfer.files) }}
           >
             <div className="text-center">
-              <Upload className="mx-auto mb-4 text-maple-300" size={48} />
-              <p className="text-maple-500 mb-1">Drop .txt files here</p>
-              <p className="text-xs text-maple-400">or use the buttons above to select files</p>
+              <Upload className="mx-auto mb-4 text-maple-300 dark:text-maple-600" size={48} />
+              <p className="text-maple-500 dark:text-maple-400 mb-1">Drop .txt files here</p>
+              <p className="text-xs text-maple-400 dark:text-maple-500">or use the buttons above to select files</p>
             </div>
           </div>
         ) : inputFiles.length > 0 && processed.length === 0 ? (
           <div className="h-full flex items-center justify-center">
-            <div className="bg-white border border-maple-200 rounded-xl p-6 max-w-md">
-              <div className="text-sm font-medium text-maple-800 mb-3">
+            <div className="bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-700 rounded-xl p-6 max-w-md">
+              <div className="text-sm font-medium text-maple-800 dark:text-maple-100 mb-3">
                 {inputFiles.length} files ready to format
               </div>
               <div className="max-h-48 overflow-y-auto space-y-1 mb-4">
                 {inputFiles.map((f, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs text-maple-500 py-1">
+                  <div key={i} className="flex items-center gap-2 text-xs text-maple-500 dark:text-maple-400 py-1">
                     <FileText size={12} />
                     <span className="truncate">{f.name}</span>
-                    <span className="text-maple-300 ml-auto">{(f.size / 1024).toFixed(1)}kb</span>
+                    <span className="text-maple-300 dark:text-maple-600 ml-auto">{(f.size / 1024).toFixed(1)}kb</span>
                   </div>
                 ))}
               </div>
               <button
                 onClick={processFiles}
                 disabled={processing}
-                className="w-full py-2 text-xs text-white bg-maple-800 rounded-lg hover:bg-maple-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-2 text-xs text-white bg-maple-800 dark:bg-maple-600 rounded-lg hover:bg-maple-700 dark:hover:bg-maple-500 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {processing ? <Loader2 size={14} className="animate-spin" /> : null}
                 {processing ? 'Processing...' : 'Format Notes'}
@@ -196,47 +196,47 @@ export function FormatView() {
           </div>
         ) : (
           <div className="h-full flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2 bg-maple-50 border-b border-maple-200">
+            <div className="flex items-center justify-between px-4 py-2 bg-maple-50 dark:bg-maple-800 border-b border-maple-200 dark:border-maple-700">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPreviewIndex(i => Math.max(0, i - 1))}
                   disabled={previewIndex === 0}
-                  className="p-1 rounded hover:bg-maple-200 disabled:opacity-30"
+                  className="p-1 rounded hover:bg-maple-200 dark:hover:bg-maple-700 disabled:opacity-30"
                 >
-                  <ChevronLeft size={16} />
+                  <ChevronLeft size={16} className="text-maple-600 dark:text-maple-300" />
                 </button>
-                <span className="text-xs text-maple-600 font-medium">
+                <span className="text-xs text-maple-600 dark:text-maple-300 font-medium">
                   {previewIndex + 1} / {processed.length}
                 </span>
                 <button
                   onClick={() => setPreviewIndex(i => Math.min(processed.length - 1, i + 1))}
                   disabled={previewIndex === processed.length - 1}
-                  className="p-1 rounded hover:bg-maple-200 disabled:opacity-30"
+                  className="p-1 rounded hover:bg-maple-200 dark:hover:bg-maple-700 disabled:opacity-30"
                 >
-                  <ChevronRight size={16} />
+                  <ChevronRight size={16} className="text-maple-600 dark:text-maple-300" />
                 </button>
               </div>
-              <span className="text-xs text-maple-500">{currentPreview?.name}</span>
+              <span className="text-xs text-maple-500 dark:text-maple-400">{currentPreview?.name}</span>
             </div>
             
             <div className="flex-1 flex min-h-0">
-              <div className="flex-1 flex flex-col border-r border-maple-200">
-                <div className="px-4 py-2 bg-maple-100 border-b border-maple-200">
-                  <span className="text-[10px] uppercase tracking-wide text-maple-500 font-medium">Before (Raw)</span>
+              <div className="flex-1 flex flex-col border-r border-maple-200 dark:border-maple-700">
+                <div className="px-4 py-2 bg-maple-100 dark:bg-maple-700 border-b border-maple-200 dark:border-maple-600">
+                  <span className="text-[10px] uppercase tracking-wide text-maple-500 dark:text-maple-400 font-medium">Before (Raw)</span>
                 </div>
-                <div className="flex-1 overflow-auto p-4">
-                  <pre className="text-[11px] text-maple-600 font-mono whitespace-pre-wrap leading-relaxed">
+                <div className="flex-1 overflow-auto p-4 bg-white dark:bg-maple-800">
+                  <pre className="text-[11px] text-maple-600 dark:text-maple-300 font-mono whitespace-pre-wrap leading-relaxed">
                     {currentPreview?.raw}
                   </pre>
                 </div>
               </div>
               
               <div className="flex-1 flex flex-col">
-                <div className="px-4 py-2 bg-green-50 border-b border-green-200">
-                  <span className="text-[10px] uppercase tracking-wide text-green-700 font-medium">After (Formatted)</span>
+                <div className="px-4 py-2 bg-green-50 dark:bg-green-900/30 border-b border-green-200 dark:border-green-800">
+                  <span className="text-[10px] uppercase tracking-wide text-green-700 dark:text-green-400 font-medium">After (Formatted)</span>
                 </div>
-                <div className="flex-1 overflow-auto p-4 bg-green-50/30">
-                  <pre className="text-[11px] text-maple-700 font-mono whitespace-pre-wrap leading-relaxed">
+                <div className="flex-1 overflow-auto p-4 bg-green-50/30 dark:bg-green-900/10">
+                  <pre className="text-[11px] text-maple-700 dark:text-maple-200 font-mono whitespace-pre-wrap leading-relaxed">
                     {currentPreview?.formatted}
                   </pre>
                 </div>

@@ -3,10 +3,26 @@ import { useStore } from './useStore'
 import { getQuestionByHotkey } from '../lib/questions'
 
 export function useKeyboard(onTagSelection: (questionId: string) => void) {
-  const { notes, currentNoteIndex, setCurrentNoteIndex, mode, setMode, setSelectedQuestion } = useStore()
+  const { notes, currentNoteIndex, setCurrentNoteIndex, mode, setMode, setSelectedQuestion, undo } = useStore()
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Ctrl+Z for undo (works everywhere)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault()
+        undo()
+        return
+      }
+
+      // Escape to clear selection and close things
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setSelectedQuestion(null)
+        window.getSelection()?.removeAllRanges()
+        return
+      }
+
+      // Don't handle other keys if in input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return
       }
@@ -52,5 +68,5 @@ export function useKeyboard(onTagSelection: (questionId: string) => void) {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [notes, currentNoteIndex, mode, setCurrentNoteIndex, setMode, setSelectedQuestion, onTagSelection])
+  }, [notes, currentNoteIndex, mode, setCurrentNoteIndex, setMode, setSelectedQuestion, onTagSelection, undo])
 }

@@ -25,23 +25,23 @@ export function NotesList() {
   const annotatedCount = notes.filter(n => annotationCounts.get(n.id)).length
 
   return (
-    <aside className="w-56 bg-white border-r border-maple-200 flex flex-col">
-      <div className="p-3 space-y-2 border-b border-maple-100">
+    <aside className="w-56 bg-white dark:bg-maple-800 border-r border-maple-200 dark:border-maple-700 flex flex-col">
+      <div className="p-3 space-y-2 border-b border-maple-100 dark:border-maple-700">
         <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-maple-400" />
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-maple-400 dark:text-maple-500" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search notes"
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-maple-50 border border-maple-200 rounded focus:outline-none focus:border-maple-400"
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded focus:outline-none focus:border-maple-400 dark:text-maple-200"
           />
         </div>
-        <div className="flex text-[10px] border border-maple-200 rounded overflow-hidden">
+        <div className="flex text-[10px] border border-maple-200 dark:border-maple-600 rounded overflow-hidden">
           {(['all', 'annotated', 'unannotated'] as const).map(f => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`flex-1 py-1 ${filter === f ? 'bg-maple-800 text-white' : 'text-maple-500 hover:bg-maple-50'}`}
+              className={`flex-1 py-1 ${filter === f ? 'bg-maple-800 dark:bg-maple-600 text-white' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'}`}
             >
               {f === 'all' ? 'All' : f === 'annotated' ? 'Done' : 'Todo'}
             </button>
@@ -54,29 +54,30 @@ export function NotesList() {
           const originalIndex = notes.findIndex(n => n.id === note.id)
           const selected = originalIndex === currentNoteIndex
           const count = annotationCounts.get(note.id) || 0
+          const hasSuggested = annotations.some(a => a.noteId === note.id && a.source === 'suggested')
 
           return (
             <button
               key={note.id}
               onClick={() => setCurrentNoteIndex(originalIndex)}
-              className={`w-full text-left px-3 py-2.5 border-b border-maple-100 ${
-                selected ? 'bg-maple-100' : 'hover:bg-maple-50'
+              className={`w-full text-left px-3 py-2.5 border-b border-maple-100 dark:border-maple-700 ${
+                selected ? 'bg-maple-100 dark:bg-maple-700' : 'hover:bg-maple-50 dark:hover:bg-maple-700/50'
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
-                <span className={`text-[10px] ${selected ? 'text-maple-600 font-medium' : 'text-maple-400'}`}>
+                <span className={`text-[10px] ${selected ? 'text-maple-600 dark:text-maple-300 font-medium' : 'text-maple-400 dark:text-maple-500'}`}>
                   {originalIndex + 1}
                 </span>
-                <span className={`text-[11px] truncate flex-1 ${selected ? 'text-maple-900 font-medium' : 'text-maple-600'}`}>
+                <span className={`text-[11px] truncate flex-1 ${selected ? 'text-maple-900 dark:text-maple-100 font-medium' : 'text-maple-600 dark:text-maple-300'}`}>
                   {note.id}
                 </span>
                 {count > 0 && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${hasSuggested ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400' : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400'}`}>
                     {count}
                   </span>
                 )}
               </div>
-              <div className="text-[10px] text-maple-400 truncate">
+              <div className="text-[10px] text-maple-400 dark:text-maple-500 truncate">
                 {note.text.slice(0, 60)}...
               </div>
             </button>
@@ -84,7 +85,7 @@ export function NotesList() {
         })}
       </div>
 
-      <div className="p-2 border-t border-maple-100 text-[10px] text-maple-400 text-center">
+      <div className="p-2 border-t border-maple-100 dark:border-maple-700 text-[10px] text-maple-400 dark:text-maple-500 text-center">
         {annotatedCount} of {notes.length} annotated
       </div>
     </aside>
