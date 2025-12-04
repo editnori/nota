@@ -2,30 +2,25 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.14] - 2025-12-04
+
+### Improved
+- **Smart Filter UI overhaul**: Cleaner, simpler interface
+  - Presets as toggle chips instead of list
+  - No "Advanced" dropdown - everything flat and visible
+  - Phrase-based patterns (e.g., "passed a stone" not just "passed")
+  - Shows active search terms clearly
+  - **Auto-tag option**: Creates suggested annotations for all matched phrases
+    - Ryan can filter + auto-tag, then review/adjust instead of manual highlighting
+
 ## [0.0.13] - 2025-12-04
 
 ### Added
 - **Smart Filter**: Pre-filter notes before annotating
-  - 10 preset filters based on Ryan's research questions:
-    - Symptoms (flank pain, hematuria)
-    - Stone Growth (interval growth, increased burden)
-    - Rare Disease (cystinuria, hyperoxaluria)
-    - Measurements (mm, cm sizes)
-    - Radiology Reports (CT, ultrasound findings)
-    - Operative Notes (procedures, devices)
-    - Dietary Advice (nutrition recommendations)
-    - ER Visits (emergency presentations)
-    - Post-Op Complications (issues after surgery)
-    - Stone Passage (passed stones at home)
-  - Include terms (OR logic) - notes must contain at least one
-  - Exclude terms - skip notes containing these
-  - Minimum length filter (skip tiny notes)
+  - 10 preset filters based on Ryan's research questions
+  - Include/exclude terms, min length filter
   - Live match count preview
-  - Save custom presets
-  - Advanced mode for customization
-
-### Improved
-- Removed dark/light mode transitions for consistent instant switching
+  - Custom preset saving
 
 ## [0.0.12] - 2025-12-04
 

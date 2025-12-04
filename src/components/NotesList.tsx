@@ -1,13 +1,21 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../hooks/useStore'
 import { useDebounce } from '../hooks/useDebounce'
-import { Search, ChevronUp, ChevronDown, Filter, X, Loader2, Sliders } from 'lucide-react'
+import { Search, ChevronUp, ChevronDown, Filter, X, Loader2, Zap } from 'lucide-react'
 import { SmartFilter } from './SmartFilter'
 
 const PAGE_SIZE = 50
 
+interface MatchLocation {
+  noteId: string
+  term: string
+  start: number
+  end: number
+  context: string
+}
+
 export function NotesList() {
-  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex } = useStore()
+  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, addBulkAnnotations } = useStore()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'done' | 'todo'>('all')
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
@@ -158,9 +166,21 @@ export function NotesList() {
     return notes.filter(n => n.meta?.type === type).length
   }, [notes])
 
-  function handleSmartFilterApply(ids: Set<string>) {
+  function handleSmartFilterApply(ids: Set<string>, matches?: MatchLocation[]) {
     setSmartFilterIds(ids)
     setPage(0)
+    
+    // Auto-tag if matches provided
+    if (matches && matches.length > 0) {
+      const bulkAnns = matches.map(m => ({
+        noteId: m.noteId,
+        text: m.term,
+        start: m.start,
+        end: m.end,
+        questionIds: [] as string[]
+      }))
+      addBulkAnnotations(bulkAnns)
+    }
   }
 
   function clearSmartFilter() {
@@ -180,7 +200,7 @@ export function NotesList() {
               : 'border-maple-200 dark:border-maple-600 text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'
           }`}
         >
-          <Sliders size={12} />
+          <Zap size={12} />
           {smartFilterIds ? `Filtered: ${smartFilterIds.size}` : 'Smart Filter'}
         </button>
 
