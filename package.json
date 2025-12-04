@@ -1,7 +1,7 @@
 {
   "name": "nota",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Local clinical note annotation tool",
   "type": "module",
   "scripts": {

@@ -12,6 +12,14 @@ bun dev
 
 opens at http://localhost:3000
 
+## download
+
+pre-built executables available on the [releases page](https://github.com/editnori/nota/releases):
+
+- Windows: `nota_0.1.0_x64-setup.exe` or `nota_0.1.0_x64_en-US.msi`
+- macOS: `nota_0.1.0_x64.dmg` (Intel) or `nota_0.1.0_aarch64.dmg` (Apple Silicon)
+- Linux: `nota_0.1.0_amd64.deb` or `nota_0.1.0_amd64.AppImage`
+
 ## features
 
 - annotate: highlight text and tag with questions
@@ -38,26 +46,21 @@ to share your work with someone else:
 3. they import > load shared session
 4. they get your exact notes, annotations, and question config
 
-## desktop app
-
-to build a standalone desktop app (requires rust):
+## building from source
 
 ```bash
 # install rust if needed
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# install tauri cli
-bun add -D @tauri-apps/cli
+# install dependencies
+bun install
 
-# build for your platform
+# run dev
+bun dev
+
+# build desktop app for your platform
 bun run tauri:build
 ```
-
-builds will be in `src-tauri/target/release/bundle/`
-
-- windows: `.msi` or `.exe`
-- macos: `.dmg` or `.app`
-- linux: `.deb`, `.AppImage`, or `.rpm`
 
 ## data format
 
@@ -73,3 +76,28 @@ output:
 all data stays in browser localstorage. nothing sent externally. safe for phi.
 
 the desktop app is fully offline with no network access.
+
+## citation
+
+if you use nota in your research, please cite:
+
+```bibtex
+@software{nota2025,
+  author = {Qassem, Layth M},
+  title = {nota: Local Clinical Note Annotation Tool},
+  year = {2025},
+  url = {https://github.com/editnori/nota}
+}
+```
+
+or in text:
+
+> Qassem, L. M. (2025). nota: Local Clinical Note Annotation Tool. https://github.com/editnori/nota
+
+## license
+
+MIT
+
+## author
+
+Dr. Layth M Qassem PharmD MSACI
