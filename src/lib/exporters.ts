@@ -7,6 +7,8 @@ interface ExportData {
     totalNotes: number
     annotatedNotes: number
     totalAnnotations: number
+    manualAnnotations: number
+    suggestedAnnotations: number
     byQuestion: Record<string, number>
   }
   notes: Note[]
@@ -36,6 +38,8 @@ export function exportJSON(notes: Note[], annotations: Annotation[]): string {
       totalNotes: notes.length,
       annotatedNotes: annotatedNoteIds.size,
       totalAnnotations: annotations.length,
+      manualAnnotations: annotations.filter(a => a.source !== 'suggested').length,
+      suggestedAnnotations: annotations.filter(a => a.source === 'suggested').length,
       byQuestion
     },
     notes,
@@ -49,7 +53,8 @@ export function exportCSV(notes: Note[], annotations: Annotation[]): string {
   const noteMap = new Map(notes.map(n => [n.id, n]))
   const rows: string[] = []
   
-  rows.push('annotation_id,note_id,note_type,start,end,text,questions,comment,context_before,context_after')
+  // Updated CSV header with source and created_at
+  rows.push('annotation_id,note_id,note_type,start,end,text,questions,source,created_at,comment,context_before,context_after')
 
   for (const ann of annotations) {
     const note = noteMap.get(ann.noteId)
@@ -66,6 +71,8 @@ export function exportCSV(notes: Note[], annotations: Annotation[]): string {
       ann.end.toString(),
       `"${ann.text.replace(/"/g, '""').replace(/[\n\r]/g, ' ')}"`,
       ann.questions.join(';'),
+      ann.source || 'manual',
+      ann.createdAt ? new Date(ann.createdAt).toISOString() : '',
       ann.comment ? `"${ann.comment.replace(/"/g, '""')}"` : '',
       `"${contextBefore.replace(/"/g, '""')}"`,
       `"${contextAfter.replace(/"/g, '""')}"`

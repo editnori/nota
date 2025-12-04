@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../hooks/useStore'
 import { loadQuestions, getQuestion } from '../lib/questions'
-import { X, ExternalLink, Search, Wand2 } from 'lucide-react'
+import { X, ExternalLink, Search, Wand2, ChevronDown, ChevronUp } from 'lucide-react'
 
 const PAGE_SIZE = 50
 
@@ -11,6 +11,7 @@ export function ReviewView() {
   const [searchText, setSearchText] = useState('')
   const [showBulkTag, setShowBulkTag] = useState(false)
   const [bulkSearch, setBulkSearch] = useState('')
+  const [showMatchPreview, setShowMatchPreview] = useState(false)
   const [page, setPage] = useState(0)
   const questions = loadQuestions()
 
@@ -45,11 +46,11 @@ export function ReviewView() {
   const totalPages = Math.ceil(filteredAnnotations.length / PAGE_SIZE)
   const pagedAnnotations = filteredAnnotations.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
-  // Bulk tag matches
+  // Bulk tag matches with context
   const bulkMatches = useMemo(() => {
     if (!bulkSearch.trim()) return []
     const lower = bulkSearch.toLowerCase()
-    const matches: { noteId: string, text: string, start: number, end: number }[] = []
+    const matches: { noteId: string, text: string, start: number, end: number, contextBefore: string, contextAfter: string }[] = []
     
     notes.forEach(note => {
       let idx = 0
@@ -62,11 +63,14 @@ export function ReviewView() {
         )
         
         if (!alreadyTagged) {
+          const ctxLen = 30
           matches.push({
             noteId: note.id,
             text: note.text.slice(foundIdx, foundIdx + bulkSearch.length),
             start: foundIdx,
-            end: foundIdx + bulkSearch.length
+            end: foundIdx + bulkSearch.length,
+            contextBefore: note.text.slice(Math.max(0, foundIdx - ctxLen), foundIdx),
+            contextAfter: note.text.slice(foundIdx + bulkSearch.length, foundIdx + bulkSearch.length + ctxLen)
           })
         }
         idx = foundIdx + 1
@@ -96,6 +100,7 @@ export function ReviewView() {
     })))
     setBulkSearch('')
     setShowBulkTag(false)
+    setShowMatchPreview(false)
   }
 
   const manualCount = annotations.filter(a => a.source !== 'suggested').length
@@ -173,29 +178,64 @@ export function ReviewView() {
         {/* Bulk tag panel */}
         {showBulkTag && (
           <div className="max-w-2xl mx-auto mb-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Wand2 size={14} className="text-amber-600 dark:text-amber-400" />
+              <span className="text-[11px] font-medium text-amber-800 dark:text-amber-300">Search & Tag</span>
+            </div>
             <input
               value={bulkSearch}
-              onChange={e => setBulkSearch(e.target.value)}
+              onChange={e => { setBulkSearch(e.target.value); setShowMatchPreview(false) }}
               placeholder="Enter text to find across all notes..."
               className="w-full px-2 py-1.5 text-[11px] bg-white dark:bg-maple-800 border border-amber-200 dark:border-amber-600 rounded focus:outline-none dark:text-maple-200 mb-2"
               autoFocus
             />
+            
             {bulkMatches.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                <span className="text-[10px] text-amber-700 dark:text-amber-400 mr-2">
-                  {bulkMatches.length} found:
-                </span>
-                {questions.map(q => (
+              <>
+                <div className="flex items-center justify-between mb-2">
                   <button
-                    key={q.id}
-                    onClick={() => handleBulkTag(q.id)}
-                    className="text-[9px] px-2 py-0.5 rounded text-white hover:opacity-80"
-                    style={{ backgroundColor: q.color }}
+                    onClick={() => setShowMatchPreview(!showMatchPreview)}
+                    className="flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400 hover:underline"
                   >
-                    {q.name}
+                    {showMatchPreview ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                    {bulkMatches.length} matches in {new Set(bulkMatches.map(m => m.noteId)).size} notes
+                    {showMatchPreview ? ' (hide)' : ' (preview)'}
                   </button>
-                ))}
-              </div>
+                </div>
+                
+                {/* Match preview */}
+                {showMatchPreview && (
+                  <div className="max-h-48 overflow-y-auto mb-3 space-y-1 bg-white dark:bg-maple-800 rounded border border-amber-100 dark:border-amber-800 p-2">
+                    {bulkMatches.slice(0, 20).map((m, i) => (
+                      <div key={i} className="text-[10px] font-mono text-maple-600 dark:text-maple-300 py-1 border-b border-maple-100 dark:border-maple-700 last:border-0">
+                        <span className="text-maple-400 dark:text-maple-500">...{m.contextBefore}</span>
+                        <mark className="bg-amber-200 dark:bg-amber-700 px-0.5 rounded">{m.text}</mark>
+                        <span className="text-maple-400 dark:text-maple-500">{m.contextAfter}...</span>
+                        <span className="text-[9px] text-maple-400 dark:text-maple-500 ml-2">({m.noteId})</span>
+                      </div>
+                    ))}
+                    {bulkMatches.length > 20 && (
+                      <div className="text-[9px] text-maple-400 dark:text-maple-500 text-center pt-1">
+                        ...and {bulkMatches.length - 20} more
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                <div className="flex flex-wrap gap-1">
+                  <span className="text-[10px] text-amber-700 dark:text-amber-400 mr-1">Tag as:</span>
+                  {questions.map(q => (
+                    <button
+                      key={q.id}
+                      onClick={() => handleBulkTag(q.id)}
+                      className="text-[9px] px-2 py-0.5 rounded text-white hover:opacity-80"
+                      style={{ backgroundColor: q.color }}
+                    >
+                      {q.name}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
             {bulkSearch && bulkMatches.length === 0 && (
               <div className="text-[10px] text-amber-600 dark:text-amber-500">No new matches</div>

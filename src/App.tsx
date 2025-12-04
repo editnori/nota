@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useStore } from './hooks/useStore'
 import { useKeyboard } from './hooks/useKeyboard'
 import { Header } from './components/Header'
@@ -8,9 +8,14 @@ import { ReviewView } from './components/ReviewView'
 import { FormatView } from './components/FormatView'
 import { QuestionPicker } from './components/QuestionPicker'
 import { AnnotationList } from './components/AnnotationList'
+import { importFromDataTransfer } from './lib/importers'
+import { Loader2 } from 'lucide-react'
 
 export default function App() {
-  const { notes, mode, currentNoteIndex, selectedQuestion, addAnnotation, isLoaded, darkMode } = useStore()
+  const { notes, mode, currentNoteIndex, selectedQuestion, addAnnotation, addNotes, setNotes, isLoaded, darkMode } = useStore()
+  const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
 
   const currentNote = notes[currentNoteIndex]
   
@@ -21,6 +26,54 @@ export default function App() {
       document.documentElement.classList.add('dark')
     }
   }, [darkMode])
+
+  // Handle drag-drop folders
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(false)
+    
+    if (e.dataTransfer.items.length === 0) return
+    
+    setImporting(true)
+    setImportProgress('Reading files...')
+    
+    try {
+      const imported = await importFromDataTransfer(e.dataTransfer.items)
+      
+      if (imported.length > 0) {
+        setImportProgress(`Loaded ${imported.length} notes`)
+        
+        if (notes.length > 0) {
+          addNotes(imported)
+        } else {
+          setNotes(imported)
+        }
+      } else {
+        setImportProgress('No valid files found')
+      }
+    } catch (err) {
+      console.error('Import error:', err)
+      setImportProgress('Import failed')
+    }
+    
+    setTimeout(() => {
+      setImporting(false)
+      setImportProgress('')
+    }, 1500)
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    // Only set false if we're leaving the main container
+    if (e.currentTarget === e.target) {
+      setIsDragging(false)
+    }
+  }
   
   const handleTagSelection = useCallback((questionId: string) => {
     const sel = window.getSelection()
@@ -83,7 +136,12 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-maple-50 dark:bg-maple-900">
+    <div 
+      className="h-screen flex flex-col bg-maple-50 dark:bg-maple-900 relative"
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+    >
       <Header />
       
       <div className="flex-1 flex min-h-0">
@@ -104,6 +162,26 @@ export default function App() {
         
         {mode === 'format' && <FormatView />}
       </div>
+
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 bg-amber-500/10 border-4 border-dashed border-amber-500 flex items-center justify-center z-50 pointer-events-none">
+          <div className="bg-white dark:bg-maple-800 rounded-xl p-6 shadow-lg text-center">
+            <p className="text-lg font-medium text-amber-700 dark:text-amber-400">Drop folder to import</p>
+            <p className="text-sm text-maple-500 dark:text-maple-400 mt-1">Subfolders become note types</p>
+          </div>
+        </div>
+      )}
+
+      {/* Import progress overlay */}
+      {importing && (
+        <div className="absolute inset-0 bg-maple-900/30 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-maple-800 rounded-xl p-6 shadow-lg text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-maple-600 dark:text-maple-300 mx-auto mb-3" />
+            <p className="text-sm text-maple-600 dark:text-maple-300">{importProgress}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
