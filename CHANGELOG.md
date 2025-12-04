@@ -2,13 +2,20 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.23] - 2025-12-04
+
+### Added
+- **Annotation navigation in Annotate view**:
+  - Click any annotation in sidebar to scroll document to that highlight
+  - Prev/Next buttons (↑/↓) to jump through annotations in order
+  - Current position indicator (e.g., "3/12")
+  - Active annotation gets a ring highlight in both sidebar and document
+  - Annotations sorted by position in document for logical navigation
+
 ## [0.0.22] - 2025-12-04
 
 ### Fixed
-- **Smart Filter persists across tabs**: Filter results now stored in global store
-  - Switching Annotate → Review → Annotate keeps your filtered notes
-  - Only cleared when you explicitly click X on the filter badge
-  - No more resetting to all 5000 notes on tab change
+- Smart Filter persists across tabs
 
 ## [0.0.21] - 2025-12-04
 

@@ -274,11 +274,6 @@ export const useStore = create<State>((set, get) => ({
 
   setHighlightedAnnotation: (id) => {
     set({ highlightedAnnotation: id })
-    if (id) {
-      setTimeout(() => {
-        set({ highlightedAnnotation: null })
-      }, 1500)
-    }
   },
 
   setFilteredNoteIds: (ids) => {

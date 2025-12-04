@@ -1,18 +1,39 @@
 import { useState } from 'react'
 import { useStore } from '../hooks/useStore'
 import { loadQuestions, getQuestion } from '../lib/questions'
-import { X, Plus, MessageSquare, Check } from 'lucide-react'
+import { X, Plus, MessageSquare, Check, ChevronUp, ChevronDown } from 'lucide-react'
 
 interface Props {
   noteId: string
 }
 
 export function AnnotationList({ noteId }: Props) {
-  const { annotations, removeAnnotation, updateAnnotation } = useStore()
+  const { annotations, removeAnnotation, updateAnnotation, setHighlightedAnnotation, highlightedAnnotation } = useStore()
   const [editingComment, setEditingComment] = useState<{ id: string, text: string } | null>(null)
   const [addingQuestionTo, setAddingQuestionTo] = useState<string | null>(null)
-  const noteAnnotations = annotations.filter(a => a.noteId === noteId)
+  const noteAnnotations = annotations.filter(a => a.noteId === noteId).sort((a, b) => a.start - b.start)
   const questions = loadQuestions()
+
+  // Current annotation index for navigation
+  const currentAnnIndex = highlightedAnnotation 
+    ? noteAnnotations.findIndex(a => a.id === highlightedAnnotation)
+    : -1
+
+  function jumpToAnnotation(annId: string) {
+    setHighlightedAnnotation(annId)
+  }
+
+  function jumpPrev() {
+    if (noteAnnotations.length === 0) return
+    const newIndex = currentAnnIndex <= 0 ? noteAnnotations.length - 1 : currentAnnIndex - 1
+    setHighlightedAnnotation(noteAnnotations[newIndex].id)
+  }
+
+  function jumpNext() {
+    if (noteAnnotations.length === 0) return
+    const newIndex = currentAnnIndex >= noteAnnotations.length - 1 ? 0 : currentAnnIndex + 1
+    setHighlightedAnnotation(noteAnnotations[newIndex].id)
+  }
 
   function handleAddQuestion(annId: string, questionId: string) {
     const ann = annotations.find(a => a.id === annId)
@@ -65,8 +86,31 @@ export function AnnotationList({ noteId }: Props) {
 
   return (
     <div className="p-3">
-      <div className="text-[10px] uppercase tracking-wide text-maple-500 dark:text-maple-400 mb-2">
-        Annotations ({noteAnnotations.length})
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[10px] uppercase tracking-wide text-maple-500 dark:text-maple-400">
+          Annotations ({noteAnnotations.length})
+        </div>
+        
+        {/* Navigation controls */}
+        <div className="flex items-center gap-0.5 bg-maple-100 dark:bg-maple-700 rounded-full">
+          <button
+            onClick={jumpPrev}
+            className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-white dark:hover:bg-maple-600"
+            title="Previous annotation (scroll)"
+          >
+            <ChevronUp size={11} />
+          </button>
+          <span className="text-[9px] text-maple-500 dark:text-maple-400 tabular-nums px-0.5">
+            {currentAnnIndex >= 0 ? currentAnnIndex + 1 : '-'}/{noteAnnotations.length}
+          </span>
+          <button
+            onClick={jumpNext}
+            className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-white dark:hover:bg-maple-600"
+            title="Next annotation (scroll)"
+          >
+            <ChevronDown size={11} />
+          </button>
+        </div>
       </div>
       <div className="space-y-2">
         {noteAnnotations.map(ann => {
@@ -76,10 +120,21 @@ export function AnnotationList({ noteId }: Props) {
           const availableQuestions = questions.filter(q => !annQuestions.includes(q.id))
           const isSuggested = ann.source === 'suggested'
           
+          const isActive = highlightedAnnotation === ann.id
+          
           return (
             <div 
               key={ann.id} 
-              className={`rounded-lg p-2.5 ${isSuggested ? 'bg-maple-50 dark:bg-maple-700/50 border border-dashed border-maple-300 dark:border-maple-600' : 'bg-maple-50 dark:bg-maple-700'}`}
+              onClick={() => jumpToAnnotation(ann.id)}
+              className={`rounded-lg p-2.5 cursor-pointer transition-all ${
+                isSuggested 
+                  ? 'bg-maple-50 dark:bg-maple-700/50 border border-dashed border-maple-300 dark:border-maple-600' 
+                  : 'bg-maple-50 dark:bg-maple-700'
+              } ${
+                isActive 
+                  ? 'ring-2 ring-maple-400 dark:ring-maple-500' 
+                  : 'hover:ring-1 hover:ring-maple-300 dark:hover:ring-maple-600'
+              }`}
             >
               <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
