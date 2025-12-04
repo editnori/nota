@@ -2,7 +2,7 @@ import { useStore } from '../hooks/useStore'
 import { exportJSON, exportCSV, downloadFile, exportSession, importSession } from '../lib/exporters'
 import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown, Moon, Sun } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
-import { importJSON, importJSONL, importTXT } from '../lib/importers'
+import { importFiles } from '../lib/importers'
 import { SettingsModal } from './SettingsModal'
 import { loadQuestions } from '../lib/questions'
 
@@ -45,120 +45,44 @@ export function Header() {
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
-  async function handleFileImport(e: React.ChangeEvent<HTMLInputElement>) {
+  // Unified import handler for both files and folders
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    const totalFiles = files.length
-    setImporting(true, `Reading ${totalFiles} file(s)...`)
-
     try {
-      let imported: Awaited<ReturnType<typeof importJSON>> = []
-      
-      if (files.length === 1) {
-        const file = files[0]
-        setImporting(true, `Processing: ${file.name}`)
-        
-        if (file.name.endsWith('.json')) {
-          imported = await importJSON(file)
-        } else if (file.name.endsWith('.jsonl')) {
-          imported = await importJSONL(file)
-        } else if (file.name.endsWith('.txt')) {
-          imported = await importTXT([file])
+      const imported = await importFiles(files, (progress) => {
+        if (progress.phase === 'scanning') {
+          setImporting(true, 'Scanning files...')
+        } else if (progress.phase === 'processing') {
+          const folder = progress.currentFolder ? `[${progress.currentFolder}] ` : ''
+          setImporting(true, `${progress.current}/${progress.total}: ${folder}${progress.currentFile}`)
+        } else if (progress.phase === 'done') {
+          setImporting(true, `Done! ${progress.current} notes loaded`)
         }
-      } else {
-        const txtFiles = Array.from(files).filter(f => f.name.endsWith('.txt'))
-        if (txtFiles.length > 0) {
-          setImporting(true, `Processing ${txtFiles.length} text files...`)
-          imported = await importTXT(txtFiles)
-        }
-      }
+      })
 
       if (imported.length > 0) {
-        setImporting(true, `Formatting ${imported.length} notes...`)
         await new Promise(r => setTimeout(r, 50))
-        
         if (notes.length > 0) {
           addNotes(imported)
         } else {
           setNotes(imported)
         }
-        
-        setImporting(true, `Done! Loaded ${imported.length} notes`)
-        setTimeout(() => setImporting(false), 1200)
+        setTimeout(() => setImporting(false), 1000)
       } else {
-        setImporting(false)
+        setImporting(true, 'No valid files found')
+        setTimeout(() => setImporting(false), 1500)
       }
     } catch (err) {
       console.error('Import error:', err)
       setImporting(false)
-      alert('Failed to import files')
+      alert('Failed to import')
     }
 
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
-
-  async function handleFolderImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-
-    const totalFiles = files.length
-    setImporting(true, `Scanning ${totalFiles} files...`)
-
-    try {
-      const filesByFolder = new Map<string, File[]>()
-      
-      for (const file of Array.from(files)) {
-        const path = (file as any).webkitRelativePath || file.name
-        const parts = path.split('/')
-        const folder = parts.length > 1 ? parts[parts.length - 2] : 'Unknown'
-        
-        if (!filesByFolder.has(folder)) {
-          filesByFolder.set(folder, [])
-        }
-        filesByFolder.get(folder)!.push(file)
-      }
-
-      const imported: Awaited<ReturnType<typeof importTXT>> = []
-      let processedFolders = 0
-      const totalFolders = filesByFolder.size
-      
-      for (const [folder, folderFiles] of filesByFolder) {
-        const txtFiles = folderFiles.filter(f => f.name.endsWith('.txt'))
-        if (txtFiles.length > 0) {
-          processedFolders++
-          setImporting(true, `Processing folder ${processedFolders}/${totalFolders}: ${folder} (${txtFiles.length} files)`)
-          const folderNotes = await importTXT(txtFiles, folder)
-          imported.push(...folderNotes)
-        }
-      }
-
-      if (imported.length > 0) {
-        setImporting(true, `Formatting ${imported.length} notes...`)
-        await new Promise(r => setTimeout(r, 50))
-        
-        if (notes.length > 0) {
-          addNotes(imported)
-        } else {
-          setNotes(imported)
-        }
-        
-        setImporting(true, `Done! Loaded ${imported.length} notes from ${totalFolders} folders`)
-        setTimeout(() => setImporting(false), 1200)
-      } else {
-        setImporting(false)
-      }
-    } catch (err) {
-      console.error('Folder import error:', err)
-      setImporting(false)
-      alert('Failed to import folder')
-    }
-
-    if (folderInputRef.current) {
-      folderInputRef.current.value = ''
-    }
+    // Reset inputs
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (folderInputRef.current) folderInputRef.current.value = ''
   }
 
   async function handleSessionImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -296,9 +220,9 @@ export function Header() {
         </div>
       )}
 
-      <input ref={fileInputRef} type="file" multiple accept=".json,.jsonl,.txt" onChange={handleFileImport} className="hidden" />
+      <input ref={fileInputRef} type="file" multiple accept=".json,.jsonl,.txt" onChange={handleImport} className="hidden" />
       {/* @ts-expect-error webkitdirectory is non-standard but widely supported */}
-      <input ref={folderInputRef} type="file" webkitdirectory="" directory="" multiple onChange={handleFolderImport} className="hidden" />
+      <input ref={folderInputRef} type="file" webkitdirectory="" directory="" multiple onChange={handleImport} className="hidden" />
       <input ref={sessionInputRef} type="file" accept=".json" onChange={handleSessionImport} className="hidden" />
 
       <div className="relative">

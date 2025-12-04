@@ -104,105 +104,173 @@ export async function importTXT(files: File[], noteType?: string): Promise<Note[
   return notes
 }
 
-type ProgressCallback = (filename: string) => void
+export interface ImportProgress {
+  phase: 'scanning' | 'processing' | 'formatting' | 'done'
+  current: number
+  total: number
+  currentFile?: string
+  currentFolder?: string
+}
 
-export async function importFolder(
-  items: FileSystemEntry[], 
+type ProgressCallback = (progress: ImportProgress) => void
+
+// Unified import function for both file input and drag-drop
+export async function importFiles(
+  files: FileList | File[],
+  onProgress?: ProgressCallback
+): Promise<Note[]> {
+  const fileArray = Array.from(files)
+  const total = fileArray.length
+  
+  onProgress?.({ phase: 'scanning', current: 0, total })
+  
+  // Group by folder (from webkitRelativePath)
+  const byFolder = new Map<string, File[]>()
+  
+  for (const file of fileArray) {
+    const path = (file as any).webkitRelativePath || ''
+    const parts = path.split('/')
+    const folder = parts.length > 1 ? parts[parts.length - 2] : ''
+    
+    if (!byFolder.has(folder)) byFolder.set(folder, [])
+    byFolder.get(folder)!.push(file)
+  }
+  
+  const notes: Note[] = []
+  let processed = 0
+  
+  for (const [folder, folderFiles] of byFolder) {
+    for (const file of folderFiles) {
+      processed++
+      onProgress?.({ 
+        phase: 'processing', 
+        current: processed, 
+        total, 
+        currentFile: file.name,
+        currentFolder: folder || undefined
+      })
+      
+      try {
+        if (file.name.endsWith('.txt')) {
+          const rawText = await file.text()
+          const text = formatNoteText(rawText)
+          notes.push({
+            id: file.name.replace(/\.txt$/, ''),
+            text,
+            meta: { source: file.name, type: folder || undefined }
+          })
+        } else if (file.name.endsWith('.json')) {
+          const imported = await importJSON(file)
+          imported.forEach(n => {
+            if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
+            notes.push(n)
+          })
+        } else if (file.name.endsWith('.jsonl')) {
+          const imported = await importJSONL(file)
+          imported.forEach(n => {
+            if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
+            notes.push(n)
+          })
+        }
+      } catch (err) {
+        console.error(`Failed to import ${file.name}:`, err)
+      }
+    }
+  }
+  
+  onProgress?.({ phase: 'done', current: notes.length, total: notes.length })
+  return notes
+}
+
+// Import from drag-drop DataTransfer
+export async function importFromDrop(
+  dataTransfer: DataTransfer,
   onProgress?: ProgressCallback
 ): Promise<Note[]> {
   const notes: Note[] = []
+  const entries: FileSystemEntry[] = []
   
-  async function processEntry(entry: FileSystemEntry, noteType?: string): Promise<void> {
+  // Get entries from DataTransfer
+  for (let i = 0; i < dataTransfer.items.length; i++) {
+    const entry = dataTransfer.items[i].webkitGetAsEntry()
+    if (entry) entries.push(entry)
+  }
+  
+  if (entries.length === 0) return []
+  
+  // Collect all files first to get total count
+  const allFiles: { file: File; folder: string }[] = []
+  
+  async function collectFiles(entry: FileSystemEntry, folder: string): Promise<void> {
     if (entry.isFile) {
-      const fileEntry = entry as FileSystemFileEntry
       const file = await new Promise<File>((resolve, reject) => {
-        fileEntry.file(resolve, reject)
+        (entry as FileSystemFileEntry).file(resolve, reject)
       })
-      
-      onProgress?.(file.name)
-      
-      if (file.name.endsWith('.txt')) {
-        const rawText = await file.text()
-        const text = formatNoteText(rawText)  // Auto-format
-        const id = file.name.replace(/\.txt$/, '')
-        notes.push({
-          id,
-          text,
-          meta: {
-            source: file.name,
-            type: noteType
-          }
-        })
-      } else if (file.name.endsWith('.json')) {
-        const imported = await importJSON(file)
-        imported.forEach(n => {
-          if (noteType && !n.meta?.type) {
-            n.meta = { ...n.meta, type: noteType }
-          }
-          notes.push(n)
-        })
-      } else if (file.name.endsWith('.jsonl')) {
-        const imported = await importJSONL(file)
-        imported.forEach(n => {
-          if (noteType && !n.meta?.type) {
-            n.meta = { ...n.meta, type: noteType }
-          }
-          notes.push(n)
-        })
-      }
+      allFiles.push({ file, folder })
     } else if (entry.isDirectory) {
-      const dirEntry = entry as FileSystemDirectoryEntry
-      const reader = dirEntry.createReader()
-      
-      // folder name becomes note type
-      const folderNoteType = dirEntry.name
-      
-      // readEntries may not return all entries at once, need to call repeatedly
-      let allEntries: FileSystemEntry[] = []
+      const dir = entry as FileSystemDirectoryEntry
+      const reader = dir.createReader()
       let batch: FileSystemEntry[]
       
       do {
         batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
           reader.readEntries(resolve, reject)
         })
-        allEntries = allEntries.concat(batch)
+        for (const sub of batch) {
+          await collectFiles(sub, dir.name)
+        }
       } while (batch.length > 0)
-      
-      for (const subEntry of allEntries) {
-        await processEntry(subEntry, folderNoteType)
-      }
     }
   }
   
-  for (const item of items) {
-    await processEntry(item)
+  onProgress?.({ phase: 'scanning', current: 0, total: 0 })
+  
+  for (const entry of entries) {
+    await collectFiles(entry, '')
   }
   
+  const total = allFiles.length
+  let processed = 0
+  
+  for (const { file, folder } of allFiles) {
+    processed++
+    onProgress?.({ 
+      phase: 'processing', 
+      current: processed, 
+      total, 
+      currentFile: file.name,
+      currentFolder: folder || undefined
+    })
+    
+    try {
+      if (file.name.endsWith('.txt')) {
+        const rawText = await file.text()
+        const text = formatNoteText(rawText)
+        notes.push({
+          id: file.name.replace(/\.txt$/, ''),
+          text,
+          meta: { source: file.name, type: folder || undefined }
+        })
+      } else if (file.name.endsWith('.json')) {
+        const imported = await importJSON(file)
+        imported.forEach(n => {
+          if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
+          notes.push(n)
+        })
+      } else if (file.name.endsWith('.jsonl')) {
+        const imported = await importJSONL(file)
+        imported.forEach(n => {
+          if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
+          notes.push(n)
+        })
+      }
+    } catch (err) {
+      console.error(`Failed to import ${file.name}:`, err)
+    }
+  }
+  
+  onProgress?.({ phase: 'done', current: notes.length, total: notes.length })
   return notes
-}
-
-// Import from DataTransferItemList (for drag-drop)
-export async function importFromDataTransfer(
-  items: DataTransferItemList,
-  onProgress?: ProgressCallback
-): Promise<Note[]> {
-  const entries: FileSystemEntry[] = []
-  
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i]
-    if (item.kind === 'file') {
-      const entry = item.webkitGetAsEntry()
-      if (entry) {
-        entries.push(entry)
-      }
-    }
-  }
-  
-  if (entries.length === 0) {
-    return []
-  }
-  
-  return importFolder(entries, onProgress)
 }
 
 function normalizeNote(raw: Record<string, unknown>): Note {
