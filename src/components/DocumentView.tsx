@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react'
 import { useStore } from '../hooks/useStore'
 import { getQuestion } from '../lib/questions'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, SkipForward } from 'lucide-react'
 
 interface Props {
   onCreateAnnotation: (text: string, start: number, end: number) => void
@@ -13,6 +13,11 @@ export function DocumentView({ onCreateAnnotation }: Props) {
 
   const note = notes[currentNoteIndex]
   const noteAnnotations = note ? annotations.filter(a => a.noteId === note.id) : []
+  
+  // Find notes with annotations for stats and navigation
+  const annotatedNoteIds = new Set(annotations.map(a => a.noteId))
+  const nextUnannotatedIndex = notes.findIndex((n, i) => i > currentNoteIndex && !annotatedNoteIds.has(n.id))
+  const hasUnannotated = notes.some(n => !annotatedNoteIds.has(n.id))
 
   const handleTextSelect = useCallback(() => {
     const sel = window.getSelection()
@@ -51,35 +56,46 @@ export function DocumentView({ onCreateAnnotation }: Props) {
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
-      <div className="h-10 bg-white border-b border-maple-200 flex items-center px-4 gap-3">
-        <div className="flex items-center bg-maple-100 rounded-full p-0.5">
+      <div className="h-10 bg-white border-b border-maple-200 flex items-center px-3 gap-2">
+        <div className="flex items-center bg-maple-100 rounded-full shrink-0">
           <button
             onClick={() => setCurrentNoteIndex(Math.max(0, currentNoteIndex - 1))}
             disabled={currentNoteIndex === 0}
-            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white disabled:opacity-30 transition-colors"
+            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-white disabled:opacity-30"
           >
-            <ChevronLeft size={14} />
+            <ChevronLeft size={12} />
           </button>
-          <span className="px-3 text-[11px] text-maple-600 font-medium tabular-nums">
-            {currentNoteIndex + 1} / {notes.length}
+          <span className="px-1 text-[10px] text-maple-600 tabular-nums whitespace-nowrap">
+            {currentNoteIndex + 1}/{notes.length}
           </span>
           <button
             onClick={() => setCurrentNoteIndex(Math.min(notes.length - 1, currentNoteIndex + 1))}
             disabled={currentNoteIndex === notes.length - 1}
-            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white disabled:opacity-30 transition-colors"
+            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-white disabled:opacity-30"
           >
-            <ChevronRight size={14} />
+            <ChevronRight size={12} />
           </button>
         </div>
         
-        <span className="text-[11px] text-maple-600 font-medium">{note.id}</span>
+        <span className="text-[11px] text-maple-600 truncate">{note.id}</span>
         
         {note.meta?.type && (
-          <span 
-            className="text-[10px] text-maple-500 bg-maple-100 px-2.5 py-1 rounded-full"
-          >
+          <span className="text-[9px] text-maple-500 bg-maple-100 px-2 py-0.5 rounded-full shrink-0">
             {note.meta.type}
           </span>
+        )}
+        
+        <div className="flex-1" />
+        
+        {hasUnannotated && nextUnannotatedIndex !== -1 && (
+          <button
+            onClick={() => setCurrentNoteIndex(nextUnannotatedIndex)}
+            className="flex items-center gap-1 text-[10px] text-maple-500 hover:text-maple-700 hover:bg-maple-100 px-2 py-1 rounded"
+            title="Jump to next unannotated note"
+          >
+            <SkipForward size={11} />
+            <span>Next todo</span>
+          </button>
         )}
       </div>
 
