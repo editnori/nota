@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, useMemo, useEffect } from 'react'
 import { useStore } from '../hooks/useStore'
 import { getQuestion, loadQuestions } from '../lib/questions'
-import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus, Check } from 'lucide-react'
+import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus, Check, Trash2 } from 'lucide-react'
 
 interface Props {
   onCreateAnnotation: (text: string, start: number, end: number) => void
@@ -27,7 +27,7 @@ interface OverlapPrompt {
 }
 
 export function DocumentView({ onCreateAnnotation }: Props) {
-  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, updateAnnotation, fontSize, setFontSize, highlightedAnnotation } = useStore()
+  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, updateAnnotation, removeAnnotation, fontSize, setFontSize, highlightedAnnotation } = useStore()
   const docRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [activeSpan, setActiveSpan] = useState<{ annotationIds: string[] } | null>(null)
@@ -281,6 +281,14 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     })
   }
 
+  function handleDeleteSpan() {
+    if (!activeSpan) return
+    activeSpan.annotationIds.forEach(annId => {
+      removeAnnotation(annId)
+    })
+    setActiveSpan(null)
+  }
+
   function handleSpanEditorSave() {
     if (!spanEditor || !note) return
     
@@ -507,9 +515,14 @@ export function DocumentView({ onCreateAnnotation }: Props) {
             })}
           </div>
           <div className="flex items-center justify-between mt-2 pt-2 border-t border-maple-100 dark:border-maple-700">
-            <span className="text-[9px] text-maple-400 dark:text-maple-500">
-              Double-click span to edit bounds
-            </span>
+            <button
+              onClick={handleDeleteSpan}
+              className="flex items-center gap-1 text-[10px] text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+              title="Delete this annotation"
+            >
+              <Trash2 size={11} />
+              Delete
+            </button>
             <button
               onClick={() => setActiveSpan(null)}
               className="text-[10px] text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200"

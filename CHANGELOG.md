@@ -2,15 +2,19 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.31] - 2025-12-04
+
+### Added
+- **Delete button in question popup**: Click on a span → popup now has "Delete" option
+  - Quick way to remove accidental annotations
+  - Alternative to Ctrl+Z undo
+  - Styled in red to indicate destructive action
+
 ## [0.0.30] - 2025-12-04
 
 ### Fixed
-- **Overlap popup ACTUALLY works now**: 
-  - Root cause: `mouseup` and `click` are separate events, stopPropagation didn't help
-  - Solution: Added `justOpenedPopupRef` flag with 100ms window
-  - Container click handler checks flag before closing popup
-  - Removed "entirely within" silent rejection - always show options
-- **Question toggle buttons stable size**: Reserved fixed width for checkmark
+- Overlap popup works (justOpenedPopupRef flag)
+- Question toggle buttons stable size
 
 ## [0.0.29] - 2025-12-04
 
