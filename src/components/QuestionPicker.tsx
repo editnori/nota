@@ -33,7 +33,8 @@ export function QuestionPicker({ onSelect }: Props) {
               }`}
               style={{
                 backgroundColor: isSelected ? `${q.color}15` : undefined,
-                ringColor: isSelected ? q.color : undefined
+                // @ts-expect-error ring color via CSS variable
+                '--tw-ring-color': isSelected ? q.color : undefined
               }}
             >
               <span

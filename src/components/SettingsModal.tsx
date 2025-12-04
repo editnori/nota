@@ -9,7 +9,6 @@ interface Props {
 
 export function SettingsModal({ onClose }: Props) {
   const [questions, setQuestions] = useState<Question[]>(loadQuestions)
-  const [editingId, setEditingId] = useState<string | null>(null)
 
   function handleSave() {
     saveQuestions(questions)
@@ -36,7 +35,6 @@ export function SettingsModal({ onClose }: Props) {
       hotkey: '',
       hint: ''
     }])
-    setEditingId(newId)
   }
 
   function handleRemove(id: string) {

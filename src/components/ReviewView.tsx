@@ -7,7 +7,7 @@ import { X, ExternalLink, Search, Wand2, Loader2, MessageSquare } from 'lucide-r
 const PAGE_SIZE = 50
 
 export function ReviewView() {
-  const { notes, annotations, removeAnnotation, setMode, setCurrentNoteIndex, addBulkAnnotations, setHighlightedAnnotation, highlightedAnnotation } = useStore()
+  const { notes, annotations, removeAnnotation, setMode, setCurrentNoteIndex, addBulkAnnotations, setHighlightedAnnotation } = useStore()
   const [selectedQ, setSelectedQ] = useState<string | null>(null)
   const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'auto'>('all')
   const [commentFilter, setCommentFilter] = useState<'all' | 'with' | 'without'>('all')

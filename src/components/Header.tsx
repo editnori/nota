@@ -289,6 +289,7 @@ export function Header() {
       )}
 
       <input ref={fileInputRef} type="file" multiple accept=".json,.jsonl,.txt" onChange={handleFileImport} className="hidden" />
+      {/* @ts-expect-error webkitdirectory is non-standard but widely supported */}
       <input ref={folderInputRef} type="file" webkitdirectory="" directory="" multiple onChange={handleFolderImport} className="hidden" />
       <input ref={sessionInputRef} type="file" accept=".json" onChange={handleSessionImport} className="hidden" />
 

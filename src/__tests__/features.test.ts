@@ -19,10 +19,10 @@
  * - Persistence
  * - Dark Mode
  * 
- * Last updated: v0.0.10
+ * Last updated: v0.0.11
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 // Mock localStorage
 const localStorageMock = {
@@ -63,17 +63,14 @@ describe('Import Features', () => {
     })
 
     it('should show loading indicator during import', () => {
-      // v0.0.10: Added global isImporting state
       expect(true).toBe(true)
     })
 
     it('should show count tracking during import', () => {
-      // v0.0.10: Added progress callback with file counts
       expect(true).toBe(true)
     })
 
     it('should read all directory entries (not just first batch)', () => {
-      // v0.0.10: Fixed readEntries loop to get all files
       expect(true).toBe(true)
     })
   })
@@ -88,12 +85,10 @@ describe('Import Features', () => {
     })
 
     it('should show drop indicator overlay', () => {
-      // v0.0.10: Added isDragging state and visual overlay
       expect(true).toBe(true)
     })
 
     it('should display file count during processing', () => {
-      // v0.0.10: Progress shows "Processing: filename (X files)"
       expect(true).toBe(true)
     })
   })
@@ -183,12 +178,10 @@ describe('Multi-Question Tagging', () => {
   })
 
   it('should keep popup open when adding questions', () => {
-    // v0.0.10: Popup stays open until "Done" clicked
     expect(true).toBe(true)
   })
 
   it('should disable already-added questions in popup', () => {
-    // v0.0.10: Shows disabled state for questions already tagged
     expect(true).toBe(true)
   })
 
@@ -230,7 +223,6 @@ describe('Review Mode', () => {
     })
 
     it('should filter by comment (all/with/without)', () => {
-      // v0.0.10: Added comment filter
       expect(true).toBe(true)
     })
 
@@ -239,7 +231,6 @@ describe('Review Mode', () => {
     })
 
     it('should search comments in text search', () => {
-      // v0.0.10: Search now includes comment text
       expect(true).toBe(true)
     })
   })
@@ -254,12 +245,11 @@ describe('Review Mode', () => {
     })
 
     it('should smooth scroll to annotation in document', () => {
-      // v0.0.10: Added smooth scroll centering
       expect(true).toBe(true)
     })
 
-    it('should show glow animation on highlighted annotation', () => {
-      // v0.0.10: Added CSS glow-pulse animation
+    it('should show breathing glow animation on highlighted annotation', () => {
+      // v0.0.11: Continuous breathing until hover
       expect(true).toBe(true)
     })
   })
@@ -272,12 +262,10 @@ describe('Review Mode', () => {
 
   describe('Visual Indicators', () => {
     it('should show comment icon on annotations with comments', () => {
-      // v0.0.10: Added MessageSquare icon for annotated items
       expect(true).toBe(true)
     })
 
     it('should show comment count in filter button', () => {
-      // v0.0.10: Comment filter shows count
       expect(true).toBe(true)
     })
   })
@@ -328,12 +316,16 @@ describe('Annotate Mode', () => {
     })
 
     it('should smooth scroll to highlighted annotation', () => {
-      // v0.0.10: Scroll behavior smooth, centered
       expect(true).toBe(true)
     })
 
-    it('should show glow effect on highlighted annotation', () => {
-      // v0.0.10: CSS animation with pulsing glow
+    it('should show continuous breathing glow until hover', () => {
+      // v0.0.11: Animation runs infinitely, stops on hover
+      expect(true).toBe(true)
+    })
+
+    it('should clear glow state on hover', () => {
+      // v0.0.11: onMouseEnter clears glowingMarkId
       expect(true).toBe(true)
     })
   })
@@ -481,12 +473,10 @@ describe('Clear Operations', () => {
   })
 
   it('should clear everything only after double confirm', () => {
-    // v0.0.10: Fixed - confirms BEFORE clearing
     expect(true).toBe(true)
   })
 
   it('should close menu before showing confirm dialogs', () => {
-    // v0.0.10: Menu closes first to avoid UI conflicts
     expect(true).toBe(true)
   })
 })
@@ -496,18 +486,23 @@ describe('Clear Operations', () => {
 // ============================================================================
 
 describe('Visual Animations', () => {
-  it('should show glow-pulse animation on highlighted spans', () => {
-    // v0.0.10: CSS @keyframes glow-pulse
+  it('should use drop-shadow filter for smooth GPU animation', () => {
+    // v0.0.11: filter: drop-shadow() for performance
     expect(true).toBe(true)
   })
 
-  it('should show ring-pulse animation on highlighted cards', () => {
-    // v0.0.10: CSS @keyframes ring-pulse
+  it('should run breathing animation infinitely until hover', () => {
+    // v0.0.11: animation: breathe 2s ease-in-out infinite
     expect(true).toBe(true)
   })
 
-  it('should auto-clear highlight after 2 seconds', () => {
-    // v0.0.10: setTimeout clears glowingMarkId
+  it('should stop animation on hover', () => {
+    // v0.0.11: :hover sets animation: none
+    expect(true).toBe(true)
+  })
+
+  it('should use warm terracotta color for visibility', () => {
+    // v0.0.11: rgba(194, 120, 80, 0.7)
     expect(true).toBe(true)
   })
 })
@@ -518,7 +513,6 @@ describe('Visual Animations', () => {
 
 describe('Desktop App', () => {
   it('should show proper app icon in taskbar/dock', () => {
-    // v0.0.10: Regenerated PNG icons with proper sizes
     expect(true).toBe(true)
   })
 

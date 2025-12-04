@@ -25,7 +25,7 @@ async function getTauriStore() {
   
   try {
     const { load } = await import('@tauri-apps/plugin-store')
-    tauriStore = await load('nota-session.json', { autoSave: true })
+    tauriStore = await load('nota-session.json')
     return tauriStore
   } catch (err) {
     console.error('Failed to load Tauri store:', err)
@@ -38,7 +38,7 @@ export async function loadSession(): Promise<SessionData | null> {
     try {
       const store = await getTauriStore()
       if (store) {
-        const data = await store.get<SessionData>(STORAGE_KEY)
+        const data = await store.get(STORAGE_KEY) as SessionData | null
         if (data) {
           return data
         }

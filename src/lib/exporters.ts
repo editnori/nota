@@ -140,7 +140,7 @@ export async function downloadFile(content: string, filename: string, type: stri
   if (inTauri) {
     try {
       const { save } = await import('@tauri-apps/plugin-dialog')
-      const { writeTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
+      const { writeTextFile } = await import('@tauri-apps/plugin-fs')
       
       // Determine filters based on file type
       let filters = [{ name: 'All Files', extensions: ['*'] }]

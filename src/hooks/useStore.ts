@@ -224,7 +224,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   undo: () => {
-    const { undoStack, annotations } = get()
+    const { undoStack } = get()
     if (undoStack.length === 0) return
 
     const action = undoStack[undoStack.length - 1]

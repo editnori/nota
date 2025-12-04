@@ -2,6 +2,20 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.11] - 2025-12-04
+
+### Improved
+- **Breathing animation**: Completely reworked highlight animation
+  - Uses `filter: drop-shadow()` for GPU-accelerated smoothness
+  - Continuous breathing effect until user hovers over it
+  - Warm terracotta color (`rgb(194, 120, 80)`) for better visibility
+  - Stops cleanly on hover, clears animation state
+
+### Fixed
+- All TypeScript errors resolved
+- Removed unused variables and imports
+- Fixed type issues with Tauri store API
+
 ## [0.0.10] - 2025-12-04
 
 ### Fixed
