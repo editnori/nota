@@ -2,15 +2,25 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.24] - 2025-12-04
+
+### Added
+- **Toggle questions on span popup**: Click a question to add OR remove it (not just add)
+  - Active questions show checkmark and ring highlight
+  - Can't remove the last question (must have at least one)
+- **Span editor (double-click)**: Double-click any highlight to edit its boundaries
+  - Live preview shows current selection
+  - Adjust start/end with +1/-1 buttons
+  - Save or cancel changes
+
+### Improved
+- Question popup now clearly shows which questions are active vs available
+- Hint text explains click vs double-click behavior
+
 ## [0.0.23] - 2025-12-04
 
 ### Added
-- **Annotation navigation in Annotate view**:
-  - Click any annotation in sidebar to scroll document to that highlight
-  - Prev/Next buttons (↑/↓) to jump through annotations in order
-  - Current position indicator (e.g., "3/12")
-  - Active annotation gets a ring highlight in both sidebar and document
-  - Annotations sorted by position in document for logical navigation
+- Annotation navigation in sidebar (click to jump, prev/next buttons)
 
 ## [0.0.22] - 2025-12-04
 

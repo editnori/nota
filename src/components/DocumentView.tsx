@@ -1,10 +1,19 @@
 import { useCallback, useRef, useState, useMemo, useEffect } from 'react'
 import { useStore } from '../hooks/useStore'
 import { getQuestion, loadQuestions } from '../lib/questions'
-import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus, Check } from 'lucide-react'
 
 interface Props {
   onCreateAnnotation: (text: string, start: number, end: number) => void
+}
+
+interface SpanEditor {
+  annotationId: string
+  originalStart: number
+  originalEnd: number
+  currentStart: number
+  currentEnd: number
+  position: { x: number, y: number }
 }
 
 export function DocumentView({ onCreateAnnotation }: Props) {
@@ -13,6 +22,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [activeSpan, setActiveSpan] = useState<{ annotationIds: string[], position: { x: number, y: number } } | null>(null)
   const [glowingMarkId, setGlowingMarkId] = useState<string | null>(null)
+  const [spanEditor, setSpanEditor] = useState<SpanEditor | null>(null)
 
   const note = notes[currentNoteIndex]
   
@@ -103,16 +113,62 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     })
   }
 
-  function handleAddQuestionToSpan(questionId: string) {
+  function handleSpanDoubleClick(e: React.MouseEvent, annotationIds: string[]) {
+    e.stopPropagation()
+    e.preventDefault()
+    
+    // Edit the first annotation's span
+    const annId = annotationIds[0]
+    const ann = annotations.find(a => a.id === annId)
+    if (!ann) return
+    
+    const rect = (e.target as HTMLElement).getBoundingClientRect()
+    setSpanEditor({
+      annotationId: annId,
+      originalStart: ann.start,
+      originalEnd: ann.end,
+      currentStart: ann.start,
+      currentEnd: ann.end,
+      position: { x: rect.left, y: rect.bottom + 4 }
+    })
+    setActiveSpan(null)
+  }
+
+  function handleToggleQuestion(questionId: string) {
     if (!activeSpan) return
     
     activeSpan.annotationIds.forEach(annId => {
       const ann = annotations.find(a => a.id === annId)
-      if (ann && !ann.questions.includes(questionId)) {
+      if (!ann) return
+      
+      if (ann.questions.includes(questionId)) {
+        // Remove question (but keep at least one)
+        if (ann.questions.length > 1) {
+          updateAnnotation(annId, { questions: ann.questions.filter(q => q !== questionId) })
+        }
+      } else {
+        // Add question
         updateAnnotation(annId, { questions: [...ann.questions, questionId] })
       }
     })
-    // Don't close popup - let user click multiple questions
+  }
+
+  function handleSpanEditorSave() {
+    if (!spanEditor || !note) return
+    
+    const { annotationId, currentStart, currentEnd } = spanEditor
+    const newText = note.text.slice(currentStart, currentEnd)
+    
+    updateAnnotation(annotationId, {
+      start: currentStart,
+      end: currentEnd,
+      text: newText
+    })
+    setSpanEditor(null)
+  }
+
+  function handleSpanEditorCancel() {
+    setSpanEditor(null)
   }
 
   if (!note) {
@@ -130,7 +186,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const questions = loadQuestions()
 
   return (
-    <div className="flex-1 flex flex-col min-w-0" onClick={() => setActiveSpan(null)}>
+    <div className="flex-1 flex flex-col min-w-0" onClick={() => { setActiveSpan(null); setSpanEditor(null) }}>
       <div className="h-10 bg-white dark:bg-maple-800 border-b border-maple-200 dark:border-maple-700 flex items-center px-3 gap-2">
         <div className="flex items-center bg-maple-100 dark:bg-maple-700 rounded-full shrink-0">
           <button
@@ -231,8 +287,9 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                         color: 'inherit',
                         opacity: isSuggested ? 0.8 : 1
                       }}
-                      title={`${seg.questions.map(qid => getQuestion(qid)?.name || qid).join(' + ')}${isSuggested ? ' (auto)' : ''}\n(click to add more)`}
+                      title={`${seg.questions.map(qid => getQuestion(qid)?.name || qid).join(' + ')}${isSuggested ? ' (auto)' : ''}\nClick: edit questions | Double-click: edit span`}
                       onClick={(e) => handleSpanClick(e, seg.annotationIds)}
+                      onDoubleClick={(e) => handleSpanDoubleClick(e, seg.annotationIds)}
                       onMouseEnter={() => isGlowing && setGlowingMarkId(null)}
                     >
                       {seg.text}
@@ -264,44 +321,143 @@ export function DocumentView({ onCreateAnnotation }: Props) {
         </div>
       </div>
 
-      {/* Question picker popup for adding to existing span - stays open until clicked away */}
+      {/* Question picker popup - toggle questions on/off */}
       {activeSpan && (
         <div
           className="fixed z-50 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg p-2 max-w-xs"
           style={{ left: activeSpan.position.x, top: activeSpan.position.y }}
           onClick={e => e.stopPropagation()}
         >
-          <div className="text-[10px] text-maple-500 dark:text-maple-400 mb-2">Add questions to this span:</div>
+          <div className="text-[10px] text-maple-500 dark:text-maple-400 mb-2">Toggle questions (click to add/remove):</div>
           <div className="flex flex-wrap gap-1">
             {questions.map(q => {
-              // Check if all annotations already have this question
-              const allHave = activeSpan.annotationIds.every(annId => {
+              // Check if any annotation has this question
+              const hasQuestion = activeSpan.annotationIds.some(annId => {
                 const ann = annotations.find(a => a.id === annId)
                 return ann?.questions.includes(q.id)
+              })
+              
+              // Check if this is the only question (can't remove last one)
+              const isOnlyQuestion = hasQuestion && activeSpan.annotationIds.every(annId => {
+                const ann = annotations.find(a => a.id === annId)
+                return ann?.questions.length === 1 && ann.questions[0] === q.id
               })
               
               return (
                 <button
                   key={q.id}
-                  onClick={() => handleAddQuestionToSpan(q.id)}
-                  disabled={allHave}
-                  className={`text-[9px] px-2 py-1 rounded text-white transition-all ${
-                    allHave ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-80 hover:scale-105'
-                  }`}
-                  style={{ backgroundColor: q.color }}
-                  title={allHave ? 'Already tagged' : `Add "${q.name}"`}
+                  onClick={() => handleToggleQuestion(q.id)}
+                  disabled={isOnlyQuestion}
+                  className={`text-[9px] px-2 py-1 rounded transition-all flex items-center gap-1 ${
+                    hasQuestion 
+                      ? 'text-white ring-2 ring-offset-1' 
+                      : 'text-white opacity-40 hover:opacity-70'
+                  } ${isOnlyQuestion ? 'cursor-not-allowed' : 'hover:scale-105'}`}
+                  style={{ 
+                    backgroundColor: q.color,
+                    // @ts-expect-error CSS variable
+                    '--tw-ring-color': q.color
+                  }}
+                  title={isOnlyQuestion ? 'Cannot remove last question' : hasQuestion ? `Remove "${q.name}"` : `Add "${q.name}"`}
                 >
+                  {hasQuestion && <Check size={10} />}
                   {q.hotkey}. {q.name}
                 </button>
               )
             })}
           </div>
-          <button
-            onClick={() => setActiveSpan(null)}
-            className="mt-2 text-[10px] text-maple-400 dark:text-maple-500 hover:text-maple-600 dark:hover:text-maple-300"
-          >
-            Done
-          </button>
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-maple-100 dark:border-maple-700">
+            <span className="text-[9px] text-maple-400 dark:text-maple-500">
+              Double-click span to edit bounds
+            </span>
+            <button
+              onClick={() => setActiveSpan(null)}
+              className="text-[10px] text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Span editor popup - adjust start/end */}
+      {spanEditor && note && (
+        <div
+          className="fixed z-50 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg p-3 w-72"
+          style={{ left: spanEditor.position.x, top: spanEditor.position.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="text-[10px] text-maple-500 dark:text-maple-400 mb-2">Edit span boundaries:</div>
+          
+          {/* Preview */}
+          <div className="text-[11px] bg-maple-50 dark:bg-maple-700 rounded p-2 mb-3 font-mono break-words">
+            <span className="text-maple-400">...</span>
+            <span className="bg-amber-200 dark:bg-amber-700 px-0.5 rounded">
+              {note.text.slice(spanEditor.currentStart, spanEditor.currentEnd)}
+            </span>
+            <span className="text-maple-400">...</span>
+          </div>
+          
+          {/* Controls */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div>
+              <label className="text-[9px] text-maple-500 dark:text-maple-400 block mb-1">Start</label>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setSpanEditor({ ...spanEditor, currentStart: Math.max(0, spanEditor.currentStart - 1) })}
+                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[10px]"
+                >
+                  -1
+                </button>
+                <span className="text-[10px] text-maple-600 dark:text-maple-300 flex-1 text-center tabular-nums">
+                  {spanEditor.currentStart}
+                </span>
+                <button
+                  onClick={() => setSpanEditor({ ...spanEditor, currentStart: Math.min(spanEditor.currentEnd - 1, spanEditor.currentStart + 1) })}
+                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[10px]"
+                >
+                  +1
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-[9px] text-maple-500 dark:text-maple-400 block mb-1">End</label>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setSpanEditor({ ...spanEditor, currentEnd: Math.max(spanEditor.currentStart + 1, spanEditor.currentEnd - 1) })}
+                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[10px]"
+                >
+                  -1
+                </button>
+                <span className="text-[10px] text-maple-600 dark:text-maple-300 flex-1 text-center tabular-nums">
+                  {spanEditor.currentEnd}
+                </span>
+                <button
+                  onClick={() => setSpanEditor({ ...spanEditor, currentEnd: Math.min(note.text.length, spanEditor.currentEnd + 1) })}
+                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[10px]"
+                >
+                  +1
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={handleSpanEditorCancel}
+              className="text-[10px] px-2 py-1 text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSpanEditorSave}
+              className="text-[10px] px-3 py-1 bg-maple-800 dark:bg-maple-600 text-white rounded hover:bg-maple-700 dark:hover:bg-maple-500 flex items-center gap-1"
+            >
+              <Check size={10} />
+              Save
+            </button>
+          </div>
         </div>
       )}
     </div>
