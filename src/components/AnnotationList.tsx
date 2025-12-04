@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../hooks/useStore'
 import { loadQuestions, getQuestion } from '../lib/questions'
 import { X, Plus, MessageSquare, Check, ChevronUp, ChevronDown } from 'lucide-react'
@@ -8,15 +8,31 @@ interface Props {
 }
 
 export function AnnotationList({ noteId }: Props) {
-  const { getAnnotationsForNote, removeAnnotation, updateAnnotation, setHighlightedAnnotation, highlightedAnnotation, annotations } = useStore()
+  // Use individual selectors for better performance
+  const removeAnnotation = useStore(s => s.removeAnnotation)
+  const updateAnnotation = useStore(s => s.updateAnnotation)
+  const setHighlightedAnnotation = useStore(s => s.setHighlightedAnnotation)
+  const highlightedAnnotation = useStore(s => s.highlightedAnnotation)
+  
+  // Get annotations for THIS note only - key optimization
+  const noteAnnotations = useStore(
+    useCallback((s) => {
+      const anns = s.annotationsByNote.get(noteId) || []
+      return [...anns].sort((a, b) => a.start - b.start)
+    }, [noteId])
+  )
+  
   const [editingComment, setEditingComment] = useState<{ id: string, text: string } | null>(null)
   const [addingQuestionTo, setAddingQuestionTo] = useState<string | null>(null)
   
-  // Use indexed lookup for O(1) access, sort by position
-  const noteAnnotations = useMemo(() => {
-    const anns = getAnnotationsForNote(noteId)
-    return [...anns].sort((a, b) => a.start - b.start)
-  }, [getAnnotationsForNote, noteId, annotations]) // annotations as dependency for reactivity
+  // Build local annotation map for O(1) lookups
+  const annotationMap = useMemo(() => {
+    const map = new Map<string, typeof noteAnnotations[0]>()
+    for (const a of noteAnnotations) {
+      map.set(a.id, a)
+    }
+    return map
+  }, [noteAnnotations])
   
   const questions = loadQuestions()
 
@@ -42,7 +58,7 @@ export function AnnotationList({ noteId }: Props) {
   }
 
   function handleAddQuestion(annId: string, questionId: string) {
-    const ann = annotations.find(a => a.id === annId)
+    const ann = annotationMap.get(annId)  // O(1) lookup
     if (ann && !ann.questions.includes(questionId)) {
       updateAnnotation(annId, { questions: [...ann.questions, questionId] })
     }
@@ -50,7 +66,7 @@ export function AnnotationList({ noteId }: Props) {
   }
 
   function handleRemoveQuestion(annId: string, questionId: string) {
-    const ann = annotations.find(a => a.id === annId)
+    const ann = annotationMap.get(annId)  // O(1) lookup
     if (ann && ann.questions.length > 1) {
       updateAnnotation(annId, { questions: ann.questions.filter(q => q !== questionId) })
     }

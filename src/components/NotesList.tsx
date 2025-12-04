@@ -62,7 +62,15 @@ interface MatchLocation {
 }
 
 export function NotesList() {
-  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, addBulkAnnotations, filteredNoteIds, setFilteredNoteIds, setNotes } = useStore()
+  // Use individual selectors to minimize re-renders
+  const notes = useStore(s => s.notes)
+  const annotations = useStore(s => s.annotations)
+  const currentNoteIndex = useStore(s => s.currentNoteIndex)
+  const setCurrentNoteIndex = useStore(s => s.setCurrentNoteIndex)
+  const addBulkAnnotations = useStore(s => s.addBulkAnnotations)
+  const filteredNoteIds = useStore(s => s.filteredNoteIds)
+  const setFilteredNoteIds = useStore(s => s.setFilteredNoteIds)
+  const setNotes = useStore(s => s.setNotes)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'done' | 'todo'>('all')
   const [typeFilter, setTypeFilter] = useState<string | null>(null)

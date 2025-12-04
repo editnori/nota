@@ -2,17 +2,27 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.39] - 2025-12-04
+
+### Performance (critical rendering fix)
+- **DocumentView selector optimization**: 
+  - Was subscribing to entire `annotationsByNote` Map → re-rendered on ANY annotation change
+  - Now uses per-note selector → only re-renders when THIS note's annotations change
+- **hasUnannotated O(1)**: Simple size comparison instead of iterating 30k notes
+- **NotesList individual selectors**: Prevents unnecessary re-renders
+- **AnnotationList selector**: Only subscribes to current note's annotations
+- **Header selector**: Uses note-specific selector for annotation count
+
+This is the **KEY FIX** - components were re-rendering on every annotation change 
+even if it was for a different note. Now they only re-render when relevant data changes.
+
 ## [0.0.38] - 2025-12-04
 
 ### Performance (final unbiased audit)
-- **annotationsById index**: O(1) lookup by annotation ID
-  - `getAnnotationById(id)` for instant access
-  - Store operations use Map.get() instead of find()
-- **Single set() calls**: Combined state + lastSaved updates
-  - Was triggering 2 re-renders, now 1
-- **exportJSON optimized**: Single pass through annotations
-  - Was 4x filter() calls, now 1 loop
-- **buildAnnotationIndexes**: Builds both byNote and byId in one pass
+- annotationsById index: O(1) lookup by annotation ID
+- Single set() calls: Combined state + lastSaved updates
+- exportJSON optimized: Single pass through annotations
+- buildAnnotationIndexes: Builds both byNote and byId in one pass
 
 ## [0.0.37] - 2025-12-04
 

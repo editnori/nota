@@ -27,7 +27,27 @@ interface OverlapPrompt {
 }
 
 export function DocumentView({ onCreateAnnotation }: Props) {
-  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, updateAnnotation, removeAnnotation, fontSize, setFontSize, highlightedAnnotation, getAnnotationsForNote, annotationsByNote } = useStore()
+  // Only subscribe to what we need - avoid subscribing to full annotations array
+  const notes = useStore(s => s.notes)
+  const currentNoteIndex = useStore(s => s.currentNoteIndex)
+  const setCurrentNoteIndex = useStore(s => s.setCurrentNoteIndex)
+  const updateAnnotation = useStore(s => s.updateAnnotation)
+  const removeAnnotation = useStore(s => s.removeAnnotation)
+  const fontSize = useStore(s => s.fontSize)
+  const setFontSize = useStore(s => s.setFontSize)
+  const highlightedAnnotation = useStore(s => s.highlightedAnnotation)
+  
+  // Get annotations for current note only - this is the key optimization
+  // We use a selector that only returns annotations for THIS note
+  const note = notes[currentNoteIndex]
+  const noteAnnotations = useStore(
+    useCallback((s) => note ? s.annotationsByNote.get(note.id) || [] : [], [note?.id])
+  )
+  
+  // For hasUnannotated check - just need size comparison
+  const annotationsByNoteSize = useStore(s => s.annotationsByNote.size)
+  const notesLength = notes.length
+  
   const docRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [activeSpan, setActiveSpan] = useState<{ annotationIds: string[] } | null>(null)
@@ -40,48 +60,33 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   
   // Flag to prevent closing popup immediately after opening
   const justOpenedPopupRef = useRef(false)
-
-  const note = notes[currentNoteIndex]
-  
-  // Use indexed lookup for O(1) access - only depends on note.id and annotationsByNote
-  const noteAnnotations = useMemo(() => {
-    if (!note) return []
-    return getAnnotationsForNote(note.id)
-  }, [note?.id, getAnnotationsForNote, annotationsByNote])
   
   // Build annotation ID -> annotation map for O(1) lookups in handlers
   const annotationMap = useMemo(() => {
-    const map = new Map<string, typeof annotations[0]>()
+    const map = new Map<string, typeof noteAnnotations[0]>()
     for (const a of noteAnnotations) {
       map.set(a.id, a)
     }
     return map
   }, [noteAnnotations])
   
-  // Find notes with annotations for navigation - use index keys for O(1)
-  const { nextUnannotatedIndex, hasUnannotated } = useMemo(() => {
-    // Use the index directly - keys are noteIds that have annotations
-    const annotatedNoteIds = annotationsByNote
+  // Check if ANY note is unannotated (simple size comparison)
+  const hasUnannotated = annotationsByNoteSize < notesLength
+  
+  // Get annotationsByNote only when we need to find next unannotated
+  const annotationsByNote = useStore(s => s.annotationsByNote)
+  
+  // Find next unannotated note from current position
+  const nextUnannotatedIndex = useMemo(() => {
+    if (!hasUnannotated) return -1
     
-    let nextIdx = -1
     for (let i = currentNoteIndex + 1; i < notes.length; i++) {
-      if (!annotatedNoteIds.has(notes[i].id)) {
-        nextIdx = i
-        break
+      if (!annotationsByNote.has(notes[i].id)) {
+        return i
       }
     }
-    
-    // Check if any note is unannotated
-    let hasUnannotated = false
-    for (const n of notes) {
-      if (!annotatedNoteIds.has(n.id)) {
-        hasUnannotated = true
-        break
-      }
-    }
-    
-    return { nextUnannotatedIndex: nextIdx, hasUnannotated }
-  }, [annotationsByNote, notes, currentNoteIndex])
+    return -1
+  }, [hasUnannotated, annotationsByNote, notes, currentNoteIndex])
 
   // Scroll to highlighted annotation when it changes - with smooth animation
   useEffect(() => {

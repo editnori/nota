@@ -1,17 +1,46 @@
 import { useStore, setBulkOperation } from '../hooks/useStore'
 import { exportJSON, exportCSV, downloadFile, exportSession, importSession } from '../lib/exporters'
 import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown, Moon, Sun } from 'lucide-react'
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { importFiles } from '../lib/importers'
 import { SettingsModal } from './SettingsModal'
 import { loadQuestions } from '../lib/questions'
 
 export function Header() {
-  const { 
-    notes, annotations, mode, setMode, setNotes, addNotes, 
-    clearSession, clearNoteAnnotations, clearAllAnnotations, clearSuggestedAnnotations,
-    currentNoteIndex, lastSaved, darkMode, setDarkMode, setImporting 
-  } = useStore()
+  // Use individual selectors to minimize re-renders
+  const notes = useStore(s => s.notes)
+  const mode = useStore(s => s.mode)
+  const setMode = useStore(s => s.setMode)
+  const setNotes = useStore(s => s.setNotes)
+  const addNotes = useStore(s => s.addNotes)
+  const clearSession = useStore(s => s.clearSession)
+  const clearNoteAnnotations = useStore(s => s.clearNoteAnnotations)
+  const clearAllAnnotations = useStore(s => s.clearAllAnnotations)
+  const clearSuggestedAnnotations = useStore(s => s.clearSuggestedAnnotations)
+  const currentNoteIndex = useStore(s => s.currentNoteIndex)
+  const lastSaved = useStore(s => s.lastSaved)
+  const darkMode = useStore(s => s.darkMode)
+  const setDarkMode = useStore(s => s.setDarkMode)
+  const setImporting = useStore(s => s.setImporting)
+  
+  // Get annotations count for current note efficiently using selector
+  const currentNote = notes[currentNoteIndex]
+  const currentNoteAnnotationCount = useStore(
+    useCallback((s) => currentNote ? (s.annotationsByNote.get(currentNote.id)?.length || 0) : 0, [currentNote?.id])
+  )
+  
+  // Suggested count - iterate only when needed (for display)
+  const suggestedCount = useStore(s => {
+    let count = 0
+    for (const a of s.annotations) {
+      if (a.source === 'suggested') count++
+    }
+    return count
+  })
+  
+  // For export, get annotations directly
+  const annotations = useStore(s => s.annotations)
+  
   const [showSettings, setShowSettings] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showImportMenu, setShowImportMenu] = useState(false)
@@ -20,22 +49,6 @@ export function Header() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const sessionInputRef = useRef<HTMLInputElement>(null)
-
-  const currentNote = notes[currentNoteIndex]
-  
-  // Memoize counts to avoid recalculating on every render
-  const { currentNoteAnnotationCount, suggestedCount } = useMemo(() => {
-    let currentCount = 0
-    let suggested = 0
-    const noteId = currentNote?.id
-    
-    for (const a of annotations) {
-      if (noteId && a.noteId === noteId) currentCount++
-      if (a.source === 'suggested') suggested++
-    }
-    
-    return { currentNoteAnnotationCount: currentCount, suggestedCount: suggested }
-  }, [annotations, currentNote?.id])
 
   useEffect(() => {
     if (lastSaved) {
