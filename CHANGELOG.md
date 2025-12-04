@@ -2,18 +2,21 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.26] - 2025-12-04
+
+### Improved
+- **Three-way overlap handling**: When selection overlaps existing annotation, now offers:
+  - **Extend** - grow existing annotation to include new selection
+  - **Overlap** - create separate overlapping annotation (when needed)
+  - **Cancel** - do nothing
+- Replaced browser confirm() with styled popup matching app theme
+
 ## [0.0.25] - 2025-12-04
 
 ### Added
-- **Click-and-drag span editing**: While span editor is open, select text in document to redefine boundaries
-- **Overlap prevention**: When creating annotation that overlaps existing one, prompts to extend instead
-  - Prevents accidental overlapping spans (which are rare/unwanted)
-  - Option to extend existing annotation to cover new selection
-
-### Improved
-- Span editor now has -5/+5 buttons for faster boundary adjustment
-- Shows character count in span editor
-- Better hint text explaining selection-based editing
+- Click-and-drag span editing (select text while editor open)
+- Overlap detection with extend option
+- -5/+5 buttons in span editor
 
 ## [0.0.24] - 2025-12-04
 
