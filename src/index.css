@@ -51,31 +51,35 @@ body {
   outline: none;
 }
 
-/* Continuous breathing glow - stops on hover */
-@keyframes breathe {
-  0%, 100% { 
-    filter: drop-shadow(0 0 2px rgba(194, 120, 80, 0.3));
+/* Simple border pulse indicator - like Windows title bar attention */
+@keyframes border-pulse {
+  0%, 100% {
+    outline-color: rgba(194, 120, 80, 0.4);
   }
-  50% { 
-    filter: drop-shadow(0 0 16px rgba(194, 120, 80, 0.7));
+  50% {
+    outline-color: rgba(194, 120, 80, 0.9);
   }
 }
 
 .animate-glow {
-  animation: breathe 2s ease-in-out infinite;
+  outline: 2px solid rgba(194, 120, 80, 0.7);
+  outline-offset: 2px;
   border-radius: 4px;
+  animation: border-pulse 1.5s ease-in-out infinite;
 }
 
 .animate-glow:hover {
   animation: none;
-  filter: drop-shadow(0 0 8px rgba(194, 120, 80, 0.5));
+  outline-color: rgba(194, 120, 80, 0.5);
 }
 
 .animate-ring {
-  animation: breathe 2s ease-in-out infinite;
+  outline: 2px solid rgba(194, 120, 80, 0.7);
+  outline-offset: 2px;
+  animation: border-pulse 1.5s ease-in-out infinite;
 }
 
 .animate-ring:hover {
   animation: none;
-  filter: drop-shadow(0 0 8px rgba(194, 120, 80, 0.5));
+  outline-color: rgba(194, 120, 80, 0.5);
 }
