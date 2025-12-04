@@ -9,6 +9,7 @@ import { FormatView } from './components/FormatView'
 import { QuestionPicker } from './components/QuestionPicker'
 import { AnnotationList } from './components/AnnotationList'
 import { importFromDrop } from './lib/importers'
+import { setBulkOperation } from './hooks/useStore'
 import { Loader2, Upload } from 'lucide-react'
 
 export default function App() {
@@ -38,6 +39,8 @@ export default function App() {
     if (e.dataTransfer.items.length === 0) return
     
     try {
+      setBulkOperation(true) // Disable saves during import
+      
       const imported = await importFromDrop(e.dataTransfer, (progress) => {
         if (progress.phase === 'scanning') {
           setImporting(true, 'Scanning...')
@@ -49,20 +52,24 @@ export default function App() {
       })
       
       if (imported.length > 0) {
+        // Use requestIdleCallback for smoother UI during large imports
         if (notes.length > 0) {
           addNotes(imported)
         } else {
           setNotes(imported)
         }
-        setTimeout(() => setImporting(false), 500)
+        setBulkOperation(false) // Re-enable saves
+        setTimeout(() => setImporting(false), 300)
       } else {
+        setBulkOperation(false)
         setImporting(true, 'No valid files found')
-        setTimeout(() => setImporting(false), 1000)
+        setTimeout(() => setImporting(false), 800)
       }
     } catch (err) {
       console.error('Import error:', err)
+      setBulkOperation(false)
       setImporting(true, 'Import failed')
-      setTimeout(() => setImporting(false), 1500)
+      setTimeout(() => setImporting(false), 1000)
     }
   }
 

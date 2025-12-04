@@ -2,23 +2,25 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.34] - 2025-12-04
+
+### Performance (30k+ notes optimization)
+- **O(1) note lookups**: Added `noteIndexMap` for instant note ID → index lookups
+  - Was O(n) findIndex on every render, now O(1) Map lookup
+- **Memoized NoteItem component**: Individual notes don't re-render when others change
+- **Precomputed type counts**: Note type counts calculated once, not per-render
+- **Bulk operation flag**: Disables auto-save during large imports
+  - Prevents 30k individual save operations
+  - Single save after import completes
+- **Increased save debounce**: 300ms → 500ms for large datasets
+- **Optimized annotation counts**: Single loop instead of multiple filter() calls
+- **ReviewView optimization**: Added noteIndexMap for O(1) navigation
+
 ## [0.0.33] - 2025-12-04
 
 ### Fixed
-- **Drag-drop folders works again**: 
-  - Fixed using dragEnter/dragLeave counter pattern
-  - Properly tracks nested element drag events
-  - Drop overlay shows correctly
-
-### Added
-- **Delete non-matching notes in Smart Filter**:
-  - New "Delete X" button when filter has matches
-  - Permanently removes notes that don't match current filter
-  - Confirmation required before deletion
-
-### Improved
-- Faster import (removed unnecessary delays)
-- Smart Filter shows "X / Y notes" count
+- Drag-drop folders
+- Delete non-matching in Smart Filter
 
 ## [0.0.32] - 2025-12-04
 

@@ -129,9 +129,16 @@ export function ReviewView() {
     return bulkMatches.filter(m => !excludedMatches.has(m.id))
   }, [bulkMatches, excludedMatches])
 
+  // Build note ID -> index map for O(1) lookups
+  const noteIndexMap = useMemo(() => {
+    const map = new Map<string, number>()
+    notes.forEach((n, idx) => map.set(n.id, idx))
+    return map
+  }, [notes])
+
   function goToNote(noteId: string, annotationId?: string) {
-    const idx = notes.findIndex(n => n.id === noteId)
-    if (idx >= 0) {
+    const idx = noteIndexMap.get(noteId)
+    if (idx !== undefined) {
       setCurrentNoteIndex(idx)
       setMode('annotate')
       if (annotationId) {

@@ -1,10 +1,57 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, memo } from 'react'
 import { useStore } from '../hooks/useStore'
 import { useDebounce } from '../hooks/useDebounce'
 import { Search, ChevronUp, ChevronDown, Filter, X, Loader2, Zap } from 'lucide-react'
 import { SmartFilter } from './SmartFilter'
+import type { Note } from '../lib/types'
 
 const PAGE_SIZE = 50
+
+// Memoized note item to prevent re-renders
+const NoteItem = memo(function NoteItem({ 
+  note, 
+  index, 
+  isSelected, 
+  annotationCount, 
+  hasSuggested,
+  onClick 
+}: {
+  note: Note
+  index: number
+  isSelected: boolean
+  annotationCount: number
+  hasSuggested: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left px-2 py-2 border-b border-maple-100 dark:border-maple-700 ${
+        isSelected ? 'bg-maple-100 dark:bg-maple-700' : 'hover:bg-maple-50 dark:hover:bg-maple-700/50'
+      }`}
+    >
+      <div className="flex items-center gap-1.5 mb-0.5">
+        <span className={`text-[9px] tabular-nums ${isSelected ? 'text-maple-600 dark:text-maple-300 font-medium' : 'text-maple-400 dark:text-maple-500'}`}>
+          {index + 1}
+        </span>
+        <span className={`text-[10px] truncate flex-1 ${isSelected ? 'text-maple-900 dark:text-maple-100 font-medium' : 'text-maple-600 dark:text-maple-300'}`}>
+          {note.id}
+        </span>
+        {annotationCount > 0 && (
+          <span className={`text-[8px] px-1 py-0.5 rounded-full font-medium ${hasSuggested ? 'bg-maple-200 dark:bg-maple-600 text-maple-600 dark:text-maple-300' : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400'}`}>
+            {annotationCount}
+          </span>
+        )}
+      </div>
+      {note.meta?.type && (
+        <div className="text-[8px] text-maple-400 dark:text-maple-500 mb-0.5">{note.meta.type}</div>
+      )}
+      <div className="text-[9px] text-maple-400 dark:text-maple-500 truncate leading-tight">
+        {note.text.slice(0, 50)}...
+      </div>
+    </button>
+  )
+})
 
 interface MatchLocation {
   noteId: string
@@ -44,13 +91,24 @@ export function NotesList() {
     return set
   }, [annotations])
 
-  // Get unique note types
-  const noteTypes = useMemo(() => {
+  // Build note ID -> index map for O(1) lookups
+  const noteIndexMap = useMemo(() => {
+    const map = new Map<string, number>()
+    notes.forEach((note, idx) => map.set(note.id, idx))
+    return map
+  }, [notes])
+
+  // Get unique note types with counts (computed once)
+  const { noteTypes, typeCounts } = useMemo(() => {
     const types = new Set<string>()
+    const counts = new Map<string, number>()
     for (const note of notes) {
-      if (note.meta?.type) types.add(note.meta.type)
+      if (note.meta?.type) {
+        types.add(note.meta.type)
+        counts.set(note.meta.type, (counts.get(note.meta.type) || 0) + 1)
+      }
     }
-    return Array.from(types).sort()
+    return { noteTypes: Array.from(types).sort(), typeCounts: counts }
   }, [notes])
 
   // Build search index for faster lookups
@@ -157,13 +215,12 @@ export function NotesList() {
   }, [notes, currentNoteIndex, filtered])
 
   const annotatedCount = useMemo(() => {
-    return notes.filter(n => annotationCounts.get(n.id)).length
-  }, [notes, annotationCounts])
-
-  // Get count for a type
-  const getTypeCount = useCallback((type: string) => {
-    return notes.filter(n => n.meta?.type === type).length
-  }, [notes])
+    let count = 0
+    for (const noteId of annotationCounts.keys()) {
+      if (noteIndexMap.has(noteId)) count++
+    }
+    return count
+  }, [annotationCounts, noteIndexMap])
 
   async function handleSmartFilterApply(ids: Set<string>, matches?: MatchLocation[]) {
     setFilteredNoteIds(ids)
@@ -293,7 +350,7 @@ export function NotesList() {
                   }`}
                 >
                   <span className="dark:text-maple-200 truncate">{type}</span>
-                  <span className="text-maple-400 dark:text-maple-500 ml-1">{getTypeCount(type)}</span>
+                  <span className="text-maple-400 dark:text-maple-500 ml-1">{typeCounts.get(type) || 0}</span>
                 </button>
               ))}
             </div>
@@ -340,39 +397,17 @@ export function NotesList() {
 
       <div className="flex-1 overflow-y-auto">
         {paged.map((note) => {
-          const originalIndex = notes.findIndex(n => n.id === note.id)
-          const selected = originalIndex === currentNoteIndex
-          const count = annotationCounts.get(note.id) || 0
-          const hasSuggested = suggestedNotes.has(note.id)
-
+          const originalIndex = noteIndexMap.get(note.id) ?? 0
           return (
-            <button
+            <NoteItem
               key={note.id}
+              note={note}
+              index={originalIndex}
+              isSelected={originalIndex === currentNoteIndex}
+              annotationCount={annotationCounts.get(note.id) || 0}
+              hasSuggested={suggestedNotes.has(note.id)}
               onClick={() => setCurrentNoteIndex(originalIndex)}
-              className={`w-full text-left px-2 py-2 border-b border-maple-100 dark:border-maple-700 ${
-                selected ? 'bg-maple-100 dark:bg-maple-700' : 'hover:bg-maple-50 dark:hover:bg-maple-700/50'
-              }`}
-            >
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <span className={`text-[9px] tabular-nums ${selected ? 'text-maple-600 dark:text-maple-300 font-medium' : 'text-maple-400 dark:text-maple-500'}`}>
-                  {originalIndex + 1}
-                </span>
-                <span className={`text-[10px] truncate flex-1 ${selected ? 'text-maple-900 dark:text-maple-100 font-medium' : 'text-maple-600 dark:text-maple-300'}`}>
-                  {note.id}
-                </span>
-                {count > 0 && (
-                  <span className={`text-[8px] px-1 py-0.5 rounded-full font-medium ${hasSuggested ? 'bg-maple-200 dark:bg-maple-600 text-maple-600 dark:text-maple-300' : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400'}`}>
-                    {count}
-                  </span>
-                )}
-              </div>
-              {note.meta?.type && (
-                <div className="text-[8px] text-maple-400 dark:text-maple-500 mb-0.5">{note.meta.type}</div>
-              )}
-              <div className="text-[9px] text-maple-400 dark:text-maple-500 truncate leading-tight">
-                {note.text.slice(0, 50)}...
-              </div>
-            </button>
+            />
           )
         })}
         

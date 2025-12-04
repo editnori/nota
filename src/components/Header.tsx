@@ -1,7 +1,7 @@
-import { useStore } from '../hooks/useStore'
+import { useStore, setBulkOperation } from '../hooks/useStore'
 import { exportJSON, exportCSV, downloadFile, exportSession, importSession } from '../lib/exporters'
 import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown, Moon, Sun } from 'lucide-react'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { importFiles } from '../lib/importers'
 import { SettingsModal } from './SettingsModal'
 import { loadQuestions } from '../lib/questions'
@@ -22,10 +22,20 @@ export function Header() {
   const sessionInputRef = useRef<HTMLInputElement>(null)
 
   const currentNote = notes[currentNoteIndex]
-  const currentNoteAnnotationCount = currentNote 
-    ? annotations.filter(a => a.noteId === currentNote.id).length 
-    : 0
-  const suggestedCount = annotations.filter(a => a.source === 'suggested').length
+  
+  // Memoize counts to avoid recalculating on every render
+  const { currentNoteAnnotationCount, suggestedCount } = useMemo(() => {
+    let currentCount = 0
+    let suggested = 0
+    const noteId = currentNote?.id
+    
+    for (const a of annotations) {
+      if (noteId && a.noteId === noteId) currentCount++
+      if (a.source === 'suggested') suggested++
+    }
+    
+    return { currentNoteAnnotationCount: currentCount, suggestedCount: suggested }
+  }, [annotations, currentNote?.id])
 
   useEffect(() => {
     if (lastSaved) {
@@ -51,6 +61,8 @@ export function Header() {
     if (!files || files.length === 0) return
 
     try {
+      setBulkOperation(true) // Disable saves during import
+      
       const imported = await importFiles(files, (progress) => {
         if (progress.phase === 'scanning') {
           setImporting(true, 'Scanning...')
@@ -62,19 +74,21 @@ export function Header() {
       })
 
       if (imported.length > 0) {
-        await new Promise(r => setTimeout(r, 50))
         if (notes.length > 0) {
           addNotes(imported)
         } else {
           setNotes(imported)
         }
-        setTimeout(() => setImporting(false), 1000)
+        setBulkOperation(false) // Re-enable saves
+        setTimeout(() => setImporting(false), 300)
       } else {
+        setBulkOperation(false)
         setImporting(true, 'No valid files found')
-        setTimeout(() => setImporting(false), 1500)
+        setTimeout(() => setImporting(false), 800)
       }
     } catch (err) {
       console.error('Import error:', err)
+      setBulkOperation(false)
       setImporting(false)
       alert('Failed to import')
     }

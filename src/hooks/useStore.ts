@@ -48,8 +48,12 @@ interface State {
 
 // Debounced save to avoid too many writes
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
+let isBulkOperation = false
 
 function debouncedSave(state: State) {
+  // Skip saving during bulk operations
+  if (isBulkOperation) return Date.now()
+  
   if (saveTimeout) clearTimeout(saveTimeout)
   saveTimeout = setTimeout(async () => {
     await saveSession({
@@ -59,8 +63,18 @@ function debouncedSave(state: State) {
       mode: state.mode,
       selectedQuestion: state.selectedQuestion
     })
-  }, 300)
+  }, 500) // Increased debounce for large datasets
   return Date.now()
+}
+
+// Call this to temporarily disable saves during bulk operations
+export function setBulkOperation(bulk: boolean) {
+  isBulkOperation = bulk
+  if (!bulk) {
+    // Trigger save when bulk operation ends
+    const state = useStore.getState()
+    debouncedSave(state)
+  }
 }
 
 // Load preferences from localStorage
