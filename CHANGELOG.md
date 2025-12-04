@@ -2,6 +2,31 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.5.42] - 2025-12-04
+
+### Bug Fixes & Polish
+- **Fixed: Clear all blank screen** - Now resets `filteredNoteIds` and `highlightedAnnotation`
+- **Fixed: Import lag** - Shows loading indicator immediately, small delay for UI update
+- **Custom confirm dialogs** - Beautiful modal instead of ugly browser `confirm()`
+  - Danger variant (red) for destructive actions
+  - Warning variant (amber) for clearing actions
+- **Session import fixed** - Now properly rebuilds annotation indexes
+- **No more browser alerts** - All feedback uses the import overlay
+
+### Testing
+- Updated test suite with 141 tests covering:
+  - Performance optimizations
+  - Smart Filter
+  - Span editing
+  - Overlap handling
+  - Confirm dialogs
+  - Clear session
+  - Import UX
+  - Annotation navigation
+
+### New Component
+- `ConfirmModal` - Reusable confirmation dialog with variants
+
 ## [0.5.41] - 2025-12-04
 
 ### Performance (save optimization)

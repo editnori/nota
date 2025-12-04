@@ -4,7 +4,17 @@ import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown, Moon, S
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { importFiles } from '../lib/importers'
 import { SettingsModal } from './SettingsModal'
+import { ConfirmModal } from './ConfirmModal'
 import { loadQuestions } from '../lib/questions'
+
+interface ConfirmState {
+  isOpen: boolean
+  title: string
+  message: string
+  confirmText: string
+  variant: 'danger' | 'warning' | 'default'
+  onConfirm: () => void
+}
 
 export function Header() {
   // Use individual selectors to minimize re-renders
@@ -49,6 +59,14 @@ export function Header() {
   const [showImportMenu, setShowImportMenu] = useState(false)
   const [showClearMenu, setShowClearMenu] = useState(false)
   const [saveIndicator, setSaveIndicator] = useState(false)
+  const [confirmModal, setConfirmModal] = useState<ConfirmState>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    variant: 'default',
+    onConfirm: () => {}
+  })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const sessionInputRef = useRef<HTMLInputElement>(null)
@@ -75,6 +93,12 @@ export function Header() {
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files || files.length === 0) return
+
+    // Show loading immediately
+    setImporting(true, 'Preparing...')
+    
+    // Small delay to let UI update before heavy processing
+    await new Promise(r => setTimeout(r, 50))
 
     try {
       setBulkOperation(true) // Disable saves during import
@@ -105,8 +129,8 @@ export function Header() {
     } catch (err) {
       console.error('Import error:', err)
       setBulkOperation(false)
-      setImporting(false)
-      alert('Failed to import')
+      setImporting(true, 'Import failed')
+      setTimeout(() => setImporting(false), 1500)
     }
 
     // Reset inputs
@@ -118,26 +142,46 @@ export function Header() {
     const file = e.target.files?.[0]
     if (!file) return
 
+    setImporting(true, 'Loading session...')
+
     try {
       const text = await file.text()
       const result = importSession(text)
       
       if (result.notes.length > 0 || result.annotations.length > 0) {
+        // Build annotation indexes
+        const annotationsByNote = new Map<string, typeof result.annotations>()
+        const annotationsById = new Map<string, typeof result.annotations[0]>()
+        for (const ann of result.annotations) {
+          const existing = annotationsByNote.get(ann.noteId)
+          if (existing) existing.push(ann)
+          else annotationsByNote.set(ann.noteId, [ann])
+          annotationsById.set(ann.id, ann)
+        }
+        
         useStore.setState({
           notes: result.notes,
           annotations: result.annotations,
-          currentNoteIndex: 0
+          annotationsByNote,
+          annotationsById,
+          currentNoteIndex: 0,
+          filteredNoteIds: null
         })
         
         if (result.questions) {
           localStorage.setItem('annotator_questions', JSON.stringify(result.questions))
         }
         
-        alert(`Loaded session: ${result.notes.length} notes, ${result.annotations.length} annotations`)
+        setImporting(true, `Loaded: ${result.notes.length} notes, ${result.annotations.length} annotations`)
+        setTimeout(() => setImporting(false), 1500)
+      } else {
+        setImporting(true, 'No data in session file')
+        setTimeout(() => setImporting(false), 1500)
       }
     } catch (err) {
       console.error('Session import error:', err)
-      alert('Failed to import session file')
+      setImporting(true, 'Failed to load session')
+      setTimeout(() => setImporting(false), 1500)
     }
 
     if (sessionInputRef.current) {
@@ -173,31 +217,48 @@ export function Header() {
   }
 
   function handleClearSuggested() {
-    if (confirm(`Clear ${suggestedCount} suggested annotations? Manual annotations will be kept.`)) {
-      clearSuggestedAnnotations()
-    }
     setShowClearMenu(false)
+    setConfirmModal({
+      isOpen: true,
+      title: 'Clear Suggested Annotations',
+      message: `This will remove ${suggestedCount} auto-generated annotations.\nManual annotations will be kept.`,
+      confirmText: 'Clear Suggested',
+      variant: 'warning',
+      onConfirm: () => {
+        clearSuggestedAnnotations()
+        setConfirmModal(m => ({ ...m, isOpen: false }))
+      }
+    })
   }
 
   function handleClearAllAnnotations() {
-    if (confirm(`Clear all ${annotations.length} annotations? Notes will be kept.`)) {
-      clearAllAnnotations()
-    }
     setShowClearMenu(false)
+    setConfirmModal({
+      isOpen: true,
+      title: 'Clear All Annotations',
+      message: `This will remove all ${annotations.length} annotations.\nYour notes will be kept.`,
+      confirmText: 'Clear All',
+      variant: 'warning',
+      onConfirm: () => {
+        clearAllAnnotations()
+        setConfirmModal(m => ({ ...m, isOpen: false }))
+      }
+    })
   }
 
-  async function handleClearEverything() {
+  function handleClearEverything() {
     setShowClearMenu(false)
-    
-    // First confirmation
-    const confirmMsg = `This will permanently delete:\n- ${notes.length} notes\n- ${annotations.length} annotations\n\nAre you sure? This cannot be undone.`
-    if (!confirm(confirmMsg)) return
-    
-    // Second confirmation
-    if (!confirm('Final confirmation: Delete everything?')) return
-    
-    // Only clear after both confirmations
-    await clearSession()
+    setConfirmModal({
+      isOpen: true,
+      title: 'Clear Everything',
+      message: `This will permanently delete:\n• ${notes.length} notes\n• ${annotations.length} annotations\n\nThis cannot be undone.`,
+      confirmText: 'Delete Everything',
+      variant: 'danger',
+      onConfirm: async () => {
+        await clearSession()
+        setConfirmModal(m => ({ ...m, isOpen: false }))
+      }
+    })
   }
 
   return (
@@ -381,6 +442,16 @@ export function Header() {
       </div>
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        variant={confirmModal.variant}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(m => ({ ...m, isOpen: false }))}
+      />
     </header>
   )
 }

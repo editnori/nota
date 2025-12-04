@@ -342,7 +342,9 @@ export const useStore = create<State>((set, get) => ({
       mode: 'annotate',
       selectedQuestion: null,
       lastSaved: null,
-      undoStack: []
+      undoStack: [],
+      filteredNoteIds: null,
+      highlightedAnnotation: null
     })
   },
 
