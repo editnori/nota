@@ -36,16 +36,18 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const fontSize = useStore(s => s.fontSize)
   const setFontSize = useStore(s => s.setFontSize)
   const highlightedAnnotation = useStore(s => s.highlightedAnnotation)
+  const annotationsByNote = useStore(s => s.annotationsByNote)
   
-  // Get annotations for current note only - this is the key optimization
-  // We use a selector that only returns annotations for THIS note
   const note = notes[currentNoteIndex]
-  const noteAnnotations = useStore(
-    useCallback((s) => note ? s.annotationsByNote.get(note.id) || [] : [], [note?.id])
-  )
+  
+  // Get annotations for current note only - memoized for performance
+  const noteAnnotations = useMemo(() => {
+    if (!note) return []
+    return annotationsByNote.get(note.id) || []
+  }, [note?.id, annotationsByNote])
   
   // For hasUnannotated check - just need size comparison
-  const annotationsByNoteSize = useStore(s => s.annotationsByNote.size)
+  const annotationsByNoteSize = annotationsByNote.size
   const notesLength = notes.length
   
   const docRef = useRef<HTMLDivElement>(null)
@@ -72,9 +74,6 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   
   // Check if ANY note is unannotated (simple size comparison)
   const hasUnannotated = annotationsByNoteSize < notesLength
-  
-  // Get annotationsByNote only when we need to find next unannotated
-  const annotationsByNote = useStore(s => s.annotationsByNote)
   
   // Find next unannotated note from current position
   const nextUnannotatedIndex = useMemo(() => {
