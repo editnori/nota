@@ -6,17 +6,15 @@
   "permissions": [
     "core:default",
     "shell:allow-open",
-    "dialog:allow-save",
-    "dialog:allow-open",
-    "fs:allow-write-text-file",
-    "fs:allow-read-text-file",
+    "dialog:default",
+    "fs:default",
     {
-      "identifier": "fs:scope",
-      "allow": [
-        "$DOWNLOAD/*",
-        "$DOCUMENT/*",
-        "$HOME/*"
-      ]
+      "identifier": "fs:allow-write-text-file",
+      "allow": [{ "path": "**" }]
+    },
+    {
+      "identifier": "fs:allow-read-text-file", 
+      "allow": [{ "path": "**" }]
     }
   ]
 }

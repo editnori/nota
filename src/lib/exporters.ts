@@ -110,38 +110,57 @@ export function importSession(jsonString: string): { notes: Note[], annotations:
   throw new Error('Invalid session format')
 }
 
-// Check if running in Tauri
-function isTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI__' in window
+// Check if running in Tauri desktop app
+async function isTauri(): Promise<boolean> {
+  try {
+    // Tauri 2.x detection
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+      return true
+    }
+    // Fallback check
+    if (typeof window !== 'undefined' && '__TAURI__' in window) {
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
 }
 
 export async function downloadFile(content: string, filename: string, type: string) {
-  if (isTauri()) {
+  const inTauri = await isTauri()
+  
+  if (inTauri) {
     try {
       const { save } = await import('@tauri-apps/plugin-dialog')
-      const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+      const { writeTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
       
-      // Determine default extension
-      let defaultPath = filename
+      // Determine filters based on file type
       let filters = [{ name: 'All Files', extensions: ['*'] }]
       
       if (filename.endsWith('.json')) {
-        filters = [{ name: 'JSON', extensions: ['json'] }]
+        filters = [{ name: 'JSON Files', extensions: ['json'] }]
       } else if (filename.endsWith('.csv')) {
-        filters = [{ name: 'CSV', extensions: ['csv'] }]
+        filters = [{ name: 'CSV Files', extensions: ['csv'] }]
+      } else if (filename.endsWith('.txt')) {
+        filters = [{ name: 'Text Files', extensions: ['txt'] }]
       }
       
       const filePath = await save({
-        defaultPath,
-        filters
+        defaultPath: filename,
+        filters,
+        title: 'Save file'
       })
       
       if (filePath) {
         await writeTextFile(filePath, content)
+        return // success
       }
+      // User cancelled - don't fallback
+      return
     } catch (err) {
       console.error('Tauri save error:', err)
-      // Fallback to browser download
+      // Only fallback if Tauri APIs failed to load
       browserDownload(content, filename, type)
     }
   } else {

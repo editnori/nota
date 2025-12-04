@@ -174,7 +174,10 @@ export function Header() {
 
   return (
     <header className="h-12 bg-white border-b border-maple-200 flex items-center px-4 gap-4">
-      <span className="text-sm font-medium text-maple-800">nota</span>
+      <div className="flex items-center gap-2">
+        <img src="/favicon.svg" alt="" className="w-5 h-5" />
+        <span className="text-sm font-medium text-maple-800">Nota</span>
+      </div>
 
       <div className="flex items-center gap-0.5 ml-4 bg-maple-100 p-0.5 rounded-full">
         <button
