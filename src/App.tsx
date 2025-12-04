@@ -40,12 +40,11 @@ export default function App() {
     try {
       const imported = await importFromDrop(e.dataTransfer, (progress) => {
         if (progress.phase === 'scanning') {
-          setImporting(true, 'Scanning files...')
+          setImporting(true, 'Scanning...')
         } else if (progress.phase === 'processing') {
-          const folder = progress.currentFolder ? `[${progress.currentFolder}] ` : ''
-          setImporting(true, `${progress.current}/${progress.total}: ${folder}${progress.currentFile}`)
+          setImporting(true, `${progress.current} / ${progress.total}`)
         } else if (progress.phase === 'done') {
-          setImporting(true, `Done! ${progress.current} notes loaded`)
+          setImporting(true, `${progress.current} notes`)
         }
       })
       

@@ -1,68 +1,25 @@
 import { useState, useMemo } from 'react'
-import { X, Search, ChevronDown, Filter, Ban } from 'lucide-react'
+import { X, Search, ChevronRight, Ban, Plus } from 'lucide-react'
 import { loadQuestions } from '../lib/questions'
 import type { Note } from '../lib/types'
 
-// Search patterns for each question - based on Ryan's clinical feedback
-const QUESTION_PATTERNS: Record<string, { terms: string[]; patterns?: RegExp[]; negation?: boolean }> = {
-  Q1: { // Symptoms
-    terms: ['flank pain', 'hematuria', 'gross hematuria', 'bloody urine', 'renal colic', 'dysuria'],
-    negation: true // Skip "no hematuria", "denies pain"
-  },
-  Q2: { // Progression
-    terms: ['interval stone growth', 'stones are growing', 'increased stone burden', 'stone enlargement', 'progression'],
-    negation: false
-  },
-  Q3: { // Rare Disease
-    terms: ['cystinuria', 'cystine', 'primary hyperoxaluria', 'hyperoxaluria', 'staghorn'],
-    negation: false
-  },
-  Q4: { // SDOH
-    terms: ['homeless', 'housing', 'unemploy', 'uninsured', 'transportation', 'social support', 'lives alone'],
-    negation: false
-  },
-  Q5: { // Devices - from Ryan's operative note feedback
-    terms: ['percuflex', 'boston scientific', 'nitinol basket', 'laser fiber', 'access sheath', 'guidewire', 'foley catheter', 'ureteral catheter'],
-    patterns: [/\d+\s*fr\b/i, /\d+\s*french/i, /\d+x\d+\s*(stent|catheter)?/i, /\d+\.\d+x\d+/i] // 5Fr, 20 French, 7x30, 4.8x26
-  },
-  Q6: { // Radiology - measurements and findings
-    terms: ['hydronephrosis', 'hydroureter', 'nonobstructing', 'calculi', 'calcification', 'stone burden', 'renal cyst'],
-    patterns: [/\d+\s*mm\b/i, /\d+\s*cm\b/i, /\d+\s*x\s*\d+\s*(x\s*\d+)?/i, /mgy\s*cm/i, /bosniack\s*\d/i] // 5mm, 9.7cm, 5x2x4, mGycm, Bosniack 2
-  },
-  Q7: { // Diet Advice
-    terms: ['water intake', 'fluid intake', 'low sodium', 'low oxalate', 'dietary', 'spinach', 'litholink'],
-    negation: false
-  },
-  Q8: { // ER Visit
-    terms: ['emergency department', 'emergency room', 'ED visit', 'ER visit', 'acute presentation', 'presented to'],
-    negation: false
-  },
-  Q9: { // Post-op Complication
-    terms: ['complication', 'readmit', 'readmission', 'post-operative', 'postoperative', 'infection', 'sepsis', 'fever', 'came back'],
-    negation: false
-  },
-  Q10: { // Stone Passage
-    terms: ['passed a stone', 'passed stone', 'saw a stone pass', 'stone passed', 'spontaneous passage'],
-    negation: false
-  }
+// Default patterns per question
+const DEFAULT_PATTERNS: Record<string, { terms: string[]; regex: string[]; negation: boolean }> = {
+  Q1: { terms: ['flank pain', 'hematuria', 'gross hematuria', 'bloody urine', 'renal colic'], regex: [], negation: true },
+  Q2: { terms: ['interval stone growth', 'stones are growing', 'increased stone burden', 'stone enlargement'], regex: [], negation: false },
+  Q3: { terms: ['cystinuria', 'cystine', 'primary hyperoxaluria', 'staghorn'], regex: [], negation: false },
+  Q4: { terms: ['homeless', 'housing', 'unemploy', 'uninsured', 'transportation'], regex: [], negation: false },
+  Q5: { terms: ['percuflex', 'boston scientific', 'nitinol', 'basket', 'laser fiber', 'guidewire', 'foley'], regex: ['\\d+\\s*fr\\b', '\\d+x\\d+'], negation: false },
+  Q6: { terms: ['hydronephrosis', 'hydroureter', 'nonobstructing', 'calculi', 'stone burden', 'bosniack'], regex: ['\\d+\\s*mm\\b', '\\d+\\s*cm\\b', '\\d+\\s*x\\s*\\d+', 'mgy'], negation: false },
+  Q7: { terms: ['water intake', 'fluid intake', 'low sodium', 'low oxalate', 'dietary', 'litholink'], regex: [], negation: false },
+  Q8: { terms: ['emergency department', 'emergency room', 'ED visit', 'ER visit', 'acute presentation'], regex: [], negation: false },
+  Q9: { terms: ['complication', 'readmit', 'post-operative', 'infection', 'sepsis', 'fever'], regex: [], negation: false },
+  Q10: { terms: ['passed a stone', 'passed stone', 'saw a stone pass', 'spontaneous passage'], regex: [], negation: false },
 }
 
-// Note types to EXCLUDE - from Ryan's feedback about irrelevant notes
-const EXCLUDE_PRESETS = [
-  { id: 'telephone', label: 'Telephone notes', terms: ['telephone', 'phone call', 'phone note'] },
-  { id: 'pt_ot', label: 'PT/OT notes', terms: ['physical therapy', 'occupational therapy'] },
-  { id: 'anesthesia', label: 'Anesthesia preop', terms: ['anesthesia preoperative', 'preoperative evaluation'] },
-  { id: 'short', label: 'Very short (<200 chars)', terms: [], minLength: 200 },
-]
+const NEGATION = ['no ', 'not ', 'denies ', 'negative for ', 'without ', 'absent ']
 
-const NEGATION_PATTERNS = ['no ', 'not ', 'denies ', 'denied ', 'negative for ', 'without ', 'absent ', 'none ']
-
-interface Match {
-  noteId: string
-  term: string
-  start: number
-  end: number
-}
+interface Match { noteId: string; term: string; start: number; end: number }
 
 interface Props {
   notes: Note[]
@@ -70,13 +27,29 @@ interface Props {
   onClose: () => void
 }
 
+const STORAGE_KEY = 'nota_filter_patterns'
+
 export function SmartFilter({ notes, onApply, onClose }: Props) {
   const questions = loadQuestions()
+  
+  const [patterns, setPatterns] = useState<Record<string, { terms: string[]; regex: string[]; negation: boolean }>>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      return saved ? JSON.parse(saved) : DEFAULT_PATTERNS
+    } catch { return DEFAULT_PATTERNS }
+  })
+  
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [excludes, setExcludes] = useState<Set<string>>(new Set())
-  const [customExclude, setCustomExclude] = useState('')
-  const [showExcludes, setShowExcludes] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [excludes, setExcludes] = useState('')
+  const [minLen, setMinLen] = useState('')
   const [autoTag, setAutoTag] = useState(false)
+  const [newTerm, setNewTerm] = useState('')
+
+  function savePatterns(updated: typeof patterns) {
+    setPatterns(updated)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+  }
 
   // Calculate matches
   const { matchingNotes, matches, excludedCount } = useMemo(() => {
@@ -84,83 +57,55 @@ export function SmartFilter({ notes, onApply, onClose }: Props) {
     const allMatches: Match[] = []
     let excluded = 0
 
-    // Build exclude terms list
-    const excludeTerms = customExclude.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
-    for (const ex of excludes) {
-      const preset = EXCLUDE_PRESETS.find(p => p.id === ex)
-      if (preset) excludeTerms.push(...preset.terms.map(t => t.toLowerCase()))
-    }
-    const minLength = excludes.has('short') ? 200 : 0
+    const excludeTerms = excludes.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
+    const minLength = parseInt(minLen) || 0
 
     for (const note of notes) {
       const lower = note.text.toLowerCase()
       
-      // Check excludes
       if (minLength && note.text.length < minLength) { excluded++; continue }
       if (excludeTerms.some(ex => lower.includes(ex))) { excluded++; continue }
 
-      // If no questions selected, show all (minus excludes)
-      if (selected.size === 0) {
-        matching.add(note.id)
-        continue
-      }
+      if (selected.size === 0) { matching.add(note.id); continue }
 
-      // Check selected questions
       let found = false
       for (const qid of selected) {
-        const config = QUESTION_PATTERNS[qid]
+        const config = patterns[qid]
         if (!config) continue
 
         // Check terms
         for (const term of config.terms) {
-          const termLower = term.toLowerCase()
-          let idx = lower.indexOf(termLower)
-          
+          let idx = lower.indexOf(term.toLowerCase())
           while (idx !== -1) {
-            // Check negation if enabled
             let negated = false
             if (config.negation) {
               const before = lower.slice(Math.max(0, idx - 15), idx)
-              negated = NEGATION_PATTERNS.some(neg => before.endsWith(neg))
+              negated = NEGATION.some(n => before.endsWith(n))
             }
-            
             if (!negated) {
               found = true
-              allMatches.push({
-                noteId: note.id,
-                term: note.text.slice(idx, idx + term.length),
-                start: idx,
-                end: idx + term.length
-              })
+              allMatches.push({ noteId: note.id, term: note.text.slice(idx, idx + term.length), start: idx, end: idx + term.length })
             }
-            idx = lower.indexOf(termLower, idx + 1)
+            idx = lower.indexOf(term.toLowerCase(), idx + 1)
           }
         }
 
-        // Check regex patterns
-        if (config.patterns) {
-          for (const pattern of config.patterns) {
-            const matches = note.text.matchAll(new RegExp(pattern, 'gi'))
-            for (const m of matches) {
-              if (m.index !== undefined) {
-                found = true
-                allMatches.push({
-                  noteId: note.id,
-                  term: m[0],
-                  start: m.index,
-                  end: m.index + m[0].length
-                })
-              }
+        // Check regex
+        for (const rx of config.regex) {
+          try {
+            const re = new RegExp(rx, 'gi')
+            let m
+            while ((m = re.exec(note.text)) !== null) {
+              found = true
+              allMatches.push({ noteId: note.id, term: m[0], start: m.index, end: m.index + m[0].length })
             }
-          }
+          } catch {}
         }
       }
-
       if (found) matching.add(note.id)
     }
-
     return { matchingNotes: matching, matches: allMatches, excludedCount: excluded }
-  }, [notes, selected, excludes, customExclude])
+  }, [notes, selected, patterns, excludes, minLen])
 
   function toggle(qid: string) {
     const next = new Set(selected)
@@ -169,11 +114,55 @@ export function SmartFilter({ notes, onApply, onClose }: Props) {
     setSelected(next)
   }
 
-  function toggleExclude(id: string) {
-    const next = new Set(excludes)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    setExcludes(next)
+  function expand(qid: string) {
+    setExpanded(expanded === qid ? null : qid)
+    setNewTerm('')
+  }
+
+  function addTerm(qid: string) {
+    if (!newTerm.trim()) return
+    const config = patterns[qid]
+    if (!config) return
+    const updated = { ...patterns, [qid]: { ...config, terms: [...config.terms, newTerm.trim()] } }
+    savePatterns(updated)
+    setNewTerm('')
+  }
+
+  function removeTerm(qid: string, idx: number) {
+    const config = patterns[qid]
+    if (!config) return
+    const updated = { ...patterns, [qid]: { ...config, terms: config.terms.filter((_, i) => i !== idx) } }
+    savePatterns(updated)
+  }
+
+  function addRegex(qid: string) {
+    const rx = prompt('Add regex pattern (e.g., \\d+\\s*mm):')
+    if (!rx) return
+    const config = patterns[qid]
+    if (!config) return
+    const updated = { ...patterns, [qid]: { ...config, regex: [...config.regex, rx] } }
+    savePatterns(updated)
+  }
+
+  function removeRegex(qid: string, idx: number) {
+    const config = patterns[qid]
+    if (!config) return
+    const updated = { ...patterns, [qid]: { ...config, regex: config.regex.filter((_, i) => i !== idx) } }
+    savePatterns(updated)
+  }
+
+  function toggleNegation(qid: string) {
+    const config = patterns[qid]
+    if (!config) return
+    const updated = { ...patterns, [qid]: { ...config, negation: !config.negation } }
+    savePatterns(updated)
+  }
+
+  function resetAll() {
+    savePatterns(DEFAULT_PATTERNS)
+    setSelected(new Set())
+    setExcludes('')
+    setMinLen('')
   }
 
   function apply() {
@@ -183,132 +172,146 @@ export function SmartFilter({ notes, onApply, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white dark:bg-maple-800 rounded-xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-maple-800 rounded-lg shadow-xl w-full max-w-md max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
         
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-maple-200 dark:border-maple-700">
-          <div className="flex items-center gap-2">
-            <Filter size={16} className="text-maple-500" />
-            <span className="text-sm font-medium text-maple-700 dark:text-maple-200">Find Notes by Question</span>
+        <div className="flex items-center justify-between px-4 py-2 border-b border-maple-200 dark:border-maple-700">
+          <span className="text-sm font-medium text-maple-700 dark:text-maple-200">Find Notes</span>
+          <div className="flex items-center gap-3">
+            <button onClick={resetAll} className="text-[10px] text-maple-400 hover:text-maple-600">Reset</button>
+            <button onClick={onClose}><X size={16} className="text-maple-400" /></button>
           </div>
-          <button onClick={onClose}><X size={18} className="text-maple-400 hover:text-maple-600" /></button>
         </div>
 
-        {/* Questions - styled like QuestionPicker */}
-        <div className="flex-1 overflow-y-auto p-3">
-          <div className="text-[10px] uppercase tracking-wide text-maple-500 dark:text-maple-400 mb-2">
-            Select questions to find relevant notes
-          </div>
-          
-          <div className="space-y-1.5">
-            {questions.map(q => {
-              const isActive = selected.has(q.id)
-              const config = QUESTION_PATTERNS[q.id]
-              
-              return (
-                <button
-                  key={q.id}
-                  onClick={() => toggle(q.id)}
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all ${
-                    isActive ? 'ring-2 ring-offset-1 dark:ring-offset-maple-800' : 'hover:bg-maple-50 dark:hover:bg-maple-700'
-                  }`}
-                  style={{
-                    backgroundColor: isActive ? `${q.color}15` : undefined,
-                    // @ts-expect-error
-                    '--tw-ring-color': isActive ? q.color : undefined
-                  }}
-                >
-                  <span
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shadow-sm"
+        <div className="flex-1 overflow-y-auto p-2">
+          {questions.map(q => {
+            const config = patterns[q.id]
+            const isActive = selected.has(q.id)
+            const isExpanded = expanded === q.id
+            
+            return (
+              <div key={q.id} className="mb-1">
+                <div className={`flex items-center gap-2 p-2 rounded ${isActive ? 'bg-maple-50 dark:bg-maple-700/50' : ''}`}>
+                  <button
+                    onClick={() => toggle(q.id)}
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      isActive ? 'text-white' : 'text-white/70'
+                    }`}
                     style={{ backgroundColor: q.color }}
                   >
-                    {q.hotkey}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12px] font-medium" style={{ color: isActive ? q.color : undefined }}>
-                      <span className={isActive ? '' : 'text-maple-700 dark:text-maple-200'}>{q.name}</span>
+                    {isActive ? '✓' : q.hotkey}
+                  </button>
+                  
+                  <button onClick={() => toggle(q.id)} className="flex-1 text-left text-[11px] font-medium text-maple-700 dark:text-maple-200">
+                    {q.name}
+                  </button>
+                  
+                  {config?.negation && <span className="text-[8px] px-1 py-0.5 bg-amber-100 text-amber-600 rounded">neg</span>}
+                  
+                  <button onClick={() => expand(q.id)} className="p-1 text-maple-400 hover:text-maple-600">
+                    <ChevronRight size={12} className={isExpanded ? 'rotate-90' : ''} />
+                  </button>
+                </div>
+
+                {isExpanded && config && (
+                  <div className="ml-7 mr-2 mb-2 p-2 bg-maple-50 dark:bg-maple-700/30 rounded text-[10px] space-y-2">
+                    {/* Terms */}
+                    <div>
+                      <div className="text-maple-500 mb-1">Terms:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {config.terms.map((t, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white dark:bg-maple-800 rounded">
+                            {t}
+                            <button onClick={() => removeTerm(q.id, i)} className="text-maple-400 hover:text-red-500"><X size={8} /></button>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex gap-1 mt-1">
+                        <input
+                          value={newTerm}
+                          onChange={e => setNewTerm(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && addTerm(q.id)}
+                          placeholder="Add term..."
+                          className="flex-1 px-1.5 py-0.5 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded text-[10px] dark:text-maple-200"
+                        />
+                        <button onClick={() => addTerm(q.id)} className="px-1.5 py-0.5 bg-maple-600 text-white rounded"><Plus size={10} /></button>
+                      </div>
                     </div>
-                    <div className="text-[10px] text-maple-400 dark:text-maple-500 truncate">
-                      {config?.terms.slice(0, 3).join(', ')}
-                      {config?.patterns && ' + patterns'}
+
+                    {/* Regex */}
+                    <div>
+                      <div className="text-maple-500 mb-1">Patterns (regex):</div>
+                      <div className="flex flex-wrap gap-1">
+                        {config.regex.map((r, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded font-mono text-[9px]">
+                            {r}
+                            <button onClick={() => removeRegex(q.id, i)} className="text-blue-400 hover:text-red-500"><X size={8} /></button>
+                          </span>
+                        ))}
+                        <button onClick={() => addRegex(q.id)} className="px-1.5 py-0.5 text-blue-600 hover:bg-blue-50 rounded">+ regex</button>
+                      </div>
                     </div>
+
+                    {/* Negation toggle */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={config.negation} onChange={() => toggleNegation(q.id)} className="rounded border-maple-300 text-amber-600 w-3 h-3" />
+                      <span className="text-maple-500">Skip negated (no, denies, without)</span>
+                    </label>
                   </div>
-                  {isActive && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium text-white" style={{ backgroundColor: q.color }}>
-                      on
-                    </span>
-                  )}
-                  {config?.negation && (
-                    <span className="text-[8px] px-1 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-600 rounded">neg</span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
+                )}
 
-          {/* Exclude section */}
-          <button 
-            onClick={() => setShowExcludes(!showExcludes)}
-            className="w-full flex items-center gap-2 mt-4 px-2 py-1.5 text-[11px] text-maple-500 dark:text-maple-400 hover:text-maple-700"
-          >
-            <Ban size={12} />
-            <span>Exclude irrelevant notes</span>
-            <ChevronDown size={12} className={`ml-auto transition-transform ${showExcludes ? 'rotate-180' : ''}`} />
-          </button>
+                {isActive && !isExpanded && config && (
+                  <div className="ml-7 mr-2 flex flex-wrap gap-1 pb-1 text-[9px]">
+                    {config.terms.slice(0, 3).map((t, i) => (
+                      <span key={i} className="px-1 py-0.5 bg-maple-100 dark:bg-maple-700 text-maple-500 rounded">{t}</span>
+                    ))}
+                    {(config.terms.length > 3 || config.regex.length > 0) && (
+                      <span className="text-maple-400">+{config.terms.length - 3 + config.regex.length}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
 
-          {showExcludes && (
-            <div className="mt-2 p-2 bg-maple-50 dark:bg-maple-700/50 rounded-lg space-y-2">
-              {EXCLUDE_PRESETS.map(preset => (
-                <label key={preset.id} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={excludes.has(preset.id)}
-                    onChange={() => toggleExclude(preset.id)}
-                    className="rounded border-maple-300 text-red-600 w-3.5 h-3.5"
-                  />
-                  <span className="text-[11px] text-maple-600 dark:text-maple-300">{preset.label}</span>
-                </label>
-              ))}
+          {/* Excludes */}
+          <div className="mt-3 pt-3 border-t border-maple-100 dark:border-maple-700">
+            <div className="flex items-center gap-2 mb-2">
+              <Ban size={12} className="text-maple-400" />
+              <span className="text-[10px] text-maple-500">Exclude notes containing:</span>
+            </div>
+            <input
+              value={excludes}
+              onChange={e => setExcludes(e.target.value)}
+              placeholder="telephone, physical therapy, short order..."
+              className="w-full px-2 py-1 text-[10px] bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded dark:text-maple-200"
+            />
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] text-maple-500">Min chars:</span>
               <input
-                value={customExclude}
-                onChange={e => setCustomExclude(e.target.value)}
-                placeholder="Other exclusions (comma-separated)"
-                className="w-full px-2 py-1 text-[10px] bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded dark:text-maple-200"
+                value={minLen}
+                onChange={e => setMinLen(e.target.value)}
+                placeholder="0"
+                className="w-16 px-2 py-1 text-[10px] bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded dark:text-maple-200"
               />
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Auto-tag option */}
-        <div className="px-4 py-2 border-t border-maple-100 dark:border-maple-700">
+        <div className="px-3 py-2 border-t border-maple-100 dark:border-maple-700">
           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={autoTag}
-              onChange={e => setAutoTag(e.target.checked)}
-              className="rounded border-maple-300 text-maple-600"
-            />
-            <span className="text-[10px] text-maple-600 dark:text-maple-300">Auto-tag matched phrases as suggestions</span>
-            {autoTag && matches.length > 0 && (
-              <span className="text-[9px] text-maple-400">({matches.length} matches)</span>
-            )}
+            <input type="checkbox" checked={autoTag} onChange={e => setAutoTag(e.target.checked)} className="rounded border-maple-300 text-maple-600" />
+            <span className="text-[10px] text-maple-600 dark:text-maple-300">Auto-tag matches</span>
           </label>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-maple-200 dark:border-maple-700 bg-maple-50 dark:bg-maple-700/50">
-          <div className="text-[11px]">
-            <span className="font-semibold text-maple-700 dark:text-maple-200">{matchingNotes.size}</span>
-            <span className="text-maple-500 dark:text-maple-400"> notes</span>
-            {excludedCount > 0 && (
-              <span className="text-maple-400 dark:text-maple-500"> ({excludedCount} excluded)</span>
-            )}
-          </div>
-          <button
-            onClick={apply}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-[11px] bg-maple-700 dark:bg-maple-600 text-white rounded hover:bg-maple-600"
-          >
-            <Search size={12} /> Apply
+        <div className="flex items-center justify-between px-3 py-2 border-t border-maple-200 dark:border-maple-700 bg-maple-50 dark:bg-maple-700/50">
+          <span className="text-[11px]">
+            <b className="text-maple-700 dark:text-maple-200">{matchingNotes.size}</b>
+            <span className="text-maple-400"> notes</span>
+            {excludedCount > 0 && <span className="text-maple-400"> ({excludedCount} excluded)</span>}
+          </span>
+          <button onClick={apply} className="flex items-center gap-1 px-3 py-1 text-[11px] bg-maple-700 text-white rounded">
+            <Search size={11} /> Apply
           </button>
         </div>
       </div>
