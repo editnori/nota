@@ -29,10 +29,13 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, updateAnnotation, fontSize, setFontSize, highlightedAnnotation } = useStore()
   const docRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const [activeSpan, setActiveSpan] = useState<{ annotationIds: string[], position: { x: number, y: number } } | null>(null)
+  const [activeSpan, setActiveSpan] = useState<{ annotationIds: string[] } | null>(null)
   const [glowingMarkId, setGlowingMarkId] = useState<string | null>(null)
   const [spanEditor, setSpanEditor] = useState<SpanEditor | null>(null)
   const [overlapPrompt, setOverlapPrompt] = useState<OverlapPrompt | null>(null)
+  
+  // Use ref for popup position so it doesn't shift when annotations update
+  const popupPositionRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 })
 
   const note = notes[currentNoteIndex]
   
@@ -195,10 +198,9 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   function handleSpanClick(e: React.MouseEvent, annotationIds: string[]) {
     e.stopPropagation()
     const rect = (e.target as HTMLElement).getBoundingClientRect()
-    setActiveSpan({
-      annotationIds,
-      position: { x: rect.left, y: rect.bottom + 4 }
-    })
+    // Store position in ref so it doesn't change when annotations update
+    popupPositionRef.current = { x: rect.left, y: rect.bottom + 4 }
+    setActiveSpan({ annotationIds })
   }
 
   function handleSpanDoubleClick(e: React.MouseEvent, annotationIds: string[]) {
@@ -413,7 +415,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
       {activeSpan && (
         <div
           className="fixed z-50 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg p-2 max-w-xs"
-          style={{ left: activeSpan.position.x, top: activeSpan.position.y }}
+          style={{ left: popupPositionRef.current.x, top: popupPositionRef.current.y }}
           onClick={e => e.stopPropagation()}
         >
           <div className="text-[10px] text-maple-500 dark:text-maple-400 mb-2">Toggle questions (click to add/remove):</div>

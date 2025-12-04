@@ -2,14 +2,18 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.27] - 2025-12-04
+
+### Fixed
+- **Question toggle popup position stable**: Popup no longer jumps around when toggling questions
+  - Position stored in ref instead of state
+  - DOM reflow from annotation changes no longer affects popup placement
+
 ## [0.0.26] - 2025-12-04
 
 ### Improved
-- **Three-way overlap handling**: When selection overlaps existing annotation, now offers:
-  - **Extend** - grow existing annotation to include new selection
-  - **Overlap** - create separate overlapping annotation (when needed)
-  - **Cancel** - do nothing
-- Replaced browser confirm() with styled popup matching app theme
+- Three-way overlap handling (Extend/Overlap/Cancel)
+- Styled popup instead of browser confirm()
 
 ## [0.0.25] - 2025-12-04
 
