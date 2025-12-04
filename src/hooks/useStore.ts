@@ -80,8 +80,14 @@ function buildAnnotationIndexes(annotations: Annotation[]): AnnotationIndexes {
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
 let isBulkOperation = false
 let isSaving = false
+let lastSavedHash = ''
 
-function debouncedSave(state: State) {
+// Simple hash to detect if data actually changed
+function quickHash(notes: Note[], annotations: Annotation[]): string {
+  return `${notes.length}-${annotations.length}-${annotations[annotations.length - 1]?.id || ''}`
+}
+
+function debouncedSave() {
   // Skip saving during bulk operations or if already saving
   if (isBulkOperation || isSaving) return Date.now()
   
@@ -90,15 +96,26 @@ function debouncedSave(state: State) {
     // Use requestIdleCallback if available to avoid blocking UI
     const doSave = async () => {
       if (isSaving) return
+      
+      // Get FRESH state when actually saving
+      const freshState = useStore.getState()
+      
+      // Check if data actually changed
+      const newHash = quickHash(freshState.notes, freshState.annotations)
+      if (newHash === lastSavedHash) {
+        return // Nothing changed, skip save
+      }
+      
       isSaving = true
       try {
         await saveSession({
-          notes: state.notes,
-          annotations: state.annotations,
-          currentNoteIndex: state.currentNoteIndex,
-          mode: state.mode,
-          selectedQuestion: state.selectedQuestion
+          notes: freshState.notes,
+          annotations: freshState.annotations,
+          currentNoteIndex: freshState.currentNoteIndex,
+          mode: freshState.mode,
+          selectedQuestion: freshState.selectedQuestion
         })
+        lastSavedHash = newHash
       } finally {
         isSaving = false
       }
@@ -119,8 +136,7 @@ export function setBulkOperation(bulk: boolean) {
   isBulkOperation = bulk
   if (!bulk) {
     // Trigger save when bulk operation ends
-    const state = useStore.getState()
-    debouncedSave(state)
+    debouncedSave()
   }
 }
 
@@ -187,11 +203,11 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setNotes: (notes) => {
-    set({ notes, currentNoteIndex: 0, lastSaved: debouncedSave(get()) })
+    set({ notes, currentNoteIndex: 0, lastSaved: debouncedSave() })
   },
 
   addNotes: (newNotes) => {
-    set(s => ({ notes: [...s.notes, ...newNotes], lastSaved: debouncedSave(get()) }))
+    set(s => ({ notes: [...s.notes, ...newNotes], lastSaved: debouncedSave() }))
   },
 
   addAnnotation: (ann) => {
@@ -210,7 +226,7 @@ export const useStore = create<State>((set, get) => ({
         annotationsByNote: indexes.byNote,
         annotationsById: indexes.byId,
         undoStack: [...s.undoStack.slice(-19), { type: 'add', annotation }],
-        lastSaved: debouncedSave(get())
+        lastSaved: debouncedSave()
       }
     })
   },
@@ -229,7 +245,7 @@ export const useStore = create<State>((set, get) => ({
         annotations: allAnnotations,
         annotationsByNote: indexes.byNote,
         annotationsById: indexes.byId,
-        lastSaved: debouncedSave(get())
+        lastSaved: debouncedSave()
       }
     })
   },
@@ -245,7 +261,7 @@ export const useStore = create<State>((set, get) => ({
           annotationsByNote: indexes.byNote,
           annotationsById: indexes.byId,
           undoStack: [...s.undoStack.slice(-19), { type: 'remove', annotation: ann }],
-          lastSaved: debouncedSave(get())
+          lastSaved: debouncedSave()
         }
       })
     }
@@ -262,22 +278,22 @@ export const useStore = create<State>((set, get) => ({
           annotationsByNote: indexes.byNote,
           annotationsById: indexes.byId,
           undoStack: [...s.undoStack.slice(-19), { type: 'update', annotation: ann, previousState: updates }],
-          lastSaved: debouncedSave(get())
+          lastSaved: debouncedSave()
         }
       })
     }
   },
 
   setCurrentNoteIndex: (index) => {
-    set({ currentNoteIndex: index, lastSaved: debouncedSave(get()) })
+    set({ currentNoteIndex: index, lastSaved: debouncedSave() })
   },
 
   setMode: (mode) => {
-    set({ mode, lastSaved: debouncedSave(get()) })
+    set({ mode, lastSaved: debouncedSave() })
   },
 
   setSelectedQuestion: (q) => {
-    set({ selectedQuestion: q, lastSaved: debouncedSave(get()) })
+    set({ selectedQuestion: q, lastSaved: debouncedSave() })
   },
 
   clearNoteAnnotations: (noteId) => {
@@ -288,7 +304,7 @@ export const useStore = create<State>((set, get) => ({
         annotations: newAnnotations,
         annotationsByNote: indexes.byNote,
         annotationsById: indexes.byId,
-        lastSaved: debouncedSave(get())
+        lastSaved: debouncedSave()
       }
     })
   },
@@ -298,7 +314,7 @@ export const useStore = create<State>((set, get) => ({
       annotations: [], 
       annotationsByNote: new Map(), 
       annotationsById: new Map(),
-      lastSaved: debouncedSave(get())
+      lastSaved: debouncedSave()
     })
   },
 
@@ -310,7 +326,7 @@ export const useStore = create<State>((set, get) => ({
         annotations: newAnnotations,
         annotationsByNote: indexes.byNote,
         annotationsById: indexes.byId,
-        lastSaved: debouncedSave(get())
+        lastSaved: debouncedSave()
       }
     })
   },
@@ -346,7 +362,7 @@ export const useStore = create<State>((set, get) => ({
           annotationsByNote: indexes.byNote,
           annotationsById: indexes.byId,
           undoStack: s.undoStack.slice(0, -1),
-          lastSaved: debouncedSave(get())
+          lastSaved: debouncedSave()
         }
       })
     } else if (action.type === 'remove') {
@@ -359,7 +375,7 @@ export const useStore = create<State>((set, get) => ({
           annotationsByNote: indexes.byNote,
           annotationsById: indexes.byId,
           undoStack: s.undoStack.slice(0, -1),
-          lastSaved: debouncedSave(get())
+          lastSaved: debouncedSave()
         }
       })
     } else if (action.type === 'update') {
@@ -374,7 +390,7 @@ export const useStore = create<State>((set, get) => ({
           annotationsByNote: indexes.byNote,
           annotationsById: indexes.byId,
           undoStack: s.undoStack.slice(0, -1),
-          lastSaved: debouncedSave(get())
+          lastSaved: debouncedSave()
         }
       })
     }

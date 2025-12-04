@@ -2,6 +2,16 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.5.41] - 2025-12-04
+
+### Performance (save optimization)
+- **Fixed stale state bug**: Save was using old state reference from 500ms ago
+  - Now gets fresh state when actually saving
+- **Added change detection**: Only saves when data actually changed
+  - Uses quick hash to detect changes
+  - Navigating between notes no longer triggers full 30k note save
+- **Reduced unnecessary saves**: Skip save if hash matches last saved state
+
 ## [0.5.40] - 2025-12-04
 
 ### Performance (critical rendering fix)
