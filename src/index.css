@@ -62,11 +62,11 @@ body {
 }
 
 .animate-glow {
-  animation: glow-breathe 1s ease-in-out 3;
+  animation: glow-breathe 1.5s ease-in-out 6;
   border-radius: 4px;
 }
 
-/* Breathing ring for cards - repeats 3 times */
+/* Breathing ring for cards - repeats 6 times */
 @keyframes ring-breathe {
   0%, 100% {
     box-shadow: 0 0 0 0 rgba(180, 140, 120, 0);
@@ -77,5 +77,5 @@ body {
 }
 
 .animate-ring {
-  animation: ring-breathe 1s ease-in-out 3;
+  animation: ring-breathe 1.5s ease-in-out 6;
 }
