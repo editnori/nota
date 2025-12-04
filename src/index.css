@@ -11,11 +11,6 @@ body {
   @apply bg-maple-900 text-maple-100;
 }
 
-/* Global smooth transition for dark/light mode changes */
-*, *::before, *::after {
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease;
-}
-
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

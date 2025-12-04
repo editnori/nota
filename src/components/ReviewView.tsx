@@ -432,7 +432,7 @@ export function ReviewView() {
                 <div 
                   id={`ann-card-${ann.id}`}
                   key={ann.id} 
-                  className={`bg-white dark:bg-maple-800 border rounded-lg p-3 transition-all duration-300 ${
+                  className={`bg-white dark:bg-maple-800 border rounded-lg p-3 ${
                     isSuggested ? 'border-maple-300 dark:border-maple-600 border-dashed' : 'border-maple-200 dark:border-maple-700'
                   } ${isHighlighted ? 'animate-ring' : ''}`}
                 >
