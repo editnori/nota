@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { Upload, Download, FileText, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useStore } from '../hooks/useStore'
+import { downloadFile } from '../lib/exporters'
 
 interface ProcessedNote {
   name: string
@@ -42,16 +43,10 @@ export function FormatView() {
     setProcessing(false)
   }
 
-  function downloadAll() {
-    processed.forEach(({ name, formatted }) => {
-      const blob = new Blob([formatted], { type: 'text/plain' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `formatted_${name}`
-      a.click()
-      URL.revokeObjectURL(url)
-    })
+  async function downloadAll() {
+    for (const { name, formatted } of processed) {
+      await downloadFile(formatted, `formatted_${name}`, 'text/plain')
+    }
   }
 
   function loadToAnnotator() {

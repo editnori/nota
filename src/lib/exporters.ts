@@ -110,7 +110,46 @@ export function importSession(jsonString: string): { notes: Note[], annotations:
   throw new Error('Invalid session format')
 }
 
-export function downloadFile(content: string, filename: string, type: string) {
+// Check if running in Tauri
+function isTauri(): boolean {
+  return typeof window !== 'undefined' && '__TAURI__' in window
+}
+
+export async function downloadFile(content: string, filename: string, type: string) {
+  if (isTauri()) {
+    try {
+      const { save } = await import('@tauri-apps/plugin-dialog')
+      const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+      
+      // Determine default extension
+      let defaultPath = filename
+      let filters = [{ name: 'All Files', extensions: ['*'] }]
+      
+      if (filename.endsWith('.json')) {
+        filters = [{ name: 'JSON', extensions: ['json'] }]
+      } else if (filename.endsWith('.csv')) {
+        filters = [{ name: 'CSV', extensions: ['csv'] }]
+      }
+      
+      const filePath = await save({
+        defaultPath,
+        filters
+      })
+      
+      if (filePath) {
+        await writeTextFile(filePath, content)
+      }
+    } catch (err) {
+      console.error('Tauri save error:', err)
+      // Fallback to browser download
+      browserDownload(content, filename, type)
+    }
+  } else {
+    browserDownload(content, filename, type)
+  }
+}
+
+function browserDownload(content: string, filename: string, type: string) {
   const blob = new Blob([content], { type })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

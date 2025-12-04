@@ -152,29 +152,29 @@ export function Header() {
     }
   }
 
-  function handleExportJSON() {
+  async function handleExportJSON() {
     const content = exportJSON(notes, annotations)
-    downloadFile(content, 'annotations.json', 'application/json')
+    await downloadFile(content, 'annotations.json', 'application/json')
     setShowExportMenu(false)
   }
 
-  function handleExportCSV() {
+  async function handleExportCSV() {
     const content = exportCSV(notes, annotations)
-    downloadFile(content, 'annotations.csv', 'text/csv')
+    await downloadFile(content, 'annotations.csv', 'text/csv')
     setShowExportMenu(false)
   }
 
-  function handleShareSession() {
+  async function handleShareSession() {
     const questions = loadQuestions()
     const content = exportSession(notes, annotations, questions)
     const timestamp = new Date().toISOString().slice(0, 10)
-    downloadFile(content, `annotator-session-${timestamp}.json`, 'application/json')
+    await downloadFile(content, `nota-session-${timestamp}.json`, 'application/json')
     setShowExportMenu(false)
   }
 
   return (
     <header className="h-12 bg-white border-b border-maple-200 flex items-center px-4 gap-4">
-      <span className="text-sm font-medium text-maple-800">Note Annotator</span>
+      <span className="text-sm font-medium text-maple-800">nota</span>
 
       <div className="flex items-center gap-0.5 ml-4 bg-maple-100 p-0.5 rounded-full">
         <button
