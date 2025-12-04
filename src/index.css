@@ -51,38 +51,31 @@ body {
   outline: none;
 }
 
-/* Smooth subtle glow - light maple color */
-/* Simple: grow in, fade out */
-@keyframes glow-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(214, 211, 209, 0);
+/* Breathing glow - warm maple tone, repeats 3 times */
+@keyframes glow-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(180, 140, 120, 0);
   }
   50% {
-    box-shadow: 0 0 20px 10px rgba(214, 211, 209, 0.6);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(214, 211, 209, 0);
+    box-shadow: 0 0 16px 8px rgba(180, 140, 120, 0.4);
   }
 }
 
 .animate-glow {
-  animation: glow-pulse 2s ease-in-out;
+  animation: glow-breathe 1s ease-in-out 3;
   border-radius: 4px;
 }
 
-/* Ring animation for cards */
-@keyframes ring-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(214, 211, 209, 0);
+/* Breathing ring for cards - repeats 3 times */
+@keyframes ring-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(180, 140, 120, 0);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(214, 211, 209, 0.5);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(214, 211, 209, 0);
+    box-shadow: 0 0 0 4px rgba(180, 140, 120, 0.35);
   }
 }
 
 .animate-ring {
-  animation: ring-pulse 2s ease-in-out;
+  animation: ring-breathe 1s ease-in-out 3;
 }
