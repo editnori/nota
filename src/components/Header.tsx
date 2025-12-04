@@ -1,20 +1,26 @@
 import { useStore } from '../hooks/useStore'
 import { exportJSON, exportCSV, downloadFile, exportSession, importSession } from '../lib/exporters'
-import { Download, Upload, Trash2, Settings, Check, Share2 } from 'lucide-react'
+import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { importJSON, importJSONL, importTXT } from '../lib/importers'
 import { SettingsModal } from './SettingsModal'
 import { loadQuestions } from '../lib/questions'
 
 export function Header() {
-  const { notes, annotations, mode, setMode, setNotes, addNotes, clearSession, lastSaved } = useStore()
+  const { notes, annotations, mode, setMode, setNotes, addNotes, clearSession, clearNoteAnnotations, clearAllAnnotations, currentNoteIndex, lastSaved } = useStore()
   const [showSettings, setShowSettings] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showImportMenu, setShowImportMenu] = useState(false)
+  const [showClearMenu, setShowClearMenu] = useState(false)
   const [saveIndicator, setSaveIndicator] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const sessionInputRef = useRef<HTMLInputElement>(null)
+
+  const currentNote = notes[currentNoteIndex]
+  const currentNoteAnnotationCount = currentNote 
+    ? annotations.filter(a => a.noteId === currentNote.id).length 
+    : 0
 
   useEffect(() => {
     if (lastSaved) {
@@ -25,15 +31,14 @@ export function Header() {
   }, [lastSaved])
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (showExportMenu || showImportMenu) {
-        setShowExportMenu(false)
-        setShowImportMenu(false)
-      }
+    function handleClickOutside() {
+      setShowExportMenu(false)
+      setShowImportMenu(false)
+      setShowClearMenu(false)
     }
     document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
-  }, [showExportMenu, showImportMenu])
+  }, [])
 
   async function handleFileImport(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
@@ -129,7 +134,6 @@ export function Header() {
       const result = importSession(text)
       
       if (result.notes.length > 0 || result.annotations.length > 0) {
-        // This replaces everything
         useStore.setState({
           notes: result.notes,
           annotations: result.annotations,
@@ -170,6 +174,30 @@ export function Header() {
     const timestamp = new Date().toISOString().slice(0, 10)
     await downloadFile(content, `nota-session-${timestamp}.json`, 'application/json')
     setShowExportMenu(false)
+  }
+
+  function handleClearCurrentNote() {
+    if (currentNote) {
+      clearNoteAnnotations(currentNote.id)
+    }
+    setShowClearMenu(false)
+  }
+
+  function handleClearAllAnnotations() {
+    if (confirm(`Clear all ${annotations.length} annotations? Notes will be kept.`)) {
+      clearAllAnnotations()
+    }
+    setShowClearMenu(false)
+  }
+
+  async function handleClearEverything() {
+    const confirmMsg = `This will permanently delete:\n- ${notes.length} notes\n- ${annotations.length} annotations\n\nAre you sure? This cannot be undone.`
+    if (confirm(confirmMsg)) {
+      if (confirm('Final confirmation: Delete everything?')) {
+        await clearSession()
+      }
+    }
+    setShowClearMenu(false)
   }
 
   return (
@@ -227,7 +255,7 @@ export function Header() {
 
       <div className="relative">
         <button
-          onClick={(e) => { e.stopPropagation(); setShowImportMenu(!showImportMenu); setShowExportMenu(false) }}
+          onClick={(e) => { e.stopPropagation(); setShowImportMenu(!showImportMenu); setShowExportMenu(false); setShowClearMenu(false) }}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 hover:bg-maple-50 rounded-full border border-maple-200"
         >
           <Upload size={14} />
@@ -260,7 +288,7 @@ export function Header() {
 
       <div className="relative">
         <button
-          onClick={(e) => { e.stopPropagation(); setShowExportMenu(!showExportMenu); setShowImportMenu(false) }}
+          onClick={(e) => { e.stopPropagation(); setShowExportMenu(!showExportMenu); setShowImportMenu(false); setShowClearMenu(false) }}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-maple-600 hover:bg-maple-50 rounded-full border border-maple-200"
         >
           <Download size={14} />
@@ -299,16 +327,41 @@ export function Header() {
         <Settings size={16} />
       </button>
 
-      <button
-        onClick={async () => {
-          if (confirm('Clear all notes and annotations?')) {
-            await clearSession()
-          }
-        }}
-        className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-maple-400 hover:text-red-500 hover:bg-red-50 rounded-full"
-      >
-        <Trash2 size={14} />
-      </button>
+      <div className="relative">
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowClearMenu(!showClearMenu); setShowImportMenu(false); setShowExportMenu(false) }}
+          className="flex items-center gap-0.5 px-2 py-1.5 text-xs text-maple-400 hover:text-red-500 hover:bg-red-50 rounded-full"
+        >
+          <Trash2 size={14} />
+          <ChevronDown size={10} />
+        </button>
+        {showClearMenu && (
+          <div className="absolute right-0 top-full mt-1 bg-white border border-maple-200 rounded-lg shadow-lg z-50 overflow-hidden min-w-[200px]" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={handleClearCurrentNote}
+              disabled={!currentNote || currentNoteAnnotationCount === 0}
+              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Clear this note ({currentNoteAnnotationCount})
+            </button>
+            <button
+              onClick={handleClearAllAnnotations}
+              disabled={annotations.length === 0}
+              className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Clear all annotations ({annotations.length})
+            </button>
+            <div className="h-px bg-maple-100" />
+            <button
+              onClick={handleClearEverything}
+              disabled={notes.length === 0 && annotations.length === 0}
+              className="block w-full px-4 py-2 text-xs text-left text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Clear everything...
+            </button>
+          </div>
+        )}
+      </div>
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </header>

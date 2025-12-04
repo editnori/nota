@@ -19,7 +19,9 @@ interface State {
   setCurrentNoteIndex: (index: number) => void
   setMode: (mode: Mode) => void
   setSelectedQuestion: (q: string | null) => void
-  clearSession: () => void
+  clearNoteAnnotations: (noteId: string) => void
+  clearAllAnnotations: () => void
+  clearSession: () => Promise<void>
   initSession: () => Promise<void>
 }
 
@@ -117,6 +119,18 @@ export const useStore = create<State>((set, get) => ({
 
   setSelectedQuestion: (q) => {
     set({ selectedQuestion: q })
+    const ts = debouncedSave(get())
+    set({ lastSaved: ts })
+  },
+
+  clearNoteAnnotations: (noteId) => {
+    set(s => ({ annotations: s.annotations.filter(a => a.noteId !== noteId) }))
+    const ts = debouncedSave(get())
+    set({ lastSaved: ts })
+  },
+
+  clearAllAnnotations: () => {
+    set({ annotations: [] })
     const ts = debouncedSave(get())
     set({ lastSaved: ts })
   },
