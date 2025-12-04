@@ -2,12 +2,23 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.28] - 2025-12-04
+
+### Added
+- **Merge option**: When selecting near existing annotation, can now:
+  - **Merge** - extend span AND add selected question (best of both)
+  - **Extend** - grow span but keep existing questions
+  - **Separate** - create new annotation
+  - **Cancel** - do nothing
+
+### Fixed
+- **Adjacent span detection**: Now detects spans that touch (not just overlap)
+- Popup shows "is next to" vs "overlaps" depending on relationship
+
 ## [0.0.27] - 2025-12-04
 
 ### Fixed
-- **Question toggle popup position stable**: Popup no longer jumps around when toggling questions
-  - Position stored in ref instead of state
-  - DOM reflow from annotation changes no longer affects popup placement
+- Question toggle popup position stable (uses ref)
 
 ## [0.0.26] - 2025-12-04
 

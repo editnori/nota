@@ -22,6 +22,7 @@ interface OverlapPrompt {
   newText: string
   overlappingId: string
   overlappingText: string
+  isAdjacent: boolean  // touching but not overlapping
   position: { x: number, y: number }
 }
 
@@ -135,17 +136,24 @@ export function DocumentView({ onCreateAnnotation }: Props) {
       (start < a.end && end > a.start) // Any overlap
     )
 
-    if (overlapping.length > 0) {
-      // Find the one with most overlap
-      const primary = overlapping[0]
+    // Also check for adjacent spans (touching but not overlapping)
+    const adjacent = noteAnnotations.filter(a =>
+      (start === a.end || end === a.start) // Touching
+    )
+
+    const nearby = overlapping.length > 0 ? overlapping : adjacent
+    const isAdjacent = overlapping.length === 0 && adjacent.length > 0
+
+    if (nearby.length > 0) {
+      const primary = nearby[0]
       
-      // If selection is entirely within existing annotation, just open its popup
-      if (start >= primary.start && end <= primary.end) {
+      // If selection is entirely within existing annotation, just ignore
+      if (!isAdjacent && start >= primary.start && end <= primary.end) {
         window.getSelection()?.removeAllRanges()
         return
       }
 
-      // Show overlap prompt with three options
+      // Show overlap/adjacent prompt
       const sel = window.getSelection()
       const range = sel?.getRangeAt(0)
       const rect = range?.getBoundingClientRect()
@@ -156,6 +164,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
         newText: text,
         overlappingId: primary.id,
         overlappingText: primary.text,
+        isAdjacent,
         position: { x: rect?.left || 100, y: (rect?.bottom || 100) + 4 }
       })
       window.getSelection()?.removeAllRanges()
@@ -172,7 +181,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     const existing = annotations.find(a => a.id === overlapPrompt.overlappingId)
     if (!existing) return
     
-    // Extend to cover both
+    // Extend to cover both (keep same questions)
     const newStart = Math.min(overlapPrompt.newStart, existing.start)
     const newEnd = Math.max(overlapPrompt.newEnd, existing.end)
     const newText = note.text.slice(newStart, newEnd)
@@ -181,6 +190,33 @@ export function DocumentView({ onCreateAnnotation }: Props) {
       start: newStart,
       end: newEnd,
       text: newText
+    })
+    setOverlapPrompt(null)
+  }
+
+  function handleOverlapMerge() {
+    if (!overlapPrompt || !note) return
+    
+    const existing = annotations.find(a => a.id === overlapPrompt.overlappingId)
+    if (!existing) return
+    
+    const { selectedQuestion } = useStore.getState()
+    
+    // Extend to cover both AND add the selected question
+    const newStart = Math.min(overlapPrompt.newStart, existing.start)
+    const newEnd = Math.max(overlapPrompt.newEnd, existing.end)
+    const newText = note.text.slice(newStart, newEnd)
+    
+    // Add selected question if not already present
+    const newQuestions = selectedQuestion && !existing.questions.includes(selectedQuestion)
+      ? [...existing.questions, selectedQuestion]
+      : existing.questions
+    
+    updateAnnotation(overlapPrompt.overlappingId, {
+      start: newStart,
+      end: newEnd,
+      text: newText,
+      questions: newQuestions
     })
     setOverlapPrompt(null)
   }
@@ -470,44 +506,66 @@ export function DocumentView({ onCreateAnnotation }: Props) {
         </div>
       )}
 
-      {/* Overlap prompt - three options */}
-      {overlapPrompt && (
-        <div
-          className="fixed z-50 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg p-3 w-72"
-          style={{ left: overlapPrompt.position.x, top: overlapPrompt.position.y }}
-          onClick={e => e.stopPropagation()}
-        >
-          <div className="text-[11px] text-maple-700 dark:text-maple-200 mb-3">
-            Selection overlaps with:
-            <span className="block mt-1 text-[10px] text-maple-500 dark:text-maple-400 italic truncate">
-              "{overlapPrompt.overlappingText.slice(0, 40)}{overlapPrompt.overlappingText.length > 40 ? '...' : ''}"
-            </span>
+      {/* Overlap/Adjacent prompt */}
+      {overlapPrompt && (() => {
+        const existing = annotations.find(a => a.id === overlapPrompt.overlappingId)
+        const { selectedQuestion } = useStore.getState()
+        const selectedQ = selectedQuestion ? getQuestion(selectedQuestion) : null
+        const canMerge = selectedQ && existing && selectedQuestion && !existing.questions.includes(selectedQuestion)
+        
+        return (
+          <div
+            className="fixed z-50 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg p-3 w-80"
+            style={{ left: overlapPrompt.position.x, top: overlapPrompt.position.y }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-[11px] text-maple-700 dark:text-maple-200 mb-3">
+              Selection {overlapPrompt.isAdjacent ? 'is next to' : 'overlaps'}:
+              <span className="block mt-1 text-[10px] text-maple-500 dark:text-maple-400 italic truncate">
+                "{overlapPrompt.overlappingText.slice(0, 40)}{overlapPrompt.overlappingText.length > 40 ? '...' : ''}"
+              </span>
+            </div>
+            
+            <div className="flex flex-col gap-1.5">
+              {canMerge && (
+                <button
+                  onClick={handleOverlapMerge}
+                  className="w-full text-[10px] px-3 py-1.5 bg-maple-800 dark:bg-maple-600 text-white rounded hover:bg-maple-700 dark:hover:bg-maple-500 text-left"
+                >
+                  <span className="font-medium">Merge</span>
+                  <span className="text-maple-300 dark:text-maple-400 ml-1">- extend + add "{selectedQ?.name}"</span>
+                </button>
+              )}
+              <button
+                onClick={handleOverlapExtend}
+                className={`w-full text-[10px] px-3 py-1.5 rounded text-left ${
+                  canMerge 
+                    ? 'bg-maple-100 dark:bg-maple-700 text-maple-700 dark:text-maple-200 hover:bg-maple-200 dark:hover:bg-maple-600'
+                    : 'bg-maple-800 dark:bg-maple-600 text-white hover:bg-maple-700 dark:hover:bg-maple-500'
+                }`}
+              >
+                <span className="font-medium">Extend</span>
+                <span className={canMerge ? 'text-maple-500 dark:text-maple-400 ml-1' : 'text-maple-300 dark:text-maple-400 ml-1'}>
+                  - grow existing (keep questions)
+                </span>
+              </button>
+              <button
+                onClick={handleOverlapCreate}
+                className="w-full text-[10px] px-3 py-1.5 bg-maple-100 dark:bg-maple-700 text-maple-700 dark:text-maple-200 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-left"
+              >
+                <span className="font-medium">Separate</span>
+                <span className="text-maple-500 dark:text-maple-400 ml-1">- create new annotation</span>
+              </button>
+              <button
+                onClick={handleOverlapCancel}
+                className="w-full text-[10px] px-3 py-1.5 text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200 text-left"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-          
-          <div className="flex flex-col gap-1.5">
-            <button
-              onClick={handleOverlapExtend}
-              className="w-full text-[10px] px-3 py-1.5 bg-maple-800 dark:bg-maple-600 text-white rounded hover:bg-maple-700 dark:hover:bg-maple-500 text-left"
-            >
-              <span className="font-medium">Extend</span>
-              <span className="text-maple-300 dark:text-maple-400 ml-1">- grow existing to include selection</span>
-            </button>
-            <button
-              onClick={handleOverlapCreate}
-              className="w-full text-[10px] px-3 py-1.5 bg-maple-100 dark:bg-maple-700 text-maple-700 dark:text-maple-200 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-left"
-            >
-              <span className="font-medium">Overlap</span>
-              <span className="text-maple-500 dark:text-maple-400 ml-1">- create overlapping span</span>
-            </button>
-            <button
-              onClick={handleOverlapCancel}
-              className="w-full text-[10px] px-3 py-1.5 text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200 text-left"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Span editor popup - adjust start/end */}
       {spanEditor && note && (
