@@ -434,7 +434,7 @@ export function ReviewView() {
                   key={ann.id} 
                   className={`bg-white dark:bg-maple-800 border rounded-lg p-3 transition-all duration-300 ${
                     isSuggested ? 'border-maple-300 dark:border-maple-600 border-dashed' : 'border-maple-200 dark:border-maple-700'
-                  } ${isHighlighted ? 'animate-ring ring-2 ring-amber-400' : ''}`}
+                  } ${isHighlighted ? 'animate-ring' : ''}`}
                 >
                   <div className="flex items-start gap-2 mb-2">
                     <div className="flex flex-wrap gap-1 flex-1">
