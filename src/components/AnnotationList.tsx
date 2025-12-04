@@ -72,7 +72,8 @@ export function AnnotationList({ noteId }: Props) {
         {noteAnnotations.map(ann => {
           const isAddingQuestion = addingQuestionTo === ann.id
           const isEditingComment = editingComment?.id === ann.id
-          const availableQuestions = questions.filter(q => !ann.questions.includes(q.id))
+          const annQuestions = ann.questions || []
+          const availableQuestions = questions.filter(q => !annQuestions.includes(q.id))
           const isSuggested = ann.source === 'suggested'
           
           return (
@@ -83,7 +84,7 @@ export function AnnotationList({ noteId }: Props) {
               <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap gap-1 mb-1.5">
-                    {ann.questions.map(qid => {
+                    {annQuestions.map(qid => {
                       const q = getQuestion(qid)
                       return (
                         <span
@@ -92,7 +93,7 @@ export function AnnotationList({ noteId }: Props) {
                           style={{ backgroundColor: q?.color || '#888' }}
                         >
                           {q?.name || qid}
-                          {ann.questions.length > 1 && (
+                          {annQuestions.length > 1 && (
                             <button
                               onClick={() => handleRemoveQuestion(ann.id, qid)}
                               className="opacity-50 hover:opacity-100"

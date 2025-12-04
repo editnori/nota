@@ -2,21 +2,27 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.20] - 2025-12-04
+
+### Fixed
+- **Auto-tag crash**: Fixed TypeError when auto-tagging (was using `questionIds` instead of `questions`)
+- **AnnotationList null check**: Added safeguard for annotations with missing questions array
+- **Type mismatch**: Fixed MatchLocation interface alignment between components
+
+### Verified
+- TypeScript: 0 errors
+- All 94 unit tests passing
+- Session state saving works (debounced save on all state changes)
+- Import/export functioning correctly
+
 ## [0.0.19] - 2025-12-04
 
 ### Fixed
-- **Import progress**: Now shows "47 / 234" only (no file names that cause width jumping)
-- **Removed laggy animations** from Smart Filter
+- Import progress shows count only (no file names)
+- Removed laggy animations
 
 ### Improved
-- **Smart Filter fully editable per question**:
-  - Click chevron to expand any question
-  - Add/remove terms with inline input
-  - Add/remove regex patterns
-  - Toggle negation detection per question
-  - All changes persist to localStorage
-  - Reset button restores defaults
-- No babying - full control for Ryan to customize
+- Smart Filter fully editable per question
 
 ## [0.0.18] - 2025-12-04
 
