@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../hooks/useStore'
-import { Search, ChevronUp, ChevronDown } from 'lucide-react'
+import { Search, ChevronUp, ChevronDown, Filter, X } from 'lucide-react'
 
 const PAGE_SIZE = 50
 
@@ -8,40 +8,65 @@ export function NotesList() {
   const { notes, annotations, currentNoteIndex, setCurrentNoteIndex } = useStore()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'done' | 'todo'>('all')
+  const [typeFilter, setTypeFilter] = useState<string | null>(null)
+  const [showTypeFilter, setShowTypeFilter] = useState(false)
   const [page, setPage] = useState(0)
 
+  // Memoize annotation counts for performance with large datasets
   const annotationCounts = useMemo(() => {
     const counts = new Map<string, number>()
-    annotations.forEach(a => {
+    for (const a of annotations) {
       counts.set(a.noteId, (counts.get(a.noteId) || 0) + 1)
-    })
+    }
     return counts
   }, [annotations])
 
   const suggestedNotes = useMemo(() => {
     const set = new Set<string>()
-    annotations.filter(a => a.source === 'suggested').forEach(a => set.add(a.noteId))
+    for (const a of annotations) {
+      if (a.source === 'suggested') set.add(a.noteId)
+    }
     return set
   }, [annotations])
 
+  // Get unique note types
+  const noteTypes = useMemo(() => {
+    const types = new Set<string>()
+    for (const note of notes) {
+      if (note.meta?.type) types.add(note.meta.type)
+    }
+    return Array.from(types).sort()
+  }, [notes])
+
+  // Filter notes - memoized for performance
   const filtered = useMemo(() => {
+    const searchLower = search.toLowerCase()
     return notes.filter(note => {
+      // Type filter
+      if (typeFilter && note.meta?.type !== typeFilter) return false
+      
+      // Search filter
       if (search) {
-        const lower = search.toLowerCase()
-        if (!note.id.toLowerCase().includes(lower) && !note.text.toLowerCase().includes(lower)) {
+        if (!note.id.toLowerCase().includes(searchLower) && 
+            !note.text.toLowerCase().includes(searchLower)) {
           return false
         }
       }
+      
+      // Status filter
       const count = annotationCounts.get(note.id) || 0
       if (filter === 'done' && count === 0) return false
       if (filter === 'todo' && count > 0) return false
+      
       return true
     })
-  }, [notes, search, filter, annotationCounts])
+  }, [notes, search, filter, typeFilter, annotationCounts])
 
   // Pagination
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const paged = useMemo(() => {
+    return filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  }, [filtered, page])
   
   // Keep page in bounds when filter changes
   useMemo(() => {
@@ -51,16 +76,23 @@ export function NotesList() {
   }, [totalPages, page])
 
   // Jump to page containing current note
-  function jumpToCurrent() {
+  const jumpToCurrent = useCallback(() => {
     const currentNote = notes[currentNoteIndex]
     if (!currentNote) return
     const idx = filtered.findIndex(n => n.id === currentNote.id)
     if (idx >= 0) {
       setPage(Math.floor(idx / PAGE_SIZE))
     }
-  }
+  }, [notes, currentNoteIndex, filtered])
 
-  const annotatedCount = notes.filter(n => annotationCounts.get(n.id)).length
+  const annotatedCount = useMemo(() => {
+    return notes.filter(n => annotationCounts.get(n.id)).length
+  }, [notes, annotationCounts])
+
+  // Get count for a type
+  const getTypeCount = useCallback((type: string) => {
+    return notes.filter(n => n.meta?.type === type).length
+  }, [notes])
 
   return (
     <aside className="w-52 bg-white dark:bg-maple-800 border-r border-maple-200 dark:border-maple-700 flex flex-col">
@@ -74,17 +106,74 @@ export function NotesList() {
             className="w-full pl-7 pr-2 py-1 text-[11px] bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded focus:outline-none focus:border-maple-400 dark:text-maple-200"
           />
         </div>
-        <div className="flex text-[9px] border border-maple-200 dark:border-maple-600 rounded overflow-hidden">
-          {(['all', 'done', 'todo'] as const).map(f => (
+        
+        <div className="flex gap-1">
+          <div className="flex flex-1 text-[9px] border border-maple-200 dark:border-maple-600 rounded overflow-hidden">
+            {(['all', 'done', 'todo'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => { setFilter(f); setPage(0) }}
+                className={`flex-1 py-1 capitalize ${filter === f ? 'bg-maple-800 dark:bg-maple-600 text-white' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'}`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          
+          {noteTypes.length > 0 && (
             <button
-              key={f}
-              onClick={() => { setFilter(f); setPage(0) }}
-              className={`flex-1 py-1 capitalize ${filter === f ? 'bg-maple-800 dark:bg-maple-600 text-white' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'}`}
+              onClick={() => setShowTypeFilter(!showTypeFilter)}
+              className={`p-1 rounded border ${
+                typeFilter || showTypeFilter
+                  ? 'bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400'
+                  : 'border-maple-200 dark:border-maple-600 text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'
+              }`}
+              title="Filter by note type"
             >
-              {f}
+              <Filter size={12} />
             </button>
-          ))}
+          )}
         </div>
+
+        {/* Type filter dropdown */}
+        {showTypeFilter && noteTypes.length > 0 && (
+          <div className="bg-maple-50 dark:bg-maple-700 rounded border border-maple-200 dark:border-maple-600 p-1.5">
+            <div className="text-[9px] text-maple-500 dark:text-maple-400 mb-1 px-1">Note types:</div>
+            <div className="space-y-0.5 max-h-32 overflow-y-auto">
+              <button
+                onClick={() => { setTypeFilter(null); setPage(0) }}
+                className={`w-full text-left px-1.5 py-1 text-[10px] rounded flex justify-between ${
+                  !typeFilter ? 'bg-white dark:bg-maple-600 font-medium' : 'hover:bg-white dark:hover:bg-maple-600'
+                }`}
+              >
+                <span className="dark:text-maple-200">All types</span>
+                <span className="text-maple-400 dark:text-maple-500">{notes.length}</span>
+              </button>
+              {noteTypes.map(type => (
+                <button
+                  key={type}
+                  onClick={() => { setTypeFilter(type); setPage(0) }}
+                  className={`w-full text-left px-1.5 py-1 text-[10px] rounded flex justify-between ${
+                    typeFilter === type ? 'bg-white dark:bg-maple-600 font-medium' : 'hover:bg-white dark:hover:bg-maple-600'
+                  }`}
+                >
+                  <span className="dark:text-maple-200 truncate">{type}</span>
+                  <span className="text-maple-400 dark:text-maple-500 ml-1">{getTypeCount(type)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Active type filter badge */}
+        {typeFilter && !showTypeFilter && (
+          <div className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded px-2 py-1">
+            <span className="text-[9px] truncate flex-1">{typeFilter}</span>
+            <button onClick={() => setTypeFilter(null)} className="hover:text-amber-900 dark:hover:text-amber-200">
+              <X size={10} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Pagination header */}
@@ -142,6 +231,9 @@ export function NotesList() {
                   </span>
                 )}
               </div>
+              {note.meta?.type && (
+                <div className="text-[8px] text-maple-400 dark:text-maple-500 mb-0.5">{note.meta.type}</div>
+              )}
               <div className="text-[9px] text-maple-400 dark:text-maple-500 truncate leading-tight">
                 {note.text.slice(0, 50)}...
               </div>
@@ -151,7 +243,7 @@ export function NotesList() {
         
         {paged.length === 0 && (
           <div className="p-4 text-center text-[10px] text-maple-400 dark:text-maple-500">
-            {search ? 'No matches' : 'No notes'}
+            {search || typeFilter ? 'No matches' : 'No notes'}
           </div>
         )}
       </div>

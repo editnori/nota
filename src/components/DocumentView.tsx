@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, useMemo } from 'react'
 import { useStore } from '../hooks/useStore'
 import { getQuestion, loadQuestions } from '../lib/questions'
 import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus } from 'lucide-react'
@@ -13,12 +13,32 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const [activeSpan, setActiveSpan] = useState<{ annotationIds: string[], position: { x: number, y: number } } | null>(null)
 
   const note = notes[currentNoteIndex]
-  const noteAnnotations = note ? annotations.filter(a => a.noteId === note.id) : []
   
-  // Find notes with annotations for stats and navigation
-  const annotatedNoteIds = new Set(annotations.map(a => a.noteId))
-  const nextUnannotatedIndex = notes.findIndex((n, i) => i > currentNoteIndex && !annotatedNoteIds.has(n.id))
-  const hasUnannotated = notes.some(n => !annotatedNoteIds.has(n.id))
+  // Memoize for performance with large datasets
+  const noteAnnotations = useMemo(() => {
+    if (!note) return []
+    return annotations.filter(a => a.noteId === note.id)
+  }, [note, annotations])
+  
+  // Find notes with annotations for navigation
+  const { nextUnannotatedIndex, hasUnannotated } = useMemo(() => {
+    const annotatedNoteIds = new Set<string>()
+    for (const a of annotations) {
+      annotatedNoteIds.add(a.noteId)
+    }
+    
+    let nextIdx = -1
+    for (let i = currentNoteIndex + 1; i < notes.length; i++) {
+      if (!annotatedNoteIds.has(notes[i].id)) {
+        nextIdx = i
+        break
+      }
+    }
+    
+    const hasUnannotated = notes.some(n => !annotatedNoteIds.has(n.id))
+    
+    return { nextUnannotatedIndex: nextIdx, hasUnannotated }
+  }, [annotations, notes, currentNoteIndex])
 
   const handleTextSelect = useCallback(() => {
     const sel = window.getSelection()
@@ -68,7 +88,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <p className="text-maple-400 dark:text-maple-500 mb-2">No notes loaded</p>
-          <p className="text-xs text-maple-300 dark:text-maple-600">Import some notes to begin annotating</p>
+          <p className="text-xs text-maple-300 dark:text-maple-600">Import or drag-drop notes to begin</p>
         </div>
       </div>
     )
@@ -115,7 +135,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
           <button
             onClick={() => setFontSize(Math.max(10, fontSize - 1))}
             className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-white dark:hover:bg-maple-600"
-            title="Decrease font size"
+            title="Smaller"
           >
             <Minus size={10} />
           </button>
@@ -123,7 +143,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
           <button
             onClick={() => setFontSize(Math.min(20, fontSize + 1))}
             className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-white dark:hover:bg-maple-600"
-            title="Increase font size"
+            title="Larger"
           >
             <Plus size={10} />
           </button>
@@ -136,7 +156,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
             title="Jump to next unannotated note"
           >
             <SkipForward size={11} />
-            <span>Next todo</span>
+            <span>Next</span>
           </button>
         )}
       </div>
@@ -264,10 +284,10 @@ function buildSegments(text: string, annotations: { id: string; start: number; e
   }
 
   const points = new Set<number>([0, text.length])
-  annotations.forEach(a => {
+  for (const a of annotations) {
     points.add(Math.max(0, a.start))
     points.add(Math.min(text.length, a.end))
-  })
+  }
 
   const sorted = Array.from(points).sort((a, b) => a - b)
   const segments: Segment[] = []

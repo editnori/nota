@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../hooks/useStore'
 import { loadQuestions, getQuestion } from '../lib/questions'
-import { X, ExternalLink, Search, Wand2, ChevronDown, ChevronUp } from 'lucide-react'
+import { X, ExternalLink, Search, Wand2 } from 'lucide-react'
 
 const PAGE_SIZE = 50
 
@@ -11,8 +11,9 @@ export function ReviewView() {
   const [searchText, setSearchText] = useState('')
   const [showBulkTag, setShowBulkTag] = useState(false)
   const [bulkSearch, setBulkSearch] = useState('')
-  const [showMatchPreview, setShowMatchPreview] = useState(false)
+  const [excludedMatches, setExcludedMatches] = useState<Set<string>>(new Set())
   const [page, setPage] = useState(0)
+  const [highlightedNote, setHighlightedNote] = useState<string | null>(null)
   const questions = loadQuestions()
 
   const noteMap = useMemo(() => new Map(notes.map(n => [n.id, n])), [notes])
@@ -50,10 +51,11 @@ export function ReviewView() {
   const bulkMatches = useMemo(() => {
     if (!bulkSearch.trim()) return []
     const lower = bulkSearch.toLowerCase()
-    const matches: { noteId: string, text: string, start: number, end: number, contextBefore: string, contextAfter: string }[] = []
+    const matches: { id: string, noteId: string, text: string, start: number, end: number, contextBefore: string, contextAfter: string }[] = []
     
     notes.forEach(note => {
       let idx = 0
+      let matchNum = 0
       while (idx < note.text.length) {
         const foundIdx = note.text.toLowerCase().indexOf(lower, idx)
         if (foundIdx === -1) break
@@ -63,8 +65,10 @@ export function ReviewView() {
         )
         
         if (!alreadyTagged) {
-          const ctxLen = 30
+          const ctxLen = 25
+          const matchId = `${note.id}_${foundIdx}`
           matches.push({
+            id: matchId,
             noteId: note.id,
             text: note.text.slice(foundIdx, foundIdx + bulkSearch.length),
             start: foundIdx,
@@ -74,24 +78,45 @@ export function ReviewView() {
           })
         }
         idx = foundIdx + 1
+        matchNum++
       }
     })
     return matches
   }, [bulkSearch, notes, annotations])
+
+  // Active matches (excluding deselected ones)
+  const activeMatches = useMemo(() => {
+    return bulkMatches.filter(m => !excludedMatches.has(m.id))
+  }, [bulkMatches, excludedMatches])
 
   function goToNote(noteId: string) {
     const idx = notes.findIndex(n => n.id === noteId)
     if (idx >= 0) {
       setCurrentNoteIndex(idx)
       setMode('annotate')
+      // Trigger highlight animation
+      setHighlightedNote(noteId)
+      setTimeout(() => setHighlightedNote(null), 1500)
     }
   }
 
+  function toggleMatch(matchId: string) {
+    setExcludedMatches(prev => {
+      const next = new Set(prev)
+      if (next.has(matchId)) {
+        next.delete(matchId)
+      } else {
+        next.add(matchId)
+      }
+      return next
+    })
+  }
+
   function handleBulkTag(questionId: string) {
-    if (bulkMatches.length === 0) return
-    if (!confirm(`Tag ${bulkMatches.length} matches as "${getQuestion(questionId)?.name}"?\n\nMarked as suggested for easy removal.`)) return
+    if (activeMatches.length === 0) return
+    if (!confirm(`Tag ${activeMatches.length} matches as "${getQuestion(questionId)?.name}"?`)) return
     
-    addBulkAnnotations(bulkMatches.map(m => ({
+    addBulkAnnotations(activeMatches.map(m => ({
       noteId: m.noteId,
       start: m.start,
       end: m.end,
@@ -99,8 +124,8 @@ export function ReviewView() {
       questions: [questionId]
     })))
     setBulkSearch('')
+    setExcludedMatches(new Set())
     setShowBulkTag(false)
-    setShowMatchPreview(false)
   }
 
   const manualCount = annotations.filter(a => a.source !== 'suggested').length
@@ -159,7 +184,7 @@ export function ReviewView() {
 
         <div className="p-2 border-t border-maple-100 dark:border-maple-700 space-y-1">
           <button
-            onClick={() => setShowBulkTag(!showBulkTag)}
+            onClick={() => { setShowBulkTag(!showBulkTag); setExcludedMatches(new Set()) }}
             className={`w-full flex items-center gap-1.5 px-2 py-1 text-[9px] rounded ${
               showBulkTag ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'
             }`}
@@ -184,7 +209,7 @@ export function ReviewView() {
             </div>
             <input
               value={bulkSearch}
-              onChange={e => { setBulkSearch(e.target.value); setShowMatchPreview(false) }}
+              onChange={e => { setBulkSearch(e.target.value); setExcludedMatches(new Set()) }}
               placeholder="Enter text to find across all notes..."
               className="w-full px-2 py-1.5 text-[11px] bg-white dark:bg-maple-800 border border-amber-200 dark:border-amber-600 rounded focus:outline-none dark:text-maple-200 mb-2"
               autoFocus
@@ -193,34 +218,52 @@ export function ReviewView() {
             {bulkMatches.length > 0 && (
               <>
                 <div className="flex items-center justify-between mb-2">
-                  <button
-                    onClick={() => setShowMatchPreview(!showMatchPreview)}
-                    className="flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400 hover:underline"
-                  >
-                    {showMatchPreview ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                    {bulkMatches.length} matches in {new Set(bulkMatches.map(m => m.noteId)).size} notes
-                    {showMatchPreview ? ' (hide)' : ' (preview)'}
-                  </button>
+                  <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                    {activeMatches.length} of {bulkMatches.length} selected
+                    {excludedMatches.size > 0 && (
+                      <button 
+                        onClick={() => setExcludedMatches(new Set())}
+                        className="ml-2 underline hover:no-underline"
+                      >
+                        reset
+                      </button>
+                    )}
+                  </span>
                 </div>
                 
-                {/* Match preview */}
-                {showMatchPreview && (
-                  <div className="max-h-48 overflow-y-auto mb-3 space-y-1 bg-white dark:bg-maple-800 rounded border border-amber-100 dark:border-amber-800 p-2">
-                    {bulkMatches.slice(0, 20).map((m, i) => (
-                      <div key={i} className="text-[10px] font-mono text-maple-600 dark:text-maple-300 py-1 border-b border-maple-100 dark:border-maple-700 last:border-0">
-                        <span className="text-maple-400 dark:text-maple-500">...{m.contextBefore}</span>
-                        <mark className="bg-amber-200 dark:bg-amber-700 px-0.5 rounded">{m.text}</mark>
-                        <span className="text-maple-400 dark:text-maple-500">{m.contextAfter}...</span>
-                        <span className="text-[9px] text-maple-400 dark:text-maple-500 ml-2">({m.noteId})</span>
+                {/* Match list with checkboxes */}
+                <div className="max-h-64 overflow-y-auto mb-3 space-y-0.5 bg-white dark:bg-maple-800 rounded border border-amber-100 dark:border-amber-800">
+                  {bulkMatches.map((m) => {
+                    const isExcluded = excludedMatches.has(m.id)
+                    return (
+                      <div 
+                        key={m.id}
+                        onClick={() => toggleMatch(m.id)}
+                        className={`flex items-start gap-2 px-2 py-1.5 cursor-pointer border-b border-maple-50 dark:border-maple-700 last:border-0 ${
+                          isExcluded ? 'opacity-40 bg-maple-50 dark:bg-maple-900' : 'hover:bg-amber-50 dark:hover:bg-amber-900/20'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!isExcluded}
+                          onChange={() => toggleMatch(m.id)}
+                          className="mt-0.5 accent-amber-600"
+                          onClick={e => e.stopPropagation()}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[10px] font-mono text-maple-600 dark:text-maple-300 leading-tight">
+                            <span className="text-maple-400 dark:text-maple-500">...{m.contextBefore}</span>
+                            <mark className={`px-0.5 rounded ${isExcluded ? 'bg-maple-200 dark:bg-maple-600' : 'bg-amber-200 dark:bg-amber-700'}`}>
+                              {m.text}
+                            </mark>
+                            <span className="text-maple-400 dark:text-maple-500">{m.contextAfter}...</span>
+                          </div>
+                          <div className="text-[9px] text-maple-400 dark:text-maple-500 mt-0.5">{m.noteId}</div>
+                        </div>
                       </div>
-                    ))}
-                    {bulkMatches.length > 20 && (
-                      <div className="text-[9px] text-maple-400 dark:text-maple-500 text-center pt-1">
-                        ...and {bulkMatches.length - 20} more
-                      </div>
-                    )}
-                  </div>
-                )}
+                    )
+                  })}
+                </div>
                 
                 <div className="flex flex-wrap gap-1">
                   <span className="text-[10px] text-amber-700 dark:text-amber-400 mr-1">Tag as:</span>
@@ -228,7 +271,8 @@ export function ReviewView() {
                     <button
                       key={q.id}
                       onClick={() => handleBulkTag(q.id)}
-                      className="text-[9px] px-2 py-0.5 rounded text-white hover:opacity-80"
+                      disabled={activeMatches.length === 0}
+                      className="text-[9px] px-2 py-0.5 rounded text-white hover:opacity-80 disabled:opacity-40"
                       style={{ backgroundColor: q.color }}
                     >
                       {q.name}
@@ -281,13 +325,14 @@ export function ReviewView() {
               const before = note?.text.slice(Math.max(0, ann.start - ctx), ann.start) || ''
               const after = note?.text.slice(ann.end, ann.end + ctx) || ''
               const isSuggested = ann.source === 'suggested'
+              const isHighlighted = highlightedNote === ann.noteId
 
               return (
                 <div 
                   key={ann.id} 
-                  className={`bg-white dark:bg-maple-800 border rounded-lg p-3 ${
+                  className={`bg-white dark:bg-maple-800 border rounded-lg p-3 transition-all ${
                     isSuggested ? 'border-amber-200 dark:border-amber-800' : 'border-maple-200 dark:border-maple-700'
-                  }`}
+                  } ${isHighlighted ? 'ring-2 ring-amber-400 ring-offset-2' : ''}`}
                 >
                   <div className="flex items-start gap-2 mb-2">
                     <div className="flex flex-wrap gap-1 flex-1">
