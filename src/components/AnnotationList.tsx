@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { useStore } from '../hooks/useStore'
 import { loadQuestions, getQuestion } from '../lib/questions'
 import { X, Plus, MessageSquare, Check, ChevronUp, ChevronDown } from 'lucide-react'
@@ -13,17 +13,16 @@ export function AnnotationList({ noteId }: Props) {
   const updateAnnotation = useStore(s => s.updateAnnotation)
   const setHighlightedAnnotation = useStore(s => s.setHighlightedAnnotation)
   const highlightedAnnotation = useStore(s => s.highlightedAnnotation)
-  
-  // Get annotations for THIS note only - key optimization
-  const noteAnnotations = useStore(
-    useCallback((s) => {
-      const anns = s.annotationsByNote.get(noteId) || []
-      return [...anns].sort((a, b) => a.start - b.start)
-    }, [noteId])
-  )
+  const annotationsByNote = useStore(s => s.annotationsByNote)
   
   const [editingComment, setEditingComment] = useState<{ id: string, text: string } | null>(null)
   const [addingQuestionTo, setAddingQuestionTo] = useState<string | null>(null)
+  
+  // Get annotations for THIS note only - memoized for performance
+  const noteAnnotations = useMemo(() => {
+    const anns = annotationsByNote.get(noteId) || []
+    return [...anns].sort((a, b) => a.start - b.start)
+  }, [noteId, annotationsByNote])
   
   // Build local annotation map for O(1) lookups
   const annotationMap = useMemo(() => {

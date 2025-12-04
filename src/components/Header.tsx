@@ -1,7 +1,7 @@
 import { useStore, setBulkOperation } from '../hooks/useStore'
 import { exportJSON, exportCSV, downloadFile, exportSession, importSession } from '../lib/exporters'
 import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown, Moon, Sun } from 'lucide-react'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { importFiles } from '../lib/importers'
 import { SettingsModal } from './SettingsModal'
 import { loadQuestions } from '../lib/questions'
@@ -23,23 +23,26 @@ export function Header() {
   const setDarkMode = useStore(s => s.setDarkMode)
   const setImporting = useStore(s => s.setImporting)
   
-  // Get annotations count for current note efficiently using selector
-  const currentNote = notes[currentNoteIndex]
-  const currentNoteAnnotationCount = useStore(
-    useCallback((s) => currentNote ? (s.annotationsByNote.get(currentNote.id)?.length || 0) : 0, [currentNote?.id])
-  )
+  // For export and counts, get annotations
+  const annotations = useStore(s => s.annotations)
+  const annotationsByNote = useStore(s => s.annotationsByNote)
   
-  // Suggested count - iterate only when needed (for display)
-  const suggestedCount = useStore(s => {
+  const currentNote = notes[currentNoteIndex]
+  
+  // Get annotations count for current note - memoized
+  const currentNoteAnnotationCount = useMemo(() => {
+    if (!currentNote) return 0
+    return annotationsByNote.get(currentNote.id)?.length || 0
+  }, [currentNote?.id, annotationsByNote])
+  
+  // Suggested count - memoized
+  const suggestedCount = useMemo(() => {
     let count = 0
-    for (const a of s.annotations) {
+    for (const a of annotations) {
       if (a.source === 'suggested') count++
     }
     return count
-  })
-  
-  // For export, get annotations directly
-  const annotations = useStore(s => s.annotations)
+  }, [annotations])
   
   const [showSettings, setShowSettings] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
