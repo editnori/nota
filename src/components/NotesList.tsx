@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../hooks/useStore'
-import { Search, ChevronUp, ChevronDown, Filter, X } from 'lucide-react'
+import { useDebounce } from '../hooks/useDebounce'
+import { Search, ChevronUp, ChevronDown, Filter, X, Loader2 } from 'lucide-react'
 
 const PAGE_SIZE = 50
 
@@ -11,6 +12,10 @@ export function NotesList() {
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [showTypeFilter, setShowTypeFilter] = useState(false)
   const [page, setPage] = useState(0)
+
+  // Debounce search for performance with large datasets
+  const debouncedSearch = useDebounce(search, 200)
+  const isSearching = search !== debouncedSearch
 
   // Memoize annotation counts for performance with large datasets
   const annotationCounts = useMemo(() => {
@@ -38,15 +43,66 @@ export function NotesList() {
     return Array.from(types).sort()
   }, [notes])
 
+  // Build search index for faster lookups
+  const searchIndex = useMemo(() => {
+    if (notes.length < 500) return null // Only build index for large datasets
+    
+    const index = new Map<string, Set<number>>()
+    
+    notes.forEach((note, idx) => {
+      // Index note ID words
+      const idWords = note.id.toLowerCase().split(/\W+/)
+      for (const word of idWords) {
+        if (word.length < 2) continue
+        if (!index.has(word)) index.set(word, new Set())
+        index.get(word)!.add(idx)
+      }
+      
+      // Index first 500 chars of text (for performance)
+      const textSample = note.text.slice(0, 500).toLowerCase()
+      const textWords = textSample.split(/\W+/)
+      for (const word of textWords) {
+        if (word.length < 3) continue
+        if (!index.has(word)) index.set(word, new Set())
+        index.get(word)!.add(idx)
+      }
+    })
+    
+    return index
+  }, [notes])
+
   // Filter notes - memoized for performance
   const filtered = useMemo(() => {
-    const searchLower = search.toLowerCase()
-    return notes.filter(note => {
+    let candidates = notes
+    
+    // Use index for search if available
+    if (debouncedSearch && searchIndex) {
+      const searchLower = debouncedSearch.toLowerCase()
+      const searchWords = searchLower.split(/\W+/).filter(w => w.length >= 2)
+      
+      if (searchWords.length > 0) {
+        // Find notes matching any search word
+        const matchingIndices = new Set<number>()
+        for (const word of searchWords) {
+          // Find index entries that start with the search word
+          for (const [indexWord, indices] of searchIndex) {
+            if (indexWord.startsWith(word) || indexWord.includes(word)) {
+              indices.forEach(idx => matchingIndices.add(idx))
+            }
+          }
+        }
+        candidates = Array.from(matchingIndices).map(idx => notes[idx])
+      }
+    }
+    
+    const searchLower = debouncedSearch.toLowerCase()
+    
+    return candidates.filter(note => {
       // Type filter
       if (typeFilter && note.meta?.type !== typeFilter) return false
       
-      // Search filter
-      if (search) {
+      // Search filter (if not using index or for refinement)
+      if (debouncedSearch && !searchIndex) {
         if (!note.id.toLowerCase().includes(searchLower) && 
             !note.text.toLowerCase().includes(searchLower)) {
           return false
@@ -60,7 +116,7 @@ export function NotesList() {
       
       return true
     })
-  }, [notes, search, filter, typeFilter, annotationCounts])
+  }, [notes, debouncedSearch, filter, typeFilter, annotationCounts, searchIndex])
 
   // Pagination
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
@@ -103,8 +159,11 @@ export function NotesList() {
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(0) }}
             placeholder="Search notes..."
-            className="w-full pl-7 pr-2 py-1 text-[11px] bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded focus:outline-none focus:border-maple-400 dark:text-maple-200"
+            className="w-full pl-7 pr-7 py-1 text-[11px] bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded focus:outline-none focus:border-maple-400 dark:text-maple-200"
           />
+          {isSearching && (
+            <Loader2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-maple-400 animate-spin" />
+          )}
         </div>
         
         <div className="flex gap-1">
@@ -125,7 +184,7 @@ export function NotesList() {
               onClick={() => setShowTypeFilter(!showTypeFilter)}
               className={`p-1 rounded border ${
                 typeFilter || showTypeFilter
-                  ? 'bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400'
+                  ? 'bg-maple-100 dark:bg-maple-700 border-maple-300 dark:border-maple-600 text-maple-600 dark:text-maple-300'
                   : 'border-maple-200 dark:border-maple-600 text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'
               }`}
               title="Filter by note type"
@@ -167,9 +226,9 @@ export function NotesList() {
 
         {/* Active type filter badge */}
         {typeFilter && !showTypeFilter && (
-          <div className="flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded px-2 py-1">
+          <div className="flex items-center gap-1 bg-maple-100 dark:bg-maple-700 text-maple-600 dark:text-maple-300 rounded px-2 py-1">
             <span className="text-[9px] truncate flex-1">{typeFilter}</span>
-            <button onClick={() => setTypeFilter(null)} className="hover:text-amber-900 dark:hover:text-amber-200">
+            <button onClick={() => setTypeFilter(null)} className="hover:text-maple-800 dark:hover:text-maple-100">
               <X size={10} />
             </button>
           </div>
@@ -226,7 +285,7 @@ export function NotesList() {
                   {note.id}
                 </span>
                 {count > 0 && (
-                  <span className={`text-[8px] px-1 py-0.5 rounded-full font-medium ${hasSuggested ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400' : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400'}`}>
+                  <span className={`text-[8px] px-1 py-0.5 rounded-full font-medium ${hasSuggested ? 'bg-maple-200 dark:bg-maple-600 text-maple-600 dark:text-maple-300' : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400'}`}>
                     {count}
                   </span>
                 )}

@@ -78,7 +78,7 @@ export function AnnotationList({ noteId }: Props) {
           return (
             <div 
               key={ann.id} 
-              className={`rounded-lg p-2.5 ${isSuggested ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800' : 'bg-maple-50 dark:bg-maple-700'}`}
+              className={`rounded-lg p-2.5 ${isSuggested ? 'bg-maple-50 dark:bg-maple-700/50 border border-dashed border-maple-300 dark:border-maple-600' : 'bg-maple-50 dark:bg-maple-700'}`}
             >
               <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
@@ -103,15 +103,15 @@ export function AnnotationList({ noteId }: Props) {
                         </span>
                       )
                     })}
-                    {isSuggested && (
-                      <button
-                        onClick={() => promoteAnnotation(ann.id)}
-                        className="text-[9px] px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-300 dark:hover:bg-amber-700"
-                        title="Mark as reviewed (promote to manual)"
-                      >
-                        suggested
-                      </button>
-                    )}
+                      {isSuggested && (
+                        <button
+                          onClick={() => promoteAnnotation(ann.id)}
+                          className="text-[9px] px-2 py-0.5 rounded-full bg-maple-100 dark:bg-maple-600 text-maple-500 dark:text-maple-300 border border-dashed border-maple-300 dark:border-maple-500 hover:bg-maple-200 dark:hover:bg-maple-500"
+                          title="Click to approve (promote to manual)"
+                        >
+                          auto
+                        </button>
+                      )}
                     {availableQuestions.length > 0 && (
                       <button
                         onClick={() => setAddingQuestionTo(isAddingQuestion ? null : ann.id)}
