@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import type { Note, Annotation, Mode } from '../lib/types'
-
-const STORAGE_KEY = 'annotator_session'
+import { loadSession, saveSession, clearStorage } from '../lib/storage'
 
 interface State {
   notes: Note[]
@@ -10,6 +9,7 @@ interface State {
   mode: Mode
   selectedQuestion: string | null
   lastSaved: number | null
+  isLoaded: boolean
   
   setNotes: (notes: Note[]) => void
   addNotes: (notes: Note[]) => void
@@ -20,61 +20,60 @@ interface State {
   setMode: (mode: Mode) => void
   setSelectedQuestion: (q: string | null) => void
   clearSession: () => void
+  initSession: () => Promise<void>
 }
 
-function loadSession(): Partial<State> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const data = JSON.parse(raw)
-      return {
-        notes: data.notes || [],
-        annotations: data.annotations || [],
-        currentNoteIndex: data.currentNoteIndex || 0,
-        mode: data.mode || 'annotate',
-        selectedQuestion: data.selectedQuestion || null
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return {}
-}
+// Debounced save to avoid too many writes
+let saveTimeout: ReturnType<typeof setTimeout> | null = null
 
-function saveSession(state: State) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+function debouncedSave(state: State) {
+  if (saveTimeout) clearTimeout(saveTimeout)
+  saveTimeout = setTimeout(async () => {
+    await saveSession({
       notes: state.notes,
       annotations: state.annotations,
       currentNoteIndex: state.currentNoteIndex,
       mode: state.mode,
       selectedQuestion: state.selectedQuestion
-    }))
-    return Date.now()
-  } catch {
-    return null
-  }
+    })
+  }, 300)
+  return Date.now()
 }
 
-const initial = loadSession()
-
 export const useStore = create<State>((set, get) => ({
-  notes: initial.notes || [],
-  annotations: initial.annotations || [],
-  currentNoteIndex: initial.currentNoteIndex || 0,
-  mode: initial.mode || 'annotate',
-  selectedQuestion: initial.selectedQuestion || null,
+  notes: [],
+  annotations: [],
+  currentNoteIndex: 0,
+  mode: 'annotate',
+  selectedQuestion: null,
   lastSaved: null,
+  isLoaded: false,
+
+  initSession: async () => {
+    const data = await loadSession()
+    if (data) {
+      set({
+        notes: data.notes || [],
+        annotations: data.annotations || [],
+        currentNoteIndex: data.currentNoteIndex || 0,
+        mode: data.mode || 'annotate',
+        selectedQuestion: data.selectedQuestion || null,
+        isLoaded: true
+      })
+    } else {
+      set({ isLoaded: true })
+    }
+  },
 
   setNotes: (notes) => {
     set({ notes, currentNoteIndex: 0 })
-    const ts = saveSession(get())
+    const ts = debouncedSave(get())
     set({ lastSaved: ts })
   },
 
   addNotes: (newNotes) => {
     set(s => ({ notes: [...s.notes, ...newNotes] }))
-    const ts = saveSession(get())
+    const ts = debouncedSave(get())
     set({ lastSaved: ts })
   },
 
@@ -86,13 +85,13 @@ export const useStore = create<State>((set, get) => ({
       createdAt: Date.now()
     }
     set(s => ({ annotations: [...s.annotations, annotation] }))
-    const ts = saveSession(get())
+    const ts = debouncedSave(get())
     set({ lastSaved: ts })
   },
 
   removeAnnotation: (id) => {
     set(s => ({ annotations: s.annotations.filter(a => a.id !== id) }))
-    const ts = saveSession(get())
+    const ts = debouncedSave(get())
     set({ lastSaved: ts })
   },
 
@@ -100,30 +99,30 @@ export const useStore = create<State>((set, get) => ({
     set(s => ({
       annotations: s.annotations.map(a => a.id === id ? { ...a, ...updates } : a)
     }))
-    const ts = saveSession(get())
+    const ts = debouncedSave(get())
     set({ lastSaved: ts })
   },
 
   setCurrentNoteIndex: (index) => {
     set({ currentNoteIndex: index })
-    const ts = saveSession(get())
+    const ts = debouncedSave(get())
     set({ lastSaved: ts })
   },
 
   setMode: (mode) => {
     set({ mode })
-    const ts = saveSession(get())
+    const ts = debouncedSave(get())
     set({ lastSaved: ts })
   },
 
   setSelectedQuestion: (q) => {
     set({ selectedQuestion: q })
-    const ts = saveSession(get())
+    const ts = debouncedSave(get())
     set({ lastSaved: ts })
   },
 
-  clearSession: () => {
-    localStorage.removeItem(STORAGE_KEY)
+  clearSession: async () => {
+    await clearStorage()
     set({
       notes: [],
       annotations: [],
@@ -134,3 +133,6 @@ export const useStore = create<State>((set, get) => ({
     })
   }
 }))
+
+// Initialize session on module load
+useStore.getState().initSession()

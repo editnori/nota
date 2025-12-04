@@ -300,9 +300,9 @@ export function Header() {
       </button>
 
       <button
-        onClick={() => {
+        onClick={async () => {
           if (confirm('Clear all notes and annotations?')) {
-            clearSession()
+            await clearSession()
           }
         }}
         className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-maple-400 hover:text-red-500 hover:bg-red-50 rounded-full"

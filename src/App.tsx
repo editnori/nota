@@ -10,7 +10,7 @@ import { QuestionPicker } from './components/QuestionPicker'
 import { AnnotationList } from './components/AnnotationList'
 
 export default function App() {
-  const { notes, mode, currentNoteIndex, selectedQuestion, addAnnotation } = useStore()
+  const { notes, mode, currentNoteIndex, selectedQuestion, addAnnotation, isLoaded } = useStore()
 
   const currentNote = notes[currentNoteIndex]
   
@@ -59,6 +59,18 @@ export default function App() {
   }, [currentNote, selectedQuestion, addAnnotation])
 
   useKeyboard(handleTagSelection)
+
+  // Show loading while session is being restored
+  if (!isLoaded) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-maple-50">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-maple-300 border-t-maple-600 rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-maple-500">Loading session...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="h-screen flex flex-col bg-maple-50">
