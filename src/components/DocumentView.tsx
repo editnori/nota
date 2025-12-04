@@ -82,15 +82,16 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     }
   }, [highlightedAnnotation])
 
-  const handleTextSelect = useCallback(() => {
+  // Get selection coordinates from document
+  const getSelectionCoords = useCallback(() => {
     const sel = window.getSelection()
-    if (!sel || sel.isCollapsed) return
+    if (!sel || sel.isCollapsed) return null
 
     const text = sel.toString().trim()
-    if (!text) return
+    if (!text) return null
 
     const container = docRef.current
-    if (!container) return
+    if (!container) return null
 
     const range = sel.getRangeAt(0)
     const preRange = document.createRange()
@@ -100,9 +101,65 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     const start = preRange.toString().length
     const end = start + text.length
 
+    return { text, start, end }
+  }, [])
+
+  const handleTextSelect = useCallback(() => {
+    const coords = getSelectionCoords()
+    if (!coords) return
+
+    const { text, start, end } = coords
+
+    // If span editor is open, update its boundaries instead of creating new annotation
+    if (spanEditor) {
+      setSpanEditor({ ...spanEditor, currentStart: start, currentEnd: end })
+      window.getSelection()?.removeAllRanges()
+      return
+    }
+
+    // Check for overlaps with existing annotations
+    const overlapping = noteAnnotations.filter(a => 
+      (start < a.end && end > a.start) // Any overlap
+    )
+
+    if (overlapping.length > 0) {
+      // Find the one with most overlap
+      const primary = overlapping[0]
+      
+      // If selection is entirely within existing annotation, just open its popup
+      if (start >= primary.start && end <= primary.end) {
+        window.getSelection()?.removeAllRanges()
+        return
+      }
+
+      // Ask to extend existing annotation
+      const shouldExtend = confirm(
+        `Selection overlaps with existing annotation "${primary.text.slice(0, 30)}..."\n\nExtend existing annotation to include new selection?`
+      )
+      
+      if (shouldExtend) {
+        // Extend to cover both
+        const newStart = Math.min(start, primary.start)
+        const newEnd = Math.max(end, primary.end)
+        const newText = note?.text.slice(newStart, newEnd) || text
+        
+        updateAnnotation(primary.id, {
+          start: newStart,
+          end: newEnd,
+          text: newText
+        })
+        window.getSelection()?.removeAllRanges()
+        return
+      } else {
+        // User declined, don't create overlapping annotation
+        window.getSelection()?.removeAllRanges()
+        return
+      }
+    }
+
     onCreateAnnotation(text, start, end)
-    sel.removeAllRanges()
-  }, [onCreateAnnotation])
+    window.getSelection()?.removeAllRanges()
+  }, [getSelectionCoords, onCreateAnnotation, spanEditor, noteAnnotations, note, updateAnnotation])
 
   function handleSpanClick(e: React.MouseEvent, annotationIds: string[]) {
     e.stopPropagation()
@@ -383,14 +440,16 @@ export function DocumentView({ onCreateAnnotation }: Props) {
       {/* Span editor popup - adjust start/end */}
       {spanEditor && note && (
         <div
-          className="fixed z-50 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg p-3 w-72"
+          className="fixed z-50 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg p-3 w-80"
           style={{ left: spanEditor.position.x, top: spanEditor.position.y }}
           onClick={e => e.stopPropagation()}
         >
-          <div className="text-[10px] text-maple-500 dark:text-maple-400 mb-2">Edit span boundaries:</div>
+          <div className="text-[10px] text-maple-500 dark:text-maple-400 mb-2">
+            Edit span: <span className="text-maple-700 dark:text-maple-300">select new text in document</span> or fine-tune below
+          </div>
           
           {/* Preview */}
-          <div className="text-[11px] bg-maple-50 dark:bg-maple-700 rounded p-2 mb-3 font-mono break-words">
+          <div className="text-[11px] bg-maple-50 dark:bg-maple-700 rounded p-2 mb-3 font-mono break-words max-h-20 overflow-y-auto">
             <span className="text-maple-400">...</span>
             <span className="bg-amber-200 dark:bg-amber-700 px-0.5 rounded">
               {note.text.slice(spanEditor.currentStart, spanEditor.currentEnd)}
@@ -398,25 +457,36 @@ export function DocumentView({ onCreateAnnotation }: Props) {
             <span className="text-maple-400">...</span>
           </div>
           
-          {/* Controls */}
+          {/* Fine-tune controls */}
           <div className="grid grid-cols-2 gap-2 mb-3">
             <div>
               <label className="text-[9px] text-maple-500 dark:text-maple-400 block mb-1">Start</label>
               <div className="flex items-center gap-1">
                 <button
+                  onClick={() => setSpanEditor({ ...spanEditor, currentStart: Math.max(0, spanEditor.currentStart - 5) })}
+                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[9px]"
+                  title="Move start back 5 chars"
+                >
+                  -5
+                </button>
+                <button
                   onClick={() => setSpanEditor({ ...spanEditor, currentStart: Math.max(0, spanEditor.currentStart - 1) })}
-                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[10px]"
+                  className="w-5 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[9px]"
                 >
                   -1
                 </button>
-                <span className="text-[10px] text-maple-600 dark:text-maple-300 flex-1 text-center tabular-nums">
-                  {spanEditor.currentStart}
-                </span>
                 <button
                   onClick={() => setSpanEditor({ ...spanEditor, currentStart: Math.min(spanEditor.currentEnd - 1, spanEditor.currentStart + 1) })}
-                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[10px]"
+                  className="w-5 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[9px]"
                 >
                   +1
+                </button>
+                <button
+                  onClick={() => setSpanEditor({ ...spanEditor, currentStart: Math.min(spanEditor.currentEnd - 1, spanEditor.currentStart + 5) })}
+                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[9px]"
+                  title="Move start forward 5 chars"
+                >
+                  +5
                 </button>
               </div>
             </div>
@@ -424,39 +494,55 @@ export function DocumentView({ onCreateAnnotation }: Props) {
               <label className="text-[9px] text-maple-500 dark:text-maple-400 block mb-1">End</label>
               <div className="flex items-center gap-1">
                 <button
+                  onClick={() => setSpanEditor({ ...spanEditor, currentEnd: Math.max(spanEditor.currentStart + 1, spanEditor.currentEnd - 5) })}
+                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[9px]"
+                  title="Move end back 5 chars"
+                >
+                  -5
+                </button>
+                <button
                   onClick={() => setSpanEditor({ ...spanEditor, currentEnd: Math.max(spanEditor.currentStart + 1, spanEditor.currentEnd - 1) })}
-                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[10px]"
+                  className="w-5 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[9px]"
                 >
                   -1
                 </button>
-                <span className="text-[10px] text-maple-600 dark:text-maple-300 flex-1 text-center tabular-nums">
-                  {spanEditor.currentEnd}
-                </span>
                 <button
                   onClick={() => setSpanEditor({ ...spanEditor, currentEnd: Math.min(note.text.length, spanEditor.currentEnd + 1) })}
-                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[10px]"
+                  className="w-5 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[9px]"
                 >
                   +1
+                </button>
+                <button
+                  onClick={() => setSpanEditor({ ...spanEditor, currentEnd: Math.min(note.text.length, spanEditor.currentEnd + 5) })}
+                  className="w-6 h-6 flex items-center justify-center bg-maple-100 dark:bg-maple-700 rounded hover:bg-maple-200 dark:hover:bg-maple-600 text-[9px]"
+                  title="Move end forward 5 chars"
+                >
+                  +5
                 </button>
               </div>
             </div>
           </div>
           
           {/* Actions */}
-          <div className="flex items-center justify-end gap-2">
-            <button
-              onClick={handleSpanEditorCancel}
-              className="text-[10px] px-2 py-1 text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSpanEditorSave}
-              className="text-[10px] px-3 py-1 bg-maple-800 dark:bg-maple-600 text-white rounded hover:bg-maple-700 dark:hover:bg-maple-500 flex items-center gap-1"
-            >
-              <Check size={10} />
-              Save
-            </button>
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] text-maple-400 dark:text-maple-500">
+              {spanEditor.currentEnd - spanEditor.currentStart} chars
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSpanEditorCancel}
+                className="text-[10px] px-2 py-1 text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSpanEditorSave}
+                className="text-[10px] px-3 py-1 bg-maple-800 dark:bg-maple-600 text-white rounded hover:bg-maple-700 dark:hover:bg-maple-500 flex items-center gap-1"
+              >
+                <Check size={10} />
+                Save
+              </button>
+            </div>
           </div>
         </div>
       )}

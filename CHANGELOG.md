@@ -2,20 +2,24 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.25] - 2025-12-04
+
+### Added
+- **Click-and-drag span editing**: While span editor is open, select text in document to redefine boundaries
+- **Overlap prevention**: When creating annotation that overlaps existing one, prompts to extend instead
+  - Prevents accidental overlapping spans (which are rare/unwanted)
+  - Option to extend existing annotation to cover new selection
+
+### Improved
+- Span editor now has -5/+5 buttons for faster boundary adjustment
+- Shows character count in span editor
+- Better hint text explaining selection-based editing
+
 ## [0.0.24] - 2025-12-04
 
 ### Added
-- **Toggle questions on span popup**: Click a question to add OR remove it (not just add)
-  - Active questions show checkmark and ring highlight
-  - Can't remove the last question (must have at least one)
-- **Span editor (double-click)**: Double-click any highlight to edit its boundaries
-  - Live preview shows current selection
-  - Adjust start/end with +1/-1 buttons
-  - Save or cancel changes
-
-### Improved
-- Question popup now clearly shows which questions are active vs available
-- Hint text explains click vs double-click behavior
+- Toggle questions on span popup (add/remove with click)
+- Span editor via double-click
 
 ## [0.0.23] - 2025-12-04
 
