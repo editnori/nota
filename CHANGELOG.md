@@ -2,6 +2,15 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.12] - 2025-12-04
+
+### Improved
+- **Highlight animation**: Simple border pulse indicator
+  - Clean outline that pulses in opacity (like Windows taskbar attention flash)
+  - No shadows or glow - just a subtle border
+  - Warm terracotta color, runs until hover
+  - Much cleaner and less distracting
+
 ## [0.0.11] - 2025-12-04
 
 ### Improved
