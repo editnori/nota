@@ -2,18 +2,23 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.21] - 2025-12-04
+
+### Fixed
+- **Auto-tag now includes question**: Annotations created by auto-tag now have the correct question assigned (not empty)
+  - Each match tracks which question pattern found it
+  - Annotation created with `questions: [m.questionId]`
+  
+### Added
+- **Smart Filter state persistence**: Selected questions, excludes, and min length now persist to localStorage
+  - Reopening Smart Filter restores your previous selections
+  - Separate from pattern edits (which were already persisted)
+
 ## [0.0.20] - 2025-12-04
 
 ### Fixed
-- **Auto-tag crash**: Fixed TypeError when auto-tagging (was using `questionIds` instead of `questions`)
-- **AnnotationList null check**: Added safeguard for annotations with missing questions array
-- **Type mismatch**: Fixed MatchLocation interface alignment between components
-
-### Verified
-- TypeScript: 0 errors
-- All 94 unit tests passing
-- Session state saving works (debounced save on all state changes)
-- Import/export functioning correctly
+- Auto-tag crash (questionIds vs questions)
+- AnnotationList null check for missing questions array
 
 ## [0.0.19] - 2025-12-04
 

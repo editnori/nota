@@ -11,6 +11,7 @@ interface MatchLocation {
   term: string
   start: number
   end: number
+  questionId: string
 }
 
 export function NotesList() {
@@ -182,7 +183,7 @@ export function NotesList() {
         text: m.term,
         start: m.start,
         end: m.end,
-        questions: [] as string[]
+        questions: [m.questionId]  // Tag with the question that found this match
       }))
       addBulkAnnotations(bulkAnns)
       

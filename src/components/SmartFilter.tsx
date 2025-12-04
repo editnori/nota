@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { X, Search, ChevronRight, Ban, Plus } from 'lucide-react'
 import { loadQuestions } from '../lib/questions'
 import type { Note } from '../lib/types'
@@ -19,7 +19,14 @@ const DEFAULT_PATTERNS: Record<string, { terms: string[]; regex: string[]; negat
 
 const NEGATION = ['no ', 'not ', 'denies ', 'negative for ', 'without ', 'absent ']
 
-interface Match { noteId: string; term: string; start: number; end: number }
+// Match now includes the question that found it
+export interface Match { 
+  noteId: string
+  term: string
+  start: number
+  end: number
+  questionId: string  // Which question found this match
+}
 
 interface Props {
   notes: Note[]
@@ -27,44 +34,79 @@ interface Props {
   onClose: () => void
 }
 
-const STORAGE_KEY = 'nota_filter_patterns'
+const PATTERNS_KEY = 'nota_filter_patterns'
+const STATE_KEY = 'nota_filter_state'
 
 export function SmartFilter({ notes, onApply, onClose }: Props) {
   const questions = loadQuestions()
   
   const [patterns, setPatterns] = useState<Record<string, { terms: string[]; regex: string[]; negation: boolean }>>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY)
+      const saved = localStorage.getItem(PATTERNS_KEY)
       return saved ? JSON.parse(saved) : DEFAULT_PATTERNS
     } catch { return DEFAULT_PATTERNS }
   })
   
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Load persisted state
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(STATE_KEY)
+      if (saved) {
+        const state = JSON.parse(saved)
+        return new Set(state.selected || [])
+      }
+    } catch {}
+    return new Set()
+  })
+  
+  const [excludes, setExcludes] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STATE_KEY)
+      if (saved) return JSON.parse(saved).excludes || ''
+    } catch {}
+    return ''
+  })
+  
+  const [minLen, setMinLen] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STATE_KEY)
+      if (saved) return JSON.parse(saved).minLen || ''
+    } catch {}
+    return ''
+  })
+  
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [excludes, setExcludes] = useState('')
-  const [minLen, setMinLen] = useState('')
   const [autoTag, setAutoTag] = useState(false)
   const [newTerm, setNewTerm] = useState('')
 
+  // Persist state on changes
+  useEffect(() => {
+    localStorage.setItem(STATE_KEY, JSON.stringify({
+      selected: Array.from(selected),
+      excludes,
+      minLen
+    }))
+  }, [selected, excludes, minLen])
+
   function savePatterns(updated: typeof patterns) {
     setPatterns(updated)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+    localStorage.setItem(PATTERNS_KEY, JSON.stringify(updated))
   }
 
-  // Calculate matches
+  // Calculate matches - now tracks which question found each match
   const { matchingNotes, matches, excludedCount } = useMemo(() => {
     const matching = new Set<string>()
     const allMatches: Match[] = []
     let excluded = 0
 
-    const excludeTerms = excludes.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
+    const excludeTerms = excludes.split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean)
     const minLength = parseInt(minLen) || 0
 
     for (const note of notes) {
       const lower = note.text.toLowerCase()
       
       if (minLength && note.text.length < minLength) { excluded++; continue }
-      if (excludeTerms.some(ex => lower.includes(ex))) { excluded++; continue }
+      if (excludeTerms.some((ex: string) => lower.includes(ex))) { excluded++; continue }
 
       if (selected.size === 0) { matching.add(note.id); continue }
 
@@ -84,7 +126,13 @@ export function SmartFilter({ notes, onApply, onClose }: Props) {
             }
             if (!negated) {
               found = true
-              allMatches.push({ noteId: note.id, term: note.text.slice(idx, idx + term.length), start: idx, end: idx + term.length })
+              allMatches.push({ 
+                noteId: note.id, 
+                term: note.text.slice(idx, idx + term.length), 
+                start: idx, 
+                end: idx + term.length,
+                questionId: qid  // Track which question found this
+              })
             }
             idx = lower.indexOf(term.toLowerCase(), idx + 1)
           }
@@ -97,7 +145,13 @@ export function SmartFilter({ notes, onApply, onClose }: Props) {
             let m
             while ((m = re.exec(note.text)) !== null) {
               found = true
-              allMatches.push({ noteId: note.id, term: m[0], start: m.index, end: m.index + m[0].length })
+              allMatches.push({ 
+                noteId: note.id, 
+                term: m[0], 
+                start: m.index, 
+                end: m.index + m[0].length,
+                questionId: qid  // Track which question found this
+              })
             }
           } catch {}
         }
@@ -300,7 +354,7 @@ export function SmartFilter({ notes, onApply, onClose }: Props) {
         <div className="px-3 py-2 border-t border-maple-100 dark:border-maple-700">
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={autoTag} onChange={e => setAutoTag(e.target.checked)} className="rounded border-maple-300 text-maple-600" />
-            <span className="text-[10px] text-maple-600 dark:text-maple-300">Auto-tag matches</span>
+            <span className="text-[10px] text-maple-600 dark:text-maple-300">Auto-tag matches with their question</span>
           </label>
         </div>
 
