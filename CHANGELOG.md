@@ -2,16 +2,29 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.15] - 2025-12-04
+
+### Improved
+- **Smart Filter complete rework** - directly mapped to Ryan's 10 questions:
+  - Q1: Symptoms (flank pain, hematuria, gross hematuria, bloody urine)
+  - Q2: Stone Growth (interval stone growth, stones are growing)
+  - Q3: Rare Disease (cystinuria, cystine, primary hyperoxaluria)
+  - Q4: SDOH (social determinants of health)
+  - Q5: Equipment/Devices (Fr, french, percuflex, nitinol, basket)
+  - Q6: Radiology (3 mm, 3mm, 4 mm, 5mm, hydronephrosis, hydroureter)
+  - Q7: Dietary Advice (water, soda, protein, salt, sodium, oxalate, spinach)
+  - Q8: ER Visit (emergency department, passing a stone, renal colic)
+  - Q9: Complications (post-surgery 0-30 days, readmit, infection)
+  - Q10: Stone Passage (passed a stone, saw a stone pass)
+- **Editable presets**: Click pencil icon to modify terms for any preset
+- **Reset options**: Reset individual preset or all to defaults
+- Cleaner checkbox-based selection UI
+- Shows description + terms for each preset
+
 ## [0.0.14] - 2025-12-04
 
 ### Improved
-- **Smart Filter UI overhaul**: Cleaner, simpler interface
-  - Presets as toggle chips instead of list
-  - No "Advanced" dropdown - everything flat and visible
-  - Phrase-based patterns (e.g., "passed a stone" not just "passed")
-  - Shows active search terms clearly
-  - **Auto-tag option**: Creates suggested annotations for all matched phrases
-    - Ryan can filter + auto-tag, then review/adjust instead of manual highlighting
+- Smart Filter UI with preset chips and auto-tag option
 
 ## [0.0.13] - 2025-12-04
 
