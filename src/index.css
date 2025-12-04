@@ -51,31 +51,23 @@ body {
   outline: none;
 }
 
-/* Breathing glow - warm maple tone, repeats 3 times */
-@keyframes glow-breathe {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(180, 140, 120, 0);
+/* Smooth breathing glow using filter (GPU accelerated) */
+@keyframes breathe {
+  0%, 100% { 
+    filter: drop-shadow(0 0 0 transparent);
   }
-  50% {
-    box-shadow: 0 0 16px 8px rgba(180, 140, 120, 0.4);
+  50% { 
+    filter: drop-shadow(0 0 12px rgba(160, 130, 110, 0.6));
   }
 }
 
 .animate-glow {
-  animation: glow-breathe 1.5s ease-in-out 6;
+  animation: breathe 1.8s ease-in-out 5;
   border-radius: 4px;
-}
-
-/* Breathing ring for cards - repeats 6 times */
-@keyframes ring-breathe {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(180, 140, 120, 0);
-  }
-  50% {
-    box-shadow: 0 0 0 4px rgba(180, 140, 120, 0.35);
-  }
+  will-change: filter;
 }
 
 .animate-ring {
-  animation: ring-breathe 1.5s ease-in-out 6;
+  animation: breathe 1.8s ease-in-out 5;
+  will-change: filter;
 }
