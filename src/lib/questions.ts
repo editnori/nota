@@ -76,28 +76,56 @@ export const DEFAULT_QUESTIONS: Question[] = [
 
 const QUESTIONS_STORAGE_KEY = 'annotator_questions'
 
+// Cache questions and maps for O(1) lookups
+let cachedQuestions: Question[] | null = null
+let questionById: Map<string, Question> | null = null
+let questionByHotkey: Map<string, Question> | null = null
+
+function invalidateCache() {
+  cachedQuestions = null
+  questionById = null
+  questionByHotkey = null
+}
+
 export function loadQuestions(): Question[] {
+  if (cachedQuestions) return cachedQuestions
+  
   try {
     const raw = localStorage.getItem(QUESTIONS_STORAGE_KEY)
     if (raw) {
-      return JSON.parse(raw)
+      cachedQuestions = JSON.parse(raw)
+      return cachedQuestions!
     }
   } catch {
     // ignore
   }
-  return DEFAULT_QUESTIONS
+  cachedQuestions = DEFAULT_QUESTIONS
+  return cachedQuestions
 }
 
 export function saveQuestions(questions: Question[]) {
   localStorage.setItem(QUESTIONS_STORAGE_KEY, JSON.stringify(questions))
+  invalidateCache()
 }
 
+// O(1) lookup by id
 export function getQuestion(id: string): Question | undefined {
-  const questions = loadQuestions()
-  return questions.find(q => q.id === id)
+  if (!questionById) {
+    questionById = new Map()
+    for (const q of loadQuestions()) {
+      questionById.set(q.id, q)
+    }
+  }
+  return questionById.get(id)
 }
 
+// O(1) lookup by hotkey
 export function getQuestionByHotkey(key: string): Question | undefined {
-  const questions = loadQuestions()
-  return questions.find(q => q.hotkey === key)
+  if (!questionByHotkey) {
+    questionByHotkey = new Map()
+    for (const q of loadQuestions()) {
+      questionByHotkey.set(q.hotkey, q)
+    }
+  }
+  return questionByHotkey.get(key)
 }

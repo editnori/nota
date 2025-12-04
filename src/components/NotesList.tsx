@@ -204,15 +204,22 @@ export function NotesList() {
     }
   }, [totalPages, page])
 
-  // Jump to page containing current note
+  // Build filtered note position map for O(1) lookup
+  const filteredIndexMap = useMemo(() => {
+    const map = new Map<string, number>()
+    filtered.forEach((note, idx) => map.set(note.id, idx))
+    return map
+  }, [filtered])
+
+  // Jump to page containing current note - O(1) lookup
   const jumpToCurrent = useCallback(() => {
     const currentNote = notes[currentNoteIndex]
     if (!currentNote) return
-    const idx = filtered.findIndex(n => n.id === currentNote.id)
-    if (idx >= 0) {
+    const idx = filteredIndexMap.get(currentNote.id)
+    if (idx !== undefined) {
       setPage(Math.floor(idx / PAGE_SIZE))
     }
-  }, [notes, currentNoteIndex, filtered])
+  }, [notes, currentNoteIndex, filteredIndexMap])
 
   const annotatedCount = useMemo(() => {
     let count = 0

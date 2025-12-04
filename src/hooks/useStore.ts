@@ -66,20 +66,37 @@ function buildAnnotationIndex(annotations: Annotation[]): Map<string, Annotation
 // Debounced save to avoid too many writes
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
 let isBulkOperation = false
+let isSaving = false
 
 function debouncedSave(state: State) {
-  // Skip saving during bulk operations
-  if (isBulkOperation) return Date.now()
+  // Skip saving during bulk operations or if already saving
+  if (isBulkOperation || isSaving) return Date.now()
   
   if (saveTimeout) clearTimeout(saveTimeout)
-  saveTimeout = setTimeout(async () => {
-    await saveSession({
-      notes: state.notes,
-      annotations: state.annotations,
-      currentNoteIndex: state.currentNoteIndex,
-      mode: state.mode,
-      selectedQuestion: state.selectedQuestion
-    })
+  saveTimeout = setTimeout(() => {
+    // Use requestIdleCallback if available to avoid blocking UI
+    const doSave = async () => {
+      if (isSaving) return
+      isSaving = true
+      try {
+        await saveSession({
+          notes: state.notes,
+          annotations: state.annotations,
+          currentNoteIndex: state.currentNoteIndex,
+          mode: state.mode,
+          selectedQuestion: state.selectedQuestion
+        })
+      } finally {
+        isSaving = false
+      }
+    }
+    
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(doSave, { timeout: 2000 })
+    } else {
+      // Fallback for browsers without requestIdleCallback
+      setTimeout(doSave, 100)
+    }
   }, 500) // Increased debounce for large datasets
   return Date.now()
 }

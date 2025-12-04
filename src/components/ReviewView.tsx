@@ -187,9 +187,18 @@ export function ReviewView() {
     }
   }, [highlightedCard])
 
-  const manualCount = annotations.filter(a => a.source !== 'suggested').length
-  const suggestedCount = annotations.filter(a => a.source === 'suggested').length
-  const withCommentCount = annotations.filter(a => a.comment && a.comment.trim().length > 0).length
+  // Memoize counts to avoid recalculating on every render
+  const { manualCount, suggestedCount, withCommentCount } = useMemo(() => {
+    let manual = 0
+    let suggested = 0
+    let withComment = 0
+    for (const a of annotations) {
+      if (a.source === 'suggested') suggested++
+      else manual++
+      if (a.comment && a.comment.trim().length > 0) withComment++
+    }
+    return { manualCount: manual, suggestedCount: suggested, withCommentCount: withComment }
+  }, [annotations])
 
   return (
     <div className="flex-1 flex">
