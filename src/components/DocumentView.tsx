@@ -118,7 +118,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     return { text, start, end }
   }, [])
 
-  const handleTextSelect = useCallback(() => {
+  const handleTextSelect = useCallback((e: React.MouseEvent) => {
     const coords = getSelectionCoords()
     if (!coords) return
 
@@ -128,6 +128,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     if (spanEditor) {
       setSpanEditor({ ...spanEditor, currentStart: start, currentEnd: end })
       window.getSelection()?.removeAllRanges()
+      e.stopPropagation() // Prevent closing popup
       return
     }
 
@@ -168,6 +169,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
         position: { x: rect?.left || 100, y: (rect?.bottom || 100) + 4 }
       })
       window.getSelection()?.removeAllRanges()
+      e.stopPropagation() // Prevent closing popup immediately
       return
     }
 
@@ -312,7 +314,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const questions = loadQuestions()
 
   return (
-    <div className="flex-1 flex flex-col min-w-0" onClick={() => { setActiveSpan(null); setSpanEditor(null); setOverlapPrompt(null) }}>
+    <div className="flex-1 flex flex-col min-w-0">
       <div className="h-10 bg-white dark:bg-maple-800 border-b border-maple-200 dark:border-maple-700 flex items-center px-3 gap-2">
         <div className="flex items-center bg-maple-100 dark:bg-maple-700 rounded-full shrink-0">
           <button
@@ -375,7 +377,11 @@ export function DocumentView({ onCreateAnnotation }: Props) {
         )}
       </div>
 
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 bg-maple-50 dark:bg-maple-900">
+      <div 
+        ref={scrollContainerRef} 
+        className="flex-1 overflow-y-auto p-4 bg-maple-50 dark:bg-maple-900"
+        onClick={() => { setActiveSpan(null); setSpanEditor(null); setOverlapPrompt(null) }}
+      >
         <div className="max-w-3xl mx-auto">
           <div className="bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-700 rounded-xl shadow-sm p-6">
             <div
@@ -474,11 +480,11 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                   key={q.id}
                   onClick={() => handleToggleQuestion(q.id)}
                   disabled={isOnlyQuestion}
-                  className={`text-[9px] px-2 py-1 rounded transition-all flex items-center gap-1 ${
+                  className={`text-[9px] px-2 py-1 rounded flex items-center gap-1 ${
                     hasQuestion 
                       ? 'text-white ring-2 ring-offset-1' 
                       : 'text-white opacity-40 hover:opacity-70'
-                  } ${isOnlyQuestion ? 'cursor-not-allowed' : 'hover:scale-105'}`}
+                  } ${isOnlyQuestion ? 'cursor-not-allowed' : ''}`}
                   style={{ 
                     backgroundColor: q.color,
                     // @ts-expect-error CSS variable
@@ -486,7 +492,9 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                   }}
                   title={isOnlyQuestion ? 'Cannot remove last question' : hasQuestion ? `Remove "${q.name}"` : `Add "${q.name}"`}
                 >
-                  {hasQuestion && <Check size={10} />}
+                  <span className="w-2.5 flex items-center justify-center">
+                    {hasQuestion && <Check size={10} />}
+                  </span>
                   {q.hotkey}. {q.name}
                 </button>
               )

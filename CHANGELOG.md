@@ -2,18 +2,21 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.29] - 2025-12-04
+
+### Fixed
+- **Overlap popup now works**: Fixed event propagation that was closing popup immediately
+  - stopPropagation() prevents container click from dismissing
+  - Popup appears and stays visible for user interaction
+- **Question toggle buttons stable size**: Reserved fixed width for checkmark icon
+  - Buttons no longer resize when toggling questions
+  - Much easier to click without shifting targets
+
 ## [0.0.28] - 2025-12-04
 
 ### Added
-- **Merge option**: When selecting near existing annotation, can now:
-  - **Merge** - extend span AND add selected question (best of both)
-  - **Extend** - grow span but keep existing questions
-  - **Separate** - create new annotation
-  - **Cancel** - do nothing
-
-### Fixed
-- **Adjacent span detection**: Now detects spans that touch (not just overlap)
-- Popup shows "is next to" vs "overlaps" depending on relationship
+- Merge option (extend + add question)
+- Adjacent span detection
 
 ## [0.0.27] - 2025-12-04
 
