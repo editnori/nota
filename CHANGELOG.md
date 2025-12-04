@@ -2,17 +2,19 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.22] - 2025-12-04
+
+### Fixed
+- **Smart Filter persists across tabs**: Filter results now stored in global store
+  - Switching Annotate → Review → Annotate keeps your filtered notes
+  - Only cleared when you explicitly click X on the filter badge
+  - No more resetting to all 5000 notes on tab change
+
 ## [0.0.21] - 2025-12-04
 
 ### Fixed
-- **Auto-tag now includes question**: Annotations created by auto-tag now have the correct question assigned (not empty)
-  - Each match tracks which question pattern found it
-  - Annotation created with `questions: [m.questionId]`
-  
-### Added
-- **Smart Filter state persistence**: Selected questions, excludes, and min length now persist to localStorage
-  - Reopening Smart Filter restores your previous selections
-  - Separate from pattern edits (which were already persisted)
+- Auto-tag now includes question (not empty array)
+- Smart Filter selections persist in localStorage
 
 ## [0.0.20] - 2025-12-04
 

@@ -22,6 +22,7 @@ interface State {
   isImporting: boolean
   importProgress: string
   highlightedAnnotation: string | null
+  filteredNoteIds: Set<string> | null  // Smart filter results
   
   setNotes: (notes: Note[]) => void
   addNotes: (notes: Note[]) => void
@@ -42,6 +43,7 @@ interface State {
   setDarkMode: (dark: boolean) => void
   setImporting: (importing: boolean, progress?: string) => void
   setHighlightedAnnotation: (id: string | null) => void
+  setFilteredNoteIds: (ids: Set<string> | null) => void
 }
 
 // Debounced save to avoid too many writes
@@ -91,6 +93,7 @@ export const useStore = create<State>((set, get) => ({
   isImporting: false,
   importProgress: '',
   highlightedAnnotation: null,
+  filteredNoteIds: null,
 
   initSession: async () => {
     const data = await loadSession()
@@ -276,6 +279,10 @@ export const useStore = create<State>((set, get) => ({
         set({ highlightedAnnotation: null })
       }, 1500)
     }
+  },
+
+  setFilteredNoteIds: (ids) => {
+    set({ filteredNoteIds: ids })
   }
 }))
 

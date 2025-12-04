@@ -15,13 +15,12 @@ interface MatchLocation {
 }
 
 export function NotesList() {
-  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, addBulkAnnotations } = useStore()
+  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, addBulkAnnotations, filteredNoteIds, setFilteredNoteIds } = useStore()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'done' | 'todo'>('all')
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [showTypeFilter, setShowTypeFilter] = useState(false)
   const [showSmartFilter, setShowSmartFilter] = useState(false)
-  const [smartFilterIds, setSmartFilterIds] = useState<Set<string> | null>(null)
   const [page, setPage] = useState(0)
 
   // Debounce search for performance with large datasets
@@ -87,12 +86,12 @@ export function NotesList() {
     let candidates = notes
     
     // Apply smart filter first if active
-    if (smartFilterIds) {
-      candidates = candidates.filter(n => smartFilterIds.has(n.id))
+    if (filteredNoteIds) {
+      candidates = candidates.filter(n => filteredNoteIds.has(n.id))
     }
     
     // Use index for search if available
-    if (debouncedSearch && searchIndex && !smartFilterIds) {
+    if (debouncedSearch && searchIndex && !filteredNoteIds) {
       const searchLower = debouncedSearch.toLowerCase()
       const searchWords = searchLower.split(/\W+/).filter(w => w.length >= 2)
       
@@ -132,7 +131,7 @@ export function NotesList() {
       
       return true
     })
-  }, [notes, debouncedSearch, filter, typeFilter, annotationCounts, searchIndex, smartFilterIds])
+  }, [notes, debouncedSearch, filter, typeFilter, annotationCounts, searchIndex, filteredNoteIds])
 
   // Pagination
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
@@ -167,7 +166,7 @@ export function NotesList() {
   }, [notes])
 
   async function handleSmartFilterApply(ids: Set<string>, matches?: MatchLocation[]) {
-    setSmartFilterIds(ids)
+    setFilteredNoteIds(ids)
     setPage(0)
     
     // Auto-tag if matches provided - batch to avoid UI freeze
@@ -193,7 +192,7 @@ export function NotesList() {
   }
 
   function clearSmartFilter() {
-    setSmartFilterIds(null)
+    setFilteredNoteIds(null)
     setPage(0)
   }
 
@@ -204,19 +203,19 @@ export function NotesList() {
         <button
           onClick={() => setShowSmartFilter(true)}
           className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] rounded border transition-all ${
-            smartFilterIds
+            filteredNoteIds
               ? 'bg-maple-100 dark:bg-maple-700 border-maple-400 dark:border-maple-500 text-maple-700 dark:text-maple-200 font-medium'
               : 'border-maple-200 dark:border-maple-600 text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'
           }`}
         >
           <Zap size={12} />
-          {smartFilterIds ? `Filtered: ${smartFilterIds.size}` : 'Smart Filter'}
+          {filteredNoteIds ? `Filtered: ${filteredNoteIds.size}` : 'Smart Filter'}
         </button>
 
         {/* Active smart filter indicator */}
-        {smartFilterIds && (
+        {filteredNoteIds && (
           <div className="flex items-center gap-1 bg-maple-100 dark:bg-maple-700 text-maple-600 dark:text-maple-300 rounded px-2 py-1">
-            <span className="text-[9px] flex-1">{smartFilterIds.size} of {notes.length} notes</span>
+            <span className="text-[9px] flex-1">{filteredNoteIds.size} of {notes.length} notes</span>
             <button onClick={clearSmartFilter} className="hover:text-maple-800 dark:hover:text-maple-100">
               <X size={10} />
             </button>
@@ -372,7 +371,7 @@ export function NotesList() {
         
         {paged.length === 0 && (
           <div className="p-4 text-center text-[10px] text-maple-400 dark:text-maple-500">
-            {search || typeFilter || smartFilterIds ? 'No matches' : 'No notes'}
+            {search || typeFilter || filteredNoteIds ? 'No matches' : 'No notes'}
           </div>
         )}
       </div>
