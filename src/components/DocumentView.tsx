@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useMemo } from 'react'
+import { useCallback, useRef, useState, useMemo, useEffect } from 'react'
 import { useStore } from '../hooks/useStore'
 import { getQuestion, loadQuestions } from '../lib/questions'
 import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus } from 'lucide-react'
@@ -8,7 +8,7 @@ interface Props {
 }
 
 export function DocumentView({ onCreateAnnotation }: Props) {
-  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, updateAnnotation, fontSize, setFontSize } = useStore()
+  const { notes, annotations, currentNoteIndex, setCurrentNoteIndex, updateAnnotation, fontSize, setFontSize, highlightedAnnotation } = useStore()
   const docRef = useRef<HTMLDivElement>(null)
   const [activeSpan, setActiveSpan] = useState<{ annotationIds: string[], position: { x: number, y: number } } | null>(null)
 
@@ -39,6 +39,23 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     
     return { nextUnannotatedIndex: nextIdx, hasUnannotated }
   }, [annotations, notes, currentNoteIndex])
+
+  // Scroll to highlighted annotation when it changes
+  useEffect(() => {
+    if (highlightedAnnotation && docRef.current) {
+      const ann = noteAnnotations.find(a => a.id === highlightedAnnotation)
+      if (ann) {
+        // Find the mark element that contains this annotation
+        const marks = docRef.current.querySelectorAll('mark')
+        marks.forEach(mark => {
+          const ids = mark.getAttribute('data-ann-ids')
+          if (ids && ids.includes(highlightedAnnotation)) {
+            mark.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        })
+      }
+    }
+  }, [highlightedAnnotation, noteAnnotations])
 
   const handleTextSelect = useCallback(() => {
     const sel = window.getSelection()
@@ -94,7 +111,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     )
   }
 
-  const segments = buildSegments(note.text, noteAnnotations)
+  const segments = buildSegments(note.text, noteAnnotations, annotations)
   const questions = loadQuestions()
 
   return (
@@ -178,10 +195,8 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                 
                 const colors = seg.questions.map(qid => getQuestion(qid)?.color || '#888')
                 const primaryColor = colors[0]
-                const isSuggested = seg.annotationIds.some(aid => {
-                  const ann = annotations.find(a => a.id === aid)
-                  return ann?.source === 'suggested'
-                })
+                const isSuggested = seg.isSuggested
+                const isHighlighted = seg.annotationIds.includes(highlightedAnnotation || '')
                 
                 // Create gradient border for multiple questions
                 const borderStyle = colors.length > 1
@@ -191,13 +206,17 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                 return (
                   <span key={i} className="relative inline">
                     <mark
-                      className={`rounded px-0.5 py-0.5 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-maple-400 ${isSuggested ? 'opacity-70' : ''}`}
+                      data-ann-ids={seg.annotationIds.join(',')}
+                      className={`rounded px-0.5 py-0.5 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-maple-400 transition-all ${
+                        isHighlighted ? 'ring-2 ring-maple-500 animate-pulse' : ''
+                      }`}
                       style={{
-                        backgroundColor: `${primaryColor}20`,
+                        backgroundColor: `${primaryColor}${isSuggested ? '15' : '20'}`,
                         borderBottom: colors.length > 1 ? 'none' : `2px ${isSuggested ? 'dashed' : 'solid'} ${primaryColor}`,
-                        color: 'inherit'
+                        color: 'inherit',
+                        opacity: isSuggested ? 0.8 : 1
                       }}
-                      title={`${seg.questions.map(qid => getQuestion(qid)?.name || qid).join(' + ')}${isSuggested ? ' (suggested)' : ''}\n(click to add more)`}
+                      title={`${seg.questions.map(qid => getQuestion(qid)?.name || qid).join(' + ')}${isSuggested ? ' (auto)' : ''}\n(click to add more)`}
                       onClick={(e) => handleSpanClick(e, seg.annotationIds)}
                     >
                       {seg.text}
@@ -276,15 +295,20 @@ interface Segment {
   text: string
   questions: string[]
   annotationIds: string[]
+  isSuggested: boolean
 }
 
-function buildSegments(text: string, annotations: { id: string; start: number; end: number; questions: string[] }[]): Segment[] {
-  if (annotations.length === 0) {
-    return [{ type: 'plain', text, questions: [], annotationIds: [] }]
+function buildSegments(
+  text: string, 
+  noteAnnotations: { id: string; start: number; end: number; questions: string[] }[],
+  allAnnotations: { id: string; source?: string }[]
+): Segment[] {
+  if (noteAnnotations.length === 0) {
+    return [{ type: 'plain', text, questions: [], annotationIds: [], isSuggested: false }]
   }
 
   const points = new Set<number>([0, text.length])
-  for (const a of annotations) {
+  for (const a of noteAnnotations) {
     points.add(Math.max(0, a.start))
     points.add(Math.min(text.length, a.end))
   }
@@ -297,14 +321,21 @@ function buildSegments(text: string, annotations: { id: string; start: number; e
     const end = sorted[i + 1]
     const segText = text.slice(start, end)
 
-    const covering = annotations.filter(a => a.start <= start && a.end >= end)
+    const covering = noteAnnotations.filter(a => a.start <= start && a.end >= end)
     
     if (covering.length === 0) {
-      segments.push({ type: 'plain', text: segText, questions: [], annotationIds: [] })
+      segments.push({ type: 'plain', text: segText, questions: [], annotationIds: [], isSuggested: false })
     } else {
       const questions = [...new Set(covering.flatMap(a => a.questions))]
       const annotationIds = covering.map(a => a.id)
-      segments.push({ type: 'highlight', text: segText, questions, annotationIds })
+      
+      // Check if any of the covering annotations are suggested
+      const isSuggested = covering.some(c => {
+        const fullAnn = allAnnotations.find(a => a.id === c.id)
+        return fullAnn?.source === 'suggested'
+      })
+      
+      segments.push({ type: 'highlight', text: segText, questions, annotationIds, isSuggested })
     }
   }
 

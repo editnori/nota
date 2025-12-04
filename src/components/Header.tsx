@@ -10,7 +10,7 @@ export function Header() {
   const { 
     notes, annotations, mode, setMode, setNotes, addNotes, 
     clearSession, clearNoteAnnotations, clearAllAnnotations, clearSuggestedAnnotations,
-    currentNoteIndex, lastSaved, darkMode, setDarkMode 
+    currentNoteIndex, lastSaved, darkMode, setDarkMode, setImporting 
   } = useStore()
   const [showSettings, setShowSettings] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
@@ -49,6 +49,8 @@ export function Header() {
     const files = e.target.files
     if (!files || files.length === 0) return
 
+    setImporting(true, `Reading ${files.length} file(s)...`)
+
     try {
       let imported: Awaited<ReturnType<typeof importJSON>> = []
       
@@ -69,14 +71,23 @@ export function Header() {
       }
 
       if (imported.length > 0) {
+        setImporting(true, `Loading ${imported.length} notes...`)
+        await new Promise(r => setTimeout(r, 50))
+        
         if (notes.length > 0) {
           addNotes(imported)
         } else {
           setNotes(imported)
         }
+        
+        setImporting(true, `Loaded ${imported.length} notes`)
+        setTimeout(() => setImporting(false), 1000)
+      } else {
+        setImporting(false)
       }
     } catch (err) {
       console.error('Import error:', err)
+      setImporting(false)
       alert('Failed to import files')
     }
 
@@ -88,6 +99,8 @@ export function Header() {
   async function handleFolderImport(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files || files.length === 0) return
+
+    setImporting(true, `Reading ${files.length} files...`)
 
     try {
       const filesByFolder = new Map<string, File[]>()
@@ -108,20 +121,30 @@ export function Header() {
       for (const [folder, folderFiles] of filesByFolder) {
         const txtFiles = folderFiles.filter(f => f.name.endsWith('.txt'))
         if (txtFiles.length > 0) {
+          setImporting(true, `Processing ${folder}...`)
           const folderNotes = await importTXT(txtFiles, folder)
           imported.push(...folderNotes)
         }
       }
 
       if (imported.length > 0) {
+        setImporting(true, `Loading ${imported.length} notes...`)
+        await new Promise(r => setTimeout(r, 50))
+        
         if (notes.length > 0) {
           addNotes(imported)
         } else {
           setNotes(imported)
         }
+        
+        setImporting(true, `Loaded ${imported.length} notes`)
+        setTimeout(() => setImporting(false), 1000)
+      } else {
+        setImporting(false)
       }
     } catch (err) {
       console.error('Folder import error:', err)
+      setImporting(false)
       alert('Failed to import folder')
     }
 

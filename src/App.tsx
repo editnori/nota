@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useStore } from './hooks/useStore'
 import { useKeyboard } from './hooks/useKeyboard'
 import { Header } from './components/Header'
@@ -12,10 +12,11 @@ import { importFromDataTransfer } from './lib/importers'
 import { Loader2 } from 'lucide-react'
 
 export default function App() {
-  const { notes, mode, currentNoteIndex, selectedQuestion, addAnnotation, addNotes, setNotes, isLoaded, darkMode } = useStore()
-  const [importing, setImporting] = useState(false)
-  const [importProgress, setImportProgress] = useState('')
-  const [isDragging, setIsDragging] = useState(false)
+  const { 
+    notes, mode, currentNoteIndex, selectedQuestion, addAnnotation, 
+    addNotes, setNotes, isLoaded, darkMode, 
+    isImporting, importProgress, setImporting 
+  } = useStore()
 
   const currentNote = notes[currentNoteIndex]
   
@@ -30,49 +31,41 @@ export default function App() {
   // Handle drag-drop folders
   async function handleDrop(e: React.DragEvent) {
     e.preventDefault()
-    setIsDragging(false)
     
     if (e.dataTransfer.items.length === 0) return
     
-    setImporting(true)
-    setImportProgress('Reading files...')
+    setImporting(true, 'Reading files...')
     
     try {
       const imported = await importFromDataTransfer(e.dataTransfer.items)
       
       if (imported.length > 0) {
-        setImportProgress(`Loaded ${imported.length} notes`)
+        setImporting(true, `Loading ${imported.length} notes...`)
+        
+        // Small delay to show the message
+        await new Promise(r => setTimeout(r, 100))
         
         if (notes.length > 0) {
           addNotes(imported)
         } else {
           setNotes(imported)
         }
+        
+        setImporting(true, `Loaded ${imported.length} notes`)
+        setTimeout(() => setImporting(false), 1000)
       } else {
-        setImportProgress('No valid files found')
+        setImporting(true, 'No valid files found')
+        setTimeout(() => setImporting(false), 1500)
       }
     } catch (err) {
       console.error('Import error:', err)
-      setImportProgress('Import failed')
+      setImporting(true, 'Import failed')
+      setTimeout(() => setImporting(false), 1500)
     }
-    
-    setTimeout(() => {
-      setImporting(false)
-      setImportProgress('')
-    }, 1500)
   }
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault()
-    setIsDragging(true)
-  }
-
-  function handleDragLeave(e: React.DragEvent) {
-    e.preventDefault()
-    // Only set false if we're leaving the main container
-    if (e.currentTarget === e.target) {
-      setIsDragging(false)
-    }
   }
   
   const handleTagSelection = useCallback((questionId: string) => {
@@ -140,7 +133,6 @@ export default function App() {
       className="h-screen flex flex-col bg-maple-50 dark:bg-maple-900 relative"
       onDrop={handleDrop}
       onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
     >
       <Header />
       
@@ -163,20 +155,10 @@ export default function App() {
         {mode === 'format' && <FormatView />}
       </div>
 
-      {/* Drag overlay */}
-      {isDragging && (
-        <div className="absolute inset-0 bg-amber-500/10 border-4 border-dashed border-amber-500 flex items-center justify-center z-50 pointer-events-none">
-          <div className="bg-white dark:bg-maple-800 rounded-xl p-6 shadow-lg text-center">
-            <p className="text-lg font-medium text-amber-700 dark:text-amber-400">Drop folder to import</p>
-            <p className="text-sm text-maple-500 dark:text-maple-400 mt-1">Subfolders become note types</p>
-          </div>
-        </div>
-      )}
-
-      {/* Import progress overlay */}
-      {importing && (
+      {/* Global import progress overlay */}
+      {isImporting && (
         <div className="absolute inset-0 bg-maple-900/30 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-maple-800 rounded-xl p-6 shadow-lg text-center">
+          <div className="bg-white dark:bg-maple-800 rounded-xl p-6 shadow-lg text-center min-w-[200px]">
             <Loader2 className="w-8 h-8 animate-spin text-maple-600 dark:text-maple-300 mx-auto mb-3" />
             <p className="text-sm text-maple-600 dark:text-maple-300">{importProgress}</p>
           </div>

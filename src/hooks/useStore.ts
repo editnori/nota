@@ -19,6 +19,9 @@ interface State {
   undoStack: UndoAction[]
   fontSize: number
   darkMode: boolean
+  isImporting: boolean
+  importProgress: string
+  highlightedAnnotation: string | null
   
   setNotes: (notes: Note[]) => void
   addNotes: (notes: Note[]) => void
@@ -37,6 +40,8 @@ interface State {
   undo: () => void
   setFontSize: (size: number) => void
   setDarkMode: (dark: boolean) => void
+  setImporting: (importing: boolean, progress?: string) => void
+  setHighlightedAnnotation: (id: string | null) => void
 }
 
 // Debounced save to avoid too many writes
@@ -83,6 +88,9 @@ export const useStore = create<State>((set, get) => ({
   undoStack: [],
   fontSize: prefs.fontSize,
   darkMode: prefs.darkMode,
+  isImporting: false,
+  importProgress: '',
+  highlightedAnnotation: null,
 
   initSession: async () => {
     const data = await loadSession()
@@ -255,6 +263,19 @@ export const useStore = create<State>((set, get) => ({
   setDarkMode: (dark) => {
     localStorage.setItem('nota_darkMode', dark.toString())
     set({ darkMode: dark })
+  },
+
+  setImporting: (importing, progress = '') => {
+    set({ isImporting: importing, importProgress: progress })
+  },
+
+  setHighlightedAnnotation: (id) => {
+    set({ highlightedAnnotation: id })
+    if (id) {
+      setTimeout(() => {
+        set({ highlightedAnnotation: null })
+      }, 1500)
+    }
   }
 }))
 

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useStore } from '../hooks/useStore'
 import { useDebounce } from '../hooks/useDebounce'
 import { loadQuestions, getQuestion } from '../lib/questions'
@@ -7,14 +7,14 @@ import { X, ExternalLink, Search, Wand2, Loader2 } from 'lucide-react'
 const PAGE_SIZE = 50
 
 export function ReviewView() {
-  const { notes, annotations, removeAnnotation, setMode, setCurrentNoteIndex, addBulkAnnotations } = useStore()
+  const { notes, annotations, removeAnnotation, setMode, setCurrentNoteIndex, addBulkAnnotations, setHighlightedAnnotation, highlightedAnnotation } = useStore()
   const [selectedQ, setSelectedQ] = useState<string | null>(null)
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'auto'>('all')
   const [searchText, setSearchText] = useState('')
   const [showBulkTag, setShowBulkTag] = useState(false)
   const [bulkSearch, setBulkSearch] = useState('')
   const [excludedMatches, setExcludedMatches] = useState<Set<string>>(new Set())
   const [page, setPage] = useState(0)
-  const [highlightedNote, setHighlightedNote] = useState<string | null>(null)
   const questions = loadQuestions()
 
   // Debounce searches
@@ -40,15 +40,27 @@ export function ReviewView() {
   // Filter annotations
   const filteredAnnotations = useMemo(() => {
     let filtered = annotations
+    
+    // Source filter
+    if (sourceFilter === 'manual') {
+      filtered = filtered.filter(a => a.source !== 'suggested')
+    } else if (sourceFilter === 'auto') {
+      filtered = filtered.filter(a => a.source === 'suggested')
+    }
+    
+    // Question filter
     if (selectedQ) {
       filtered = filtered.filter(a => a.questions.includes(selectedQ))
     }
+    
+    // Text search
     if (debouncedSearchText.trim()) {
       const lower = debouncedSearchText.toLowerCase()
       filtered = filtered.filter(a => a.text.toLowerCase().includes(lower))
     }
+    
     return filtered
-  }, [annotations, selectedQ, debouncedSearchText])
+  }, [annotations, selectedQ, sourceFilter, debouncedSearchText])
 
   // Pagination
   const totalPages = Math.ceil(filteredAnnotations.length / PAGE_SIZE)
@@ -68,10 +80,9 @@ export function ReviewView() {
     }
     
     for (const note of notes) {
-      // Only search first occurrence per note for very large searches
       let idx = 0
       let matchCount = 0
-      const maxMatchesPerNote = 10 // Limit matches per note for performance
+      const maxMatchesPerNote = 10
       
       while (idx < note.text.length && matchCount < maxMatchesPerNote) {
         const foundIdx = note.text.toLowerCase().indexOf(lower, idx)
@@ -95,7 +106,6 @@ export function ReviewView() {
         idx = foundIdx + 1
       }
       
-      // Early termination if we have too many matches
       if (matches.length >= 500) break
     }
     
@@ -107,13 +117,14 @@ export function ReviewView() {
     return bulkMatches.filter(m => !excludedMatches.has(m.id))
   }, [bulkMatches, excludedMatches])
 
-  function goToNote(noteId: string) {
+  function goToNote(noteId: string, annotationId?: string) {
     const idx = notes.findIndex(n => n.id === noteId)
     if (idx >= 0) {
       setCurrentNoteIndex(idx)
       setMode('annotate')
-      setHighlightedNote(noteId)
-      setTimeout(() => setHighlightedNote(null), 1500)
+      if (annotationId) {
+        setHighlightedAnnotation(annotationId)
+      }
     }
   }
 
@@ -152,7 +163,7 @@ export function ReviewView() {
     <div className="flex-1 flex">
       {/* Sidebar */}
       <aside className="w-48 bg-white dark:bg-maple-800 border-r border-maple-200 dark:border-maple-700 flex flex-col">
-        <div className="p-2 border-b border-maple-100 dark:border-maple-700">
+        <div className="p-2 space-y-2 border-b border-maple-100 dark:border-maple-700">
           <div className="relative">
             <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-maple-400" />
             <input
@@ -165,6 +176,19 @@ export function ReviewView() {
               <Loader2 size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-maple-400 animate-spin" />
             )}
           </div>
+          
+          {/* Source filter */}
+          <div className="flex text-[9px] border border-maple-200 dark:border-maple-600 rounded overflow-hidden">
+            {(['all', 'manual', 'auto'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => { setSourceFilter(f); setPage(0) }}
+                className={`flex-1 py-1 capitalize ${sourceFilter === f ? 'bg-maple-800 dark:bg-maple-600 text-white' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'}`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
         </div>
         
         <div className="flex-1 overflow-y-auto">
@@ -175,7 +199,7 @@ export function ReviewView() {
             }`}
           >
             <span className="dark:text-maple-200">All</span>
-            <span className="text-maple-400 dark:text-maple-500">{annotations.length}</span>
+            <span className="text-maple-400 dark:text-maple-500">{filteredAnnotations.length}</span>
           </button>
           
           {questions.map(q => {
@@ -213,7 +237,7 @@ export function ReviewView() {
             Search & Tag
           </button>
           <div className="text-[9px] text-maple-400 dark:text-maple-500 text-center">
-            {manualCount} manual{suggestedCount > 0 && ` + ${suggestedCount} auto`}
+            {manualCount} manual + {suggestedCount} auto
           </div>
         </div>
       </aside>
@@ -259,7 +283,6 @@ export function ReviewView() {
                   </span>
                 </div>
                 
-                {/* Match list with checkboxes */}
                 <div className="max-h-64 overflow-y-auto mb-3 space-y-0.5 bg-maple-50 dark:bg-maple-700 rounded border border-maple-100 dark:border-maple-600">
                   {bulkMatches.map((m) => {
                     const isExcluded = excludedMatches.has(m.id)
@@ -342,7 +365,7 @@ export function ReviewView() {
         {pagedAnnotations.length === 0 ? (
           <div className="flex items-center justify-center h-64">
             <p className="text-[11px] text-maple-400 dark:text-maple-500">
-              {searchText || selectedQ ? 'No matches' : 'No annotations yet'}
+              {searchText || selectedQ || sourceFilter !== 'all' ? 'No matches' : 'No annotations yet'}
             </p>
           </div>
         ) : (
@@ -353,14 +376,14 @@ export function ReviewView() {
               const before = note?.text.slice(Math.max(0, ann.start - ctx), ann.start) || ''
               const after = note?.text.slice(ann.end, ann.end + ctx) || ''
               const isSuggested = ann.source === 'suggested'
-              const isHighlighted = highlightedNote === ann.noteId
+              const isHighlighted = highlightedAnnotation === ann.id
 
               return (
                 <div 
                   key={ann.id} 
-                  className={`bg-white dark:bg-maple-800 border rounded-lg p-3 transition-all ${
+                  className={`bg-white dark:bg-maple-800 border rounded-lg p-3 transition-all duration-300 ${
                     isSuggested ? 'border-maple-300 dark:border-maple-600 border-dashed' : 'border-maple-200 dark:border-maple-700'
-                  } ${isHighlighted ? 'ring-2 ring-maple-400 ring-offset-2' : ''}`}
+                  } ${isHighlighted ? 'ring-2 ring-maple-400 animate-pulse' : ''}`}
                 >
                   <div className="flex items-start gap-2 mb-2">
                     <div className="flex flex-wrap gap-1 flex-1">
@@ -383,9 +406,9 @@ export function ReviewView() {
                       )}
                     </div>
                     <button
-                      onClick={() => goToNote(ann.noteId)}
+                      onClick={() => goToNote(ann.noteId, ann.id)}
                       className="p-1 text-maple-400 hover:text-maple-600 dark:hover:text-maple-300 hover:bg-maple-50 dark:hover:bg-maple-700 rounded"
-                      title="View"
+                      title="View in note"
                     >
                       <ExternalLink size={12} />
                     </button>
