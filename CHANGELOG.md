@@ -2,19 +2,19 @@
 
 All notable changes to Nota are documented in this file.
 
-## [0.0.39] - 2025-12-04
+## [0.5.40] - 2025-12-04
 
 ### Performance (critical rendering fix)
-- **DocumentView selector optimization**: 
-  - Was subscribing to entire `annotationsByNote` Map → re-rendered on ANY annotation change
-  - Now uses per-note selector → only re-renders when THIS note's annotations change
-- **hasUnannotated O(1)**: Simple size comparison instead of iterating 30k notes
-- **NotesList individual selectors**: Prevents unnecessary re-renders
-- **AnnotationList selector**: Only subscribes to current note's annotations
-- **Header selector**: Uses note-specific selector for annotation count
+- **DocumentView optimization**: 
+  - Was re-rendering on ANY annotation change across all notes
+  - Now uses `useMemo` with note-specific dependencies
+  - Only re-renders when current note's annotations change
+- **hasUnannotated O(1)**: Simple size comparison instead of O(30k) iteration
+- **Fixed loading screen hang**: Changed from `useCallback` inside `useStore()` to stable `useMemo` pattern
+- **All components optimized**: NotesList, AnnotationList, Header use individual selectors
 
-This is the **KEY FIX** - components were re-rendering on every annotation change 
-even if it was for a different note. Now they only re-render when relevant data changes.
+This is the **KEY FIX** for 30k+ note performance - components no longer re-render 
+on every annotation change. Annotation should now be instant.
 
 ## [0.0.38] - 2025-12-04
 
