@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useStore } from '../hooks/useStore'
 import { loadQuestions, getQuestion } from '../lib/questions'
 import { X, Plus, MessageSquare, Check, ChevronUp, ChevronDown } from 'lucide-react'
@@ -8,10 +8,16 @@ interface Props {
 }
 
 export function AnnotationList({ noteId }: Props) {
-  const { annotations, removeAnnotation, updateAnnotation, setHighlightedAnnotation, highlightedAnnotation } = useStore()
+  const { getAnnotationsForNote, removeAnnotation, updateAnnotation, setHighlightedAnnotation, highlightedAnnotation, annotations } = useStore()
   const [editingComment, setEditingComment] = useState<{ id: string, text: string } | null>(null)
   const [addingQuestionTo, setAddingQuestionTo] = useState<string | null>(null)
-  const noteAnnotations = annotations.filter(a => a.noteId === noteId).sort((a, b) => a.start - b.start)
+  
+  // Use indexed lookup for O(1) access, sort by position
+  const noteAnnotations = useMemo(() => {
+    const anns = getAnnotationsForNote(noteId)
+    return [...anns].sort((a, b) => a.start - b.start)
+  }, [getAnnotationsForNote, noteId, annotations]) // annotations as dependency for reactivity
+  
   const questions = loadQuestions()
 
   // Current annotation index for navigation

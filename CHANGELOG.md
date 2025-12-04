@@ -2,19 +2,25 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.35] - 2025-12-04
+
+### Performance (continued 30k+ optimization)
+- **Annotation index by note**: `annotationsByNote` Map for O(1) lookup
+  - `getAnnotationsForNote(noteId)` instant access
+  - No more filtering 30k annotations to find 5 for current note
+- **Index auto-maintained**: All annotation CRUD operations update index
+- **AnnotationList uses index**: Memoized sorted view from indexed data
+
 ## [0.0.34] - 2025-12-04
 
 ### Performance (30k+ notes optimization)
-- **O(1) note lookups**: Added `noteIndexMap` for instant note ID → index lookups
-  - Was O(n) findIndex on every render, now O(1) Map lookup
-- **Memoized NoteItem component**: Individual notes don't re-render when others change
-- **Precomputed type counts**: Note type counts calculated once, not per-render
-- **Bulk operation flag**: Disables auto-save during large imports
-  - Prevents 30k individual save operations
-  - Single save after import completes
-- **Increased save debounce**: 300ms → 500ms for large datasets
-- **Optimized annotation counts**: Single loop instead of multiple filter() calls
-- **ReviewView optimization**: Added noteIndexMap for O(1) navigation
+- O(1) note lookups via `noteIndexMap`
+- Memoized NoteItem component
+- Precomputed type counts
+- Bulk operation flag for imports
+- Increased save debounce to 500ms
+- Single-loop annotation counting
+- ReviewView uses noteIndexMap
 
 ## [0.0.33] - 2025-12-04
 
