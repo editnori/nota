@@ -2,20 +2,31 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.18] - 2025-12-04
+
+### Improved
+- **Smart Filter complete redesign** - now matches QuestionPicker styling:
+  - Same visual style as right sidebar (colored circles, hints)
+  - Directly linked to the 10 annotation questions
+  - Shows "neg" badge for questions with negation detection
+  
+- **Intelligent search patterns** based on Ryan's clinical feedback:
+  - Q5 Devices: Regex for "5Fr", "20 French", "7x30 stent", "4.8x26"
+  - Q6 Radiology: Regex for "5mm", "9.7cm", "5x2x4", "mGycm", "Bosniack 2"
+  - All questions have curated term lists
+  
+- **Exclude irrelevant notes** (from Ryan's feedback):
+  - Telephone notes
+  - PT/OT notes  
+  - Anesthesia preop notes
+  - Very short notes (<200 chars)
+  - Custom exclusions
+  - Shows excluded count in footer
+
 ## [0.0.17] - 2025-12-04
 
 ### Fixed
-- **Consolidated import logic**: File input and drag-drop now share same code path
-- **Unified progress format**: "47/234: [radiology] note_0042.txt"
-
-### Improved
-- **Smart Filter redesign**:
-  - Clean list UI, no boxy sections
-  - Click chevron to expand and edit terms inline
-  - **Negation detection**: Toggle per preset to skip "no hematuria", "denies pain", etc.
-  - Exclude and min length in single row at bottom
-  - Shows active terms as pills when preset selected
-- Simpler, more intuitive overall
+- Consolidated import logic, unified progress format
 
 ## [0.0.16] - 2025-12-04
 
