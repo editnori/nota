@@ -13,6 +13,7 @@ interface State {
   annotations: Annotation[]
   // Indexes for O(1) lookups
   annotationsByNote: Map<string, Annotation[]>
+  annotationsById: Map<string, Annotation>  // For O(1) lookup by ID
   currentNoteIndex: number
   mode: Mode
   selectedQuestion: string | null
@@ -47,20 +48,32 @@ interface State {
   setHighlightedAnnotation: (id: string | null) => void
   setFilteredNoteIds: (ids: Set<string> | null) => void
   getAnnotationsForNote: (noteId: string) => Annotation[]
+  getAnnotationById: (id: string) => Annotation | undefined
 }
 
-// Build annotation index by noteId
-function buildAnnotationIndex(annotations: Annotation[]): Map<string, Annotation[]> {
-  const index = new Map<string, Annotation[]>()
+// Build annotation indexes
+interface AnnotationIndexes {
+  byNote: Map<string, Annotation[]>
+  byId: Map<string, Annotation>
+}
+
+function buildAnnotationIndexes(annotations: Annotation[]): AnnotationIndexes {
+  const byNote = new Map<string, Annotation[]>()
+  const byId = new Map<string, Annotation>()
+  
   for (const ann of annotations) {
-    const existing = index.get(ann.noteId)
+    // By note ID
+    const existing = byNote.get(ann.noteId)
     if (existing) {
       existing.push(ann)
     } else {
-      index.set(ann.noteId, [ann])
+      byNote.set(ann.noteId, [ann])
     }
+    // By annotation ID
+    byId.set(ann.id, ann)
   }
-  return index
+  
+  return { byNote, byId }
 }
 
 // Debounced save to avoid too many writes
@@ -131,6 +144,7 @@ export const useStore = create<State>((set, get) => ({
   notes: [],
   annotations: [],
   annotationsByNote: new Map(),
+  annotationsById: new Map(),
   currentNoteIndex: 0,
   mode: 'annotate',
   selectedQuestion: null,
@@ -148,10 +162,12 @@ export const useStore = create<State>((set, get) => ({
     const data = await loadSession()
     if (data) {
       const annotations = data.annotations || []
+      const indexes = buildAnnotationIndexes(annotations)
       set({
         notes: data.notes || [],
         annotations,
-        annotationsByNote: buildAnnotationIndex(annotations),
+        annotationsByNote: indexes.byNote,
+        annotationsById: indexes.byId,
         currentNoteIndex: data.currentNoteIndex || 0,
         mode: data.mode || 'annotate',
         selectedQuestion: data.selectedQuestion || null,
@@ -165,17 +181,17 @@ export const useStore = create<State>((set, get) => ({
   getAnnotationsForNote: (noteId) => {
     return get().annotationsByNote.get(noteId) || []
   },
+  
+  getAnnotationById: (id) => {
+    return get().annotationsById.get(id)
+  },
 
   setNotes: (notes) => {
-    set({ notes, currentNoteIndex: 0 })
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
+    set({ notes, currentNoteIndex: 0, lastSaved: debouncedSave(get()) })
   },
 
   addNotes: (newNotes) => {
-    set(s => ({ notes: [...s.notes, ...newNotes] }))
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
+    set(s => ({ notes: [...s.notes, ...newNotes], lastSaved: debouncedSave(get()) }))
   },
 
   addAnnotation: (ann) => {
@@ -188,14 +204,15 @@ export const useStore = create<State>((set, get) => ({
     }
     set(s => {
       const newAnnotations = [...s.annotations, annotation]
+      const indexes = buildAnnotationIndexes(newAnnotations)
       return { 
         annotations: newAnnotations,
-        annotationsByNote: buildAnnotationIndex(newAnnotations),
-        undoStack: [...s.undoStack.slice(-19), { type: 'add', annotation }]
+        annotationsByNote: indexes.byNote,
+        annotationsById: indexes.byId,
+        undoStack: [...s.undoStack.slice(-19), { type: 'add', annotation }],
+        lastSaved: debouncedSave(get())
       }
     })
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
   },
 
   addBulkAnnotations: (anns) => {
@@ -207,93 +224,95 @@ export const useStore = create<State>((set, get) => ({
     }))
     set(s => {
       const allAnnotations = [...s.annotations, ...newAnnotations]
+      const indexes = buildAnnotationIndexes(allAnnotations)
       return { 
         annotations: allAnnotations,
-        annotationsByNote: buildAnnotationIndex(allAnnotations)
+        annotationsByNote: indexes.byNote,
+        annotationsById: indexes.byId,
+        lastSaved: debouncedSave(get())
       }
     })
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
   },
 
   removeAnnotation: (id) => {
-    const ann = get().annotations.find(a => a.id === id)
+    const ann = get().annotationsById.get(id)  // O(1) lookup
     if (ann) {
       set(s => {
         const newAnnotations = s.annotations.filter(a => a.id !== id)
+        const indexes = buildAnnotationIndexes(newAnnotations)
         return { 
           annotations: newAnnotations,
-          annotationsByNote: buildAnnotationIndex(newAnnotations),
-          undoStack: [...s.undoStack.slice(-19), { type: 'remove', annotation: ann }]
+          annotationsByNote: indexes.byNote,
+          annotationsById: indexes.byId,
+          undoStack: [...s.undoStack.slice(-19), { type: 'remove', annotation: ann }],
+          lastSaved: debouncedSave(get())
         }
       })
-      const ts = debouncedSave(get())
-      set({ lastSaved: ts })
     }
   },
 
   updateAnnotation: (id, updates) => {
-    const ann = get().annotations.find(a => a.id === id)
+    const ann = get().annotationsById.get(id)  // O(1) lookup
     if (ann) {
       set(s => {
         const newAnnotations = s.annotations.map(a => a.id === id ? { ...a, ...updates } : a)
+        const indexes = buildAnnotationIndexes(newAnnotations)
         return {
           annotations: newAnnotations,
-          annotationsByNote: buildAnnotationIndex(newAnnotations),
-          undoStack: [...s.undoStack.slice(-19), { type: 'update', annotation: ann, previousState: updates }]
+          annotationsByNote: indexes.byNote,
+          annotationsById: indexes.byId,
+          undoStack: [...s.undoStack.slice(-19), { type: 'update', annotation: ann, previousState: updates }],
+          lastSaved: debouncedSave(get())
         }
       })
-      const ts = debouncedSave(get())
-      set({ lastSaved: ts })
     }
   },
 
   setCurrentNoteIndex: (index) => {
-    set({ currentNoteIndex: index })
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
+    set({ currentNoteIndex: index, lastSaved: debouncedSave(get()) })
   },
 
   setMode: (mode) => {
-    set({ mode })
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
+    set({ mode, lastSaved: debouncedSave(get()) })
   },
 
   setSelectedQuestion: (q) => {
-    set({ selectedQuestion: q })
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
+    set({ selectedQuestion: q, lastSaved: debouncedSave(get()) })
   },
 
   clearNoteAnnotations: (noteId) => {
     set(s => {
       const newAnnotations = s.annotations.filter(a => a.noteId !== noteId)
+      const indexes = buildAnnotationIndexes(newAnnotations)
       return { 
         annotations: newAnnotations,
-        annotationsByNote: buildAnnotationIndex(newAnnotations)
+        annotationsByNote: indexes.byNote,
+        annotationsById: indexes.byId,
+        lastSaved: debouncedSave(get())
       }
     })
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
   },
 
   clearAllAnnotations: () => {
-    set({ annotations: [], annotationsByNote: new Map() })
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
+    set({ 
+      annotations: [], 
+      annotationsByNote: new Map(), 
+      annotationsById: new Map(),
+      lastSaved: debouncedSave(get())
+    })
   },
 
   clearSuggestedAnnotations: () => {
     set(s => {
       const newAnnotations = s.annotations.filter(a => a.source !== 'suggested')
+      const indexes = buildAnnotationIndexes(newAnnotations)
       return { 
         annotations: newAnnotations,
-        annotationsByNote: buildAnnotationIndex(newAnnotations)
+        annotationsByNote: indexes.byNote,
+        annotationsById: indexes.byId,
+        lastSaved: debouncedSave(get())
       }
     })
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
   },
 
   clearSession: async () => {
@@ -302,6 +321,7 @@ export const useStore = create<State>((set, get) => ({
       notes: [],
       annotations: [],
       annotationsByNote: new Map(),
+      annotationsById: new Map(),
       currentNoteIndex: 0,
       mode: 'annotate',
       selectedQuestion: null,
@@ -320,20 +340,26 @@ export const useStore = create<State>((set, get) => ({
       // Undo add = remove
       set(s => {
         const newAnnotations = s.annotations.filter(a => a.id !== action.annotation.id)
+        const indexes = buildAnnotationIndexes(newAnnotations)
         return {
           annotations: newAnnotations,
-          annotationsByNote: buildAnnotationIndex(newAnnotations),
-          undoStack: s.undoStack.slice(0, -1)
+          annotationsByNote: indexes.byNote,
+          annotationsById: indexes.byId,
+          undoStack: s.undoStack.slice(0, -1),
+          lastSaved: debouncedSave(get())
         }
       })
     } else if (action.type === 'remove') {
       // Undo remove = add back
       set(s => {
         const newAnnotations = [...s.annotations, action.annotation]
+        const indexes = buildAnnotationIndexes(newAnnotations)
         return {
           annotations: newAnnotations,
-          annotationsByNote: buildAnnotationIndex(newAnnotations),
-          undoStack: s.undoStack.slice(0, -1)
+          annotationsByNote: indexes.byNote,
+          annotationsById: indexes.byId,
+          undoStack: s.undoStack.slice(0, -1),
+          lastSaved: debouncedSave(get())
         }
       })
     } else if (action.type === 'update') {
@@ -342,16 +368,16 @@ export const useStore = create<State>((set, get) => ({
         const newAnnotations = s.annotations.map(a => 
           a.id === action.annotation.id ? action.annotation : a
         )
+        const indexes = buildAnnotationIndexes(newAnnotations)
         return {
           annotations: newAnnotations,
-          annotationsByNote: buildAnnotationIndex(newAnnotations),
-          undoStack: s.undoStack.slice(0, -1)
+          annotationsByNote: indexes.byNote,
+          annotationsById: indexes.byId,
+          undoStack: s.undoStack.slice(0, -1),
+          lastSaved: debouncedSave(get())
         }
       })
     }
-    
-    const ts = debouncedSave(get())
-    set({ lastSaved: ts })
   },
 
   setFontSize: (size) => {

@@ -2,19 +2,25 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.38] - 2025-12-04
+
+### Performance (final unbiased audit)
+- **annotationsById index**: O(1) lookup by annotation ID
+  - `getAnnotationById(id)` for instant access
+  - Store operations use Map.get() instead of find()
+- **Single set() calls**: Combined state + lastSaved updates
+  - Was triggering 2 re-renders, now 1
+- **exportJSON optimized**: Single pass through annotations
+  - Was 4x filter() calls, now 1 loop
+- **buildAnnotationIndexes**: Builds both byNote and byId in one pass
+
 ## [0.0.37] - 2025-12-04
 
 ### Performance (comprehensive audit)
-- **ReviewView counts memoized**: Single loop instead of 3x `filter()` calls
-- **NotesList jumpToCurrent**: O(1) via `filteredIndexMap` instead of `findIndex()`
-- **Questions cached**: 
-  - `loadQuestions()` cached after first call
-  - `getQuestion(id)` O(1) via Map
-  - `getQuestionByHotkey(key)` O(1) via Map
-- **Storage saves non-blocking**:
-  - Uses `requestIdleCallback` when available
-  - Prevents UI freeze during JSON stringify of 30k notes
-  - `isSaving` flag prevents concurrent saves
+- ReviewView counts memoized
+- NotesList jumpToCurrent O(1)
+- Questions cached with Map lookups
+- Storage saves non-blocking
 
 ## [0.0.36] - 2025-12-04
 

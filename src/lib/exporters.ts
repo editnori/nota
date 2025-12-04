@@ -25,12 +25,23 @@ interface SessionData {
 
 export function exportJSON(notes: Note[], annotations: Annotation[]): string {
   const questions = loadQuestions()
-  const annotatedNoteIds = new Set(annotations.map(a => a.noteId))
+  const annotatedNoteIds = new Set<string>()
   const byQuestion: Record<string, number> = {}
+  let manualCount = 0
+  let suggestedCount = 0
   
-  questions.forEach(q => {
-    byQuestion[q.id] = annotations.filter(a => a.questions.includes(q.id)).length
-  })
+  // Initialize counts
+  questions.forEach(q => { byQuestion[q.id] = 0 })
+  
+  // Single pass through annotations
+  for (const a of annotations) {
+    annotatedNoteIds.add(a.noteId)
+    if (a.source === 'suggested') suggestedCount++
+    else manualCount++
+    for (const qid of a.questions) {
+      byQuestion[qid] = (byQuestion[qid] || 0) + 1
+    }
+  }
 
   const data: ExportData = {
     exportedAt: new Date().toISOString(),
@@ -38,8 +49,8 @@ export function exportJSON(notes: Note[], annotations: Annotation[]): string {
       totalNotes: notes.length,
       annotatedNotes: annotatedNoteIds.size,
       totalAnnotations: annotations.length,
-      manualAnnotations: annotations.filter(a => a.source !== 'suggested').length,
-      suggestedAnnotations: annotations.filter(a => a.source === 'suggested').length,
+      manualAnnotations: manualCount,
+      suggestedAnnotations: suggestedCount,
       byQuestion
     },
     notes,
