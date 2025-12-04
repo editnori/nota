@@ -51,23 +51,31 @@ body {
   outline: none;
 }
 
-/* Smooth breathing glow using filter (GPU accelerated) */
+/* Continuous breathing glow - stops on hover */
 @keyframes breathe {
   0%, 100% { 
-    filter: drop-shadow(0 0 0 transparent);
+    filter: drop-shadow(0 0 2px rgba(194, 120, 80, 0.3));
   }
   50% { 
-    filter: drop-shadow(0 0 12px rgba(160, 130, 110, 0.6));
+    filter: drop-shadow(0 0 16px rgba(194, 120, 80, 0.7));
   }
 }
 
 .animate-glow {
-  animation: breathe 1.8s ease-in-out 5;
+  animation: breathe 2s ease-in-out infinite;
   border-radius: 4px;
-  will-change: filter;
+}
+
+.animate-glow:hover {
+  animation: none;
+  filter: drop-shadow(0 0 8px rgba(194, 120, 80, 0.5));
 }
 
 .animate-ring {
-  animation: breathe 1.8s ease-in-out 5;
-  will-change: filter;
+  animation: breathe 2s ease-in-out infinite;
+}
+
+.animate-ring:hover {
+  animation: none;
+  filter: drop-shadow(0 0 8px rgba(194, 120, 80, 0.5));
 }

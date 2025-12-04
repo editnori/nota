@@ -63,10 +63,9 @@ export function DocumentView({ onCreateAnnotation }: Props) {
             behavior: 'smooth'
           })
           
-          // After scroll completes, trigger glow
+          // After scroll completes, trigger glow (continues until user hovers)
           setTimeout(() => {
             setGlowingMarkId(highlightedAnnotation)
-            setTimeout(() => setGlowingMarkId(null), 2000)
           }, 300)
         }
       })
@@ -234,6 +233,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                       }}
                       title={`${seg.questions.map(qid => getQuestion(qid)?.name || qid).join(' + ')}${isSuggested ? ' (auto)' : ''}\n(click to add more)`}
                       onClick={(e) => handleSpanClick(e, seg.annotationIds)}
+                      onMouseEnter={() => isGlowing && setGlowingMarkId(null)}
                     >
                       {seg.text}
                       {colors.length > 1 && (
