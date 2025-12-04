@@ -37,17 +37,17 @@ export default function App() {
     
     if (e.dataTransfer.items.length === 0) return
     
-    setImporting(true, 'Reading files...')
+    setImporting(true, 'Scanning files...')
     
     try {
       let count = 0
-      const imported = await importFromDataTransfer(e.dataTransfer.items, (progress) => {
+      const imported = await importFromDataTransfer(e.dataTransfer.items, (filename) => {
         count++
-        setImporting(true, `Processing: ${progress} (${count} files)`)
+        setImporting(true, `Processing ${count} files... (${filename})`)
       })
       
       if (imported.length > 0) {
-        setImporting(true, `Loading ${imported.length} notes...`)
+        setImporting(true, `Formatting ${imported.length} notes...`)
         
         // Small delay to show the message
         await new Promise(r => setTimeout(r, 100))
@@ -58,8 +58,8 @@ export default function App() {
           setNotes(imported)
         }
         
-        setImporting(true, `Loaded ${imported.length} notes`)
-        setTimeout(() => setImporting(false), 1000)
+        setImporting(true, `Done! Loaded ${imported.length} notes`)
+        setTimeout(() => setImporting(false), 1200)
       } else {
         setImporting(true, 'No valid files found')
         setTimeout(() => setImporting(false), 1500)

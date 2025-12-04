@@ -166,12 +166,18 @@ export function NotesList() {
     return notes.filter(n => n.meta?.type === type).length
   }, [notes])
 
-  function handleSmartFilterApply(ids: Set<string>, matches?: MatchLocation[]) {
+  async function handleSmartFilterApply(ids: Set<string>, matches?: MatchLocation[]) {
     setSmartFilterIds(ids)
     setPage(0)
     
-    // Auto-tag if matches provided
+    // Auto-tag if matches provided - batch to avoid UI freeze
     if (matches && matches.length > 0) {
+      const { setImporting } = useStore.getState()
+      setImporting(true, `Creating ${matches.length} annotations...`)
+      
+      // Small delay to let UI update
+      await new Promise(r => setTimeout(r, 50))
+      
       const bulkAnns = matches.map(m => ({
         noteId: m.noteId,
         text: m.term,
@@ -180,6 +186,9 @@ export function NotesList() {
         questionIds: [] as string[]
       }))
       addBulkAnnotations(bulkAnns)
+      
+      setImporting(true, `Created ${matches.length} annotations`)
+      setTimeout(() => setImporting(false), 1000)
     }
   }
 

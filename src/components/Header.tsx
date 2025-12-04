@@ -49,13 +49,16 @@ export function Header() {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    setImporting(true, `Reading ${files.length} file(s)...`)
+    const totalFiles = files.length
+    setImporting(true, `Reading ${totalFiles} file(s)...`)
 
     try {
       let imported: Awaited<ReturnType<typeof importJSON>> = []
       
       if (files.length === 1) {
         const file = files[0]
+        setImporting(true, `Processing: ${file.name}`)
+        
         if (file.name.endsWith('.json')) {
           imported = await importJSON(file)
         } else if (file.name.endsWith('.jsonl')) {
@@ -66,12 +69,13 @@ export function Header() {
       } else {
         const txtFiles = Array.from(files).filter(f => f.name.endsWith('.txt'))
         if (txtFiles.length > 0) {
+          setImporting(true, `Processing ${txtFiles.length} text files...`)
           imported = await importTXT(txtFiles)
         }
       }
 
       if (imported.length > 0) {
-        setImporting(true, `Loading ${imported.length} notes...`)
+        setImporting(true, `Formatting ${imported.length} notes...`)
         await new Promise(r => setTimeout(r, 50))
         
         if (notes.length > 0) {
@@ -80,8 +84,8 @@ export function Header() {
           setNotes(imported)
         }
         
-        setImporting(true, `Loaded ${imported.length} notes`)
-        setTimeout(() => setImporting(false), 1000)
+        setImporting(true, `Done! Loaded ${imported.length} notes`)
+        setTimeout(() => setImporting(false), 1200)
       } else {
         setImporting(false)
       }
@@ -100,7 +104,8 @@ export function Header() {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    setImporting(true, `Reading ${files.length} files...`)
+    const totalFiles = files.length
+    setImporting(true, `Scanning ${totalFiles} files...`)
 
     try {
       const filesByFolder = new Map<string, File[]>()
@@ -117,18 +122,21 @@ export function Header() {
       }
 
       const imported: Awaited<ReturnType<typeof importTXT>> = []
+      let processedFolders = 0
+      const totalFolders = filesByFolder.size
       
       for (const [folder, folderFiles] of filesByFolder) {
         const txtFiles = folderFiles.filter(f => f.name.endsWith('.txt'))
         if (txtFiles.length > 0) {
-          setImporting(true, `Processing ${folder}...`)
+          processedFolders++
+          setImporting(true, `Processing folder ${processedFolders}/${totalFolders}: ${folder} (${txtFiles.length} files)`)
           const folderNotes = await importTXT(txtFiles, folder)
           imported.push(...folderNotes)
         }
       }
 
       if (imported.length > 0) {
-        setImporting(true, `Loading ${imported.length} notes...`)
+        setImporting(true, `Formatting ${imported.length} notes...`)
         await new Promise(r => setTimeout(r, 50))
         
         if (notes.length > 0) {
@@ -137,8 +145,8 @@ export function Header() {
           setNotes(imported)
         }
         
-        setImporting(true, `Loaded ${imported.length} notes`)
-        setTimeout(() => setImporting(false), 1000)
+        setImporting(true, `Done! Loaded ${imported.length} notes from ${totalFolders} folders`)
+        setTimeout(() => setImporting(false), 1200)
       } else {
         setImporting(false)
       }

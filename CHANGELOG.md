@@ -2,6 +2,18 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.16] - 2025-12-04
+
+### Fixed
+- **Smart Filter feature completeness**: Restored custom terms, exclude terms, and min length filters
+- **Auto-tag blank screen**: Now shows progress overlay during bulk annotation creation
+- **Import progress**: Shows detailed counts (e.g., "Processing folder 2/5: radiology (47 files)")
+- **Progress messaging**: Clearer "Formatting X notes..." and "Done! Loaded X notes" messages
+
+### Improved
+- Compact Smart Filter UI with all features accessible
+- Import progress shows folder-by-folder processing with counts
+
 ## [0.0.15] - 2025-12-04
 
 ### Improved
