@@ -14,12 +14,11 @@ export default function App() {
 
   const currentNote = notes[currentNoteIndex]
   
-  // Apply dark mode to document
+  // Apply dark mode to document - always sync with state
   useEffect(() => {
+    document.documentElement.classList.remove('dark')
     if (darkMode) {
       document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
     }
   }, [darkMode])
   
@@ -74,10 +73,10 @@ export default function App() {
   // Show loading while session is being restored
   if (!isLoaded) {
     return (
-      <div className="h-screen flex items-center justify-center bg-maple-50 dark:bg-maple-900">
+      <div className="h-screen flex items-center justify-center bg-maple-50">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-maple-300 border-t-maple-600 rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-maple-500 dark:text-maple-400">Loading session...</p>
+          <p className="text-sm text-maple-500">Loading session...</p>
         </div>
       </div>
     )
