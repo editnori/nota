@@ -2,13 +2,19 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.32] - 2025-12-04
+
+### Fixed
+- **Windows installer now shows Nota icon**: 
+  - Generated all required PNG sizes (16, 32, 48, 64, 128, 256)
+  - Rebuilt icon.ico with multiple embedded sizes
+  - Added NSIS-specific icon configuration
+  - Installer .exe should now display the orange "N" logo
+
 ## [0.0.31] - 2025-12-04
 
 ### Added
-- **Delete button in question popup**: Click on a span → popup now has "Delete" option
-  - Quick way to remove accidental annotations
-  - Alternative to Ctrl+Z undo
-  - Styled in red to indicate destructive action
+- Delete button in question popup
 
 ## [0.0.30] - 2025-12-04
 
