@@ -37,6 +37,9 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   
   // Use ref for popup position so it doesn't shift when annotations update
   const popupPositionRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 })
+  
+  // Flag to prevent closing popup immediately after opening
+  const justOpenedPopupRef = useRef(false)
 
   const note = notes[currentNoteIndex]
   
@@ -148,17 +151,13 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     if (nearby.length > 0) {
       const primary = nearby[0]
       
-      // If selection is entirely within existing annotation, just ignore
-      if (!isAdjacent && start >= primary.start && end <= primary.end) {
-        window.getSelection()?.removeAllRanges()
-        return
-      }
-
-      // Show overlap/adjacent prompt
+      // Get position before clearing selection
       const sel = window.getSelection()
       const range = sel?.getRangeAt(0)
       const rect = range?.getBoundingClientRect()
       
+      // Always show popup for overlaps/adjacent - let user decide
+      justOpenedPopupRef.current = true
       setOverlapPrompt({
         newStart: start,
         newEnd: end,
@@ -169,7 +168,8 @@ export function DocumentView({ onCreateAnnotation }: Props) {
         position: { x: rect?.left || 100, y: (rect?.bottom || 100) + 4 }
       })
       window.getSelection()?.removeAllRanges()
-      e.stopPropagation() // Prevent closing popup immediately
+      // Reset flag after a tick so subsequent clicks close the popup
+      setTimeout(() => { justOpenedPopupRef.current = false }, 100)
       return
     }
 
@@ -380,7 +380,13 @@ export function DocumentView({ onCreateAnnotation }: Props) {
       <div 
         ref={scrollContainerRef} 
         className="flex-1 overflow-y-auto p-4 bg-maple-50 dark:bg-maple-900"
-        onClick={() => { setActiveSpan(null); setSpanEditor(null); setOverlapPrompt(null) }}
+        onClick={() => { 
+          // Don't close popup if we just opened it
+          if (justOpenedPopupRef.current) return
+          setActiveSpan(null)
+          setSpanEditor(null)
+          setOverlapPrompt(null)
+        }}
       >
         <div className="max-w-3xl mx-auto">
           <div className="bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-700 rounded-xl shadow-sm p-6">

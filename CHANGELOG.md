@@ -2,15 +2,20 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.0.30] - 2025-12-04
+
+### Fixed
+- **Overlap popup ACTUALLY works now**: 
+  - Root cause: `mouseup` and `click` are separate events, stopPropagation didn't help
+  - Solution: Added `justOpenedPopupRef` flag with 100ms window
+  - Container click handler checks flag before closing popup
+  - Removed "entirely within" silent rejection - always show options
+- **Question toggle buttons stable size**: Reserved fixed width for checkmark
+
 ## [0.0.29] - 2025-12-04
 
 ### Fixed
-- **Overlap popup now works**: Fixed event propagation that was closing popup immediately
-  - stopPropagation() prevents container click from dismissing
-  - Popup appears and stays visible for user interaction
-- **Question toggle buttons stable size**: Reserved fixed width for checkmark icon
-  - Buttons no longer resize when toggling questions
-  - Much easier to click without shifting targets
+- (Attempted overlap fix - didn't fully work)
 
 ## [0.0.28] - 2025-12-04
 
