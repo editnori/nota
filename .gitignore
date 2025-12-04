@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+*.log
+
+# tauri
+src-tauri/target/
+
+# bun
+bun.lockb
+
+# ide
+.idea/
+.vscode/
+*.swp

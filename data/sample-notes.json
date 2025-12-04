@@ -1,0 +1,44 @@
+{
+  "notes": [
+    {
+      "id": "ED.IDX.0175",
+      "text": "CHIEF COMPLAINT:\n45 year old male presents with acute left flank pain radiating to groin, onset 3 hours ago. Reports gross hematuria and nausea.\n\nHISTORY OF PRESENT ILLNESS:\nPatient has history of recurrent kidney stones. Last episode was 2 years ago, passed spontaneously. Denies fever or dysuria. Pain is 8/10, colicky in nature.\n\nPAST MEDICAL HISTORY:\n- Nephrolithiasis (multiple episodes)\n- Hypertension\n- Type 2 Diabetes\n\nMEDICATIONS:\n- Lisinopril 10mg daily\n- Metformin 500mg BID\n\nPHYSICAL EXAMINATION:\nVitals: BP 142/88, HR 92, Temp 98.6F\nAbdomen: Soft, left CVA tenderness present\nNo peritoneal signs\n\nLABS:\nWBC 11.2, Cr 1.1, UA with 50+ RBCs\n\nIMAGING:\nCT KUB shows 5mm left distal ureteral stone with mild hydronephrosis.\n\nASSESSMENT AND PLAN:\n1. Acute left ureteral colic\n2. 5mm distal ureteral stone\n3. Will trial conservative management with hydration and pain control\n4. Discussed increasing fluid intake to 2-3L daily\n5. Strain urine for stone analysis\n6. Follow up with urology in 1 week if not passed",
+      "meta": {
+        "type": "EmergencyDepartment",
+        "date": "2024-01-15"
+      }
+    },
+    {
+      "id": "RAD.IDX.0874",
+      "text": "CT ABDOMEN AND PELVIS WITHOUT CONTRAST\n\nCLINICAL INDICATION: Flank pain, rule out nephrolithiasis\n\nTECHNIQUE: Helical CT of the abdomen and pelvis without IV contrast. DLP: 587.08 mGy-cm\n\nFINDINGS:\n\nKIDNEYS: The right kidney measures 11.2 cm and is unremarkable. The left kidney measures 10.8 cm. There is a 5 x 2 x 4 mm calculus in the left distal ureter at the ureterovesical junction. Mild left hydroureter and hydronephrosis proximal to the stone.\n\nNo right-sided stones identified. No perinephric stranding.\n\nBLADDER: Unremarkable.\n\nOTHER: No acute intra-abdominal pathology. Liver, spleen, pancreas, and adrenals are unremarkable.\n\nIMPRESSION:\n1. 5 x 2 x 4 mm left distal ureteral stone at UVJ with mild proximal hydroureteronephrosis\n2. No right-sided nephrolithiasis",
+      "meta": {
+        "type": "RadiologyReport",
+        "date": "2024-01-15"
+      }
+    },
+    {
+      "id": "OP.IDX.0026",
+      "text": "OPERATIVE NOTE\n\nPREOPERATIVE DIAGNOSIS: Left ureteral stone\nPOSTOPERATIVE DIAGNOSIS: Same\n\nPROCEDURE: Left ureteroscopy with laser lithotripsy and stent placement\n\nSURGEON: Dr. Smith\n\nANESTHESIA: General\n\nFINDINGS: 6mm stone in left proximal ureter\n\nPROCEDURE DETAILS:\nPatient placed in dorsal lithotomy position. Cystoscopy performed with 22 Fr rigid cystoscope. Left ureteral orifice identified. Guidewire passed under fluoroscopic guidance.\n\nA 9.5 Fr semirigid ureteroscope advanced to the proximal ureter where a 6mm stone was visualized. 200 micron holmium laser fiber used at settings of 0.8J and 10Hz. Stone fragmented completely. Fragments extracted with 2.4 Fr stone basket.\n\nA 6 Fr x 26 cm double-J ureteral stent placed. Position confirmed with fluoroscopy.\n\nEBL: Minimal\nCOMPLICATIONS: None\n\nPOSTOP PLAN:\n- Stent removal in 1 week\n- Strain urine\n- Follow up in clinic",
+      "meta": {
+        "type": "OperativeNote",
+        "date": "2024-01-20"
+      }
+    },
+    {
+      "id": "OUT.IDX.1083",
+      "text": "UROLOGY CLINIC FOLLOW UP\n\nPatient is a 45 year old male here for follow up after left ureteroscopy with laser lithotripsy.\n\nINTERVAL HISTORY:\nProcedure was 10 days ago. Stent was removed 3 days ago. Patient reports mild dysuria that has improved. No fever, no hematuria currently. Passed some small stone fragments.\n\nStone analysis returned: 80% calcium oxalate monohydrate, 20% calcium phosphate.\n\nREVIEW OF SYSTEMS:\nDenies flank pain, fever, nausea. Reports good oral intake.\n\nPHYSICAL EXAM:\nVitals: BP 128/82, HR 72\nAbdomen: Soft, non-tender\nNo CVA tenderness\n\n24-HOUR URINE RESULTS:\nVolume: 1.8L (goal >2.5L)\nCalcium: 320 mg/day (elevated)\nOxalate: 45 mg/day (normal)\nCitrate: 380 mg/day (low)\nSodium: 280 mEq/day (elevated)\npH: 5.8\n\nDIETARY RECOMMENDATIONS:\n1. Increase fluid intake to maintain urine output >2.5L daily\n2. Reduce sodium intake to <2300mg daily\n3. Moderate protein intake\n4. Increase citrus fruit consumption\n5. Avoid excessive oxalate (spinach, nuts, chocolate)\n\nMEDICATIONS:\n- Starting potassium citrate 10mEq BID\n\nFOLLOW UP:\nRepeat 24-hour urine in 3 months. Annual KUB to monitor for recurrence.",
+      "meta": {
+        "type": "OutpatientNote",
+        "date": "2024-02-01"
+      }
+    },
+    {
+      "id": "ED.IDX.0248",
+      "text": "CHIEF COMPLAINT:\n52 year old female with known cystinuria presents with right flank pain.\n\nHISTORY OF PRESENT ILLNESS:\nPatient has history of cystinuria diagnosed at age 25. Has had multiple stone surgeries including bilateral PCNLs. Currently on tiopronin. Reports 2 day history of right-sided pain, similar to prior stone episodes. Also reports passing 2 small stones at home last week which she saved for analysis.\n\nHer stone burden has been increasing on surveillance imaging. Last CT 3 months ago showed interval stone growth with new 8mm right lower pole stone.\n\nSOCIAL HISTORY:\nLives alone, works as teacher. No transportation issues. Reports difficulty affording tiopronin at times.\n\nPHYSICAL EXAM:\nVitals stable\nRight CVA tenderness\n\nCT FINDINGS:\n8mm right lower pole stone, stable. New 4mm right UPJ stone causing mild hydronephrosis.\n\nPLAN:\n1. Admit for pain control and hydration\n2. Urology consult for possible intervention\n3. Social work consult for medication assistance programs",
+      "meta": {
+        "type": "EmergencyDepartment",
+        "date": "2024-02-15"
+      }
+    }
+  ]
+}
