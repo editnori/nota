@@ -459,6 +459,12 @@ export const useStore = create<State>((set, get) => ({
     await clearStorage()
     // Reset saved hash to prevent stale comparison
     lastSavedHash = ''
+    // Clear any pending annotation batch
+    pendingAnnotations = []
+    if (batchTimeout) {
+      clearTimeout(batchTimeout)
+      batchTimeout = null
+    }
     // Reset all state in a single batch
     set({
       notes: [],

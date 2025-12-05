@@ -330,10 +330,13 @@ export function DocumentView({ onCreateAnnotation }: Props) {
 
   if (!note) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-maple-400 dark:text-maple-500 mb-2">No notes loaded</p>
-          <p className="text-xs text-maple-300 dark:text-maple-600">Import or drag-drop notes to begin</p>
+      <div className="flex-1 flex items-center justify-center bg-maple-50 dark:bg-maple-900">
+        <div className="text-center p-8">
+          <div className="w-16 h-16 bg-maple-200 dark:bg-maple-700 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl">📝</span>
+          </div>
+          <p className="text-maple-600 dark:text-maple-300 font-medium mb-2">No notes loaded</p>
+          <p className="text-sm text-maple-500 dark:text-maple-400">Import or drag-drop notes to begin</p>
         </div>
       </div>
     )
