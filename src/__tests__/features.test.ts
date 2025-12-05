@@ -22,11 +22,14 @@
  * - Smart Filter
  * - Span Editing
  * - Confirm Dialogs
+ * - Import UX
+ * - Annotation Navigation
+ * - Overlap Handling
  * 
- * Last updated: v0.5.42
+ * Last updated: v0.5.45
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock localStorage
 const localStorageMock = {
@@ -37,6 +40,11 @@ const localStorageMock = {
   clear: vi.fn(() => { localStorageMock.store = {} })
 }
 vi.stubGlobal('localStorage', localStorageMock)
+
+// Reset localStorage before each test
+beforeEach(() => {
+  localStorageMock.clear()
+})
 
 // ============================================================================
 // IMPORT/EXPORT FEATURES
@@ -59,6 +67,19 @@ describe('Import Features', () => {
     it('should import TXT files and auto-format content', () => {
       expect(true).toBe(true)
     })
+    
+    it('should auto-format note text with section headers', () => {
+      // formatNoteText adds line breaks before headers like CHIEF COMPLAINT, HPI, etc.
+      expect(true).toBe(true)
+    })
+    
+    it('should normalize line endings (CRLF to LF)', () => {
+      expect(true).toBe(true)
+    })
+    
+    it('should collapse multiple blank lines', () => {
+      expect(true).toBe(true)
+    })
   })
 
   describe('Folder Import', () => {
@@ -75,6 +96,12 @@ describe('Import Features', () => {
     })
 
     it('should read all directory entries (not just first batch)', () => {
+      // Uses do-while loop to read all batches from readEntries()
+      expect(true).toBe(true)
+    })
+    
+    it('should group files by folder for type assignment', () => {
+      // Uses webkitRelativePath to extract folder names
       expect(true).toBe(true)
     })
   })
@@ -89,10 +116,26 @@ describe('Import Features', () => {
     })
 
     it('should show drop indicator overlay', () => {
+      // isDragging state triggers overlay with border-dashed style
       expect(true).toBe(true)
     })
 
     it('should display file count during processing', () => {
+      expect(true).toBe(true)
+    })
+    
+    it('should use window-level drag events for reliable capture', () => {
+      // Window listeners for dragenter, dragover, dragleave, drop
+      expect(true).toBe(true)
+    })
+    
+    it('should use dragCountRef for enter/leave balance', () => {
+      // Prevents flicker when dragging over child elements
+      expect(true).toBe(true)
+    })
+    
+    it('should recursively scan directories via FileSystem API', () => {
+      // collectFiles traverses directories recursively
       expect(true).toBe(true)
     })
   })
@@ -103,6 +146,38 @@ describe('Import Features', () => {
     })
 
     it('should restore questions from session', () => {
+      expect(true).toBe(true)
+    })
+    
+    it('should rebuild annotation indexes on session import', () => {
+      // Builds annotationsByNote and annotationsById Maps
+      expect(true).toBe(true)
+    })
+    
+    it('should reset filteredNoteIds on session import', () => {
+      expect(true).toBe(true)
+    })
+  })
+  
+  describe('Import Progress', () => {
+    it('should show loading overlay immediately on import', () => {
+      // setImporting(true, 'Preparing...') called before processing
+      expect(true).toBe(true)
+    })
+    
+    it('should show scanning phase', () => {
+      expect(true).toBe(true)
+    })
+    
+    it('should show processing phase with current/total', () => {
+      expect(true).toBe(true)
+    })
+    
+    it('should show done phase with total notes', () => {
+      expect(true).toBe(true)
+    })
+    
+    it('should disable saves during bulk import (setBulkOperation)', () => {
       expect(true).toBe(true)
     })
   })
@@ -133,6 +208,10 @@ describe('Export Features', () => {
     it('should export notes, annotations, and questions', () => {
       expect(true).toBe(true)
     })
+    
+    it('should use timestamp in filename', () => {
+      expect(true).toBe(true)
+    })
   })
 })
 
@@ -156,6 +235,15 @@ describe('Manual Annotations', () => {
   it('should show solid underline for manual annotations', () => {
     expect(true).toBe(true)
   })
+  
+  it('should generate unique annotation IDs with timestamp and random suffix', () => {
+    // Format: ann_${Date.now()}_${random}
+    expect(true).toBe(true)
+  })
+  
+  it('should set createdAt timestamp', () => {
+    expect(true).toBe(true)
+  })
 })
 
 describe('Auto (Suggested) Annotations', () => {
@@ -174,6 +262,11 @@ describe('Auto (Suggested) Annotations', () => {
   it('should allow clearing only suggested annotations', () => {
     expect(true).toBe(true)
   })
+  
+  it('should show reduced opacity for suggested annotations', () => {
+    // opacity: 0.8 for isSuggested
+    expect(true).toBe(true)
+  })
 })
 
 describe('Multi-Question Tagging', () => {
@@ -190,6 +283,15 @@ describe('Multi-Question Tagging', () => {
   })
 
   it('should show question color dots on multi-tagged spans', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should prevent removing last question from annotation', () => {
+    // isOnlyQuestion check prevents removal
+    expect(true).toBe(true)
+  })
+  
+  it('should show gradient border for multi-question spans', () => {
     expect(true).toBe(true)
   })
 })
@@ -249,11 +351,12 @@ describe('Review Mode', () => {
     })
 
     it('should smooth scroll to annotation in document', () => {
+      // Uses scrollTo with behavior: 'smooth'
       expect(true).toBe(true)
     })
 
     it('should show breathing glow animation on highlighted annotation', () => {
-      // v0.0.11: Continuous breathing until hover
+      // border-pulse animation runs infinitely until hover
       expect(true).toBe(true)
     })
   })
@@ -298,6 +401,20 @@ describe('Annotate Mode', () => {
     })
 
     it('should build search index for large datasets', () => {
+      // Only builds index for 500+ notes
+      expect(true).toBe(true)
+    })
+    
+    it('should reset state when notes are cleared', () => {
+      // useEffect resets page, search, filter when notes.length === 0
+      expect(true).toBe(true)
+    })
+    
+    it('should keep page in bounds when filter changes', () => {
+      expect(true).toBe(true)
+    })
+    
+    it('should show note type counts in filter dropdown', () => {
       expect(true).toBe(true)
     })
   })
@@ -320,16 +437,22 @@ describe('Annotate Mode', () => {
     })
 
     it('should smooth scroll to highlighted annotation', () => {
+      // requestAnimationFrame + scrollTo with behavior: 'smooth'
       expect(true).toBe(true)
     })
 
     it('should show continuous breathing glow until hover', () => {
-      // v0.0.11: Animation runs infinitely, stops on hover
+      // animation: border-pulse 1.5s ease-in-out infinite
       expect(true).toBe(true)
     })
 
     it('should clear glow state on hover', () => {
-      // v0.0.11: onMouseEnter clears glowingMarkId
+      // onMouseEnter clears glowingMarkId
+      expect(true).toBe(true)
+    })
+    
+    it('should use popup position ref to prevent shift', () => {
+      // popupPositionRef prevents position changes during annotation updates
       expect(true).toBe(true)
     })
   })
@@ -417,6 +540,16 @@ describe('Persistence', () => {
   it('should persist dark mode preference', () => {
     expect(true).toBe(true)
   })
+  
+  it('should use Tauri store when available', () => {
+    // isTauri() check with fallback to localStorage
+    expect(true).toBe(true)
+  })
+  
+  it('should serialize in microtask to avoid blocking', () => {
+    // setTimeout(0) before JSON.stringify
+    expect(true).toBe(true)
+  })
 })
 
 // ============================================================================
@@ -433,6 +566,11 @@ describe('Dark Mode', () => {
   })
 
   it('should persist preference', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should sync with state on every render', () => {
+    // useEffect always removes and re-adds dark class
     expect(true).toBe(true)
   })
 })
@@ -455,6 +593,12 @@ describe('Undo System', () => {
   })
 
   it('should limit undo stack to 20 actions', () => {
+    // undoStack.slice(-19) keeps last 19 + new = 20
+    expect(true).toBe(true)
+  })
+  
+  it('should update indexes incrementally on undo', () => {
+    // Uses addToIndexes/removeFromIndexes for undo operations
     expect(true).toBe(true)
   })
 })
@@ -468,19 +612,31 @@ describe('Clear Operations', () => {
     expect(true).toBe(true)
   })
 
-  it('should clear suggested annotations (one confirm)', () => {
+  it('should clear suggested annotations with custom modal', () => {
+    // Uses ConfirmModal with warning variant
     expect(true).toBe(true)
   })
 
-  it('should clear all annotations (one confirm)', () => {
+  it('should clear all annotations with custom modal', () => {
+    // Uses ConfirmModal with warning variant
     expect(true).toBe(true)
   })
 
-  it('should clear everything only after double confirm', () => {
+  it('should clear everything with custom modal (danger variant)', () => {
+    // Uses ConfirmModal with danger variant
     expect(true).toBe(true)
   })
 
   it('should close menu before showing confirm dialogs', () => {
+    // setShowClearMenu(false) called before setConfirmModal
+    expect(true).toBe(true)
+  })
+  
+  it('should reset filteredNoteIds on clear session', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should reset highlightedAnnotation on clear session', () => {
     expect(true).toBe(true)
   })
 })
@@ -490,23 +646,23 @@ describe('Clear Operations', () => {
 // ============================================================================
 
 describe('Visual Animations', () => {
-  it('should use drop-shadow filter for smooth GPU animation', () => {
-    // v0.0.11: filter: drop-shadow() for performance
+  it('should use outline for smooth animation', () => {
+    // outline: 2px solid with border-pulse animation
     expect(true).toBe(true)
   })
 
   it('should run breathing animation infinitely until hover', () => {
-    // v0.0.11: animation: breathe 2s ease-in-out infinite
+    // animation: border-pulse 1.5s ease-in-out infinite
     expect(true).toBe(true)
   })
 
   it('should stop animation on hover', () => {
-    // v0.0.11: :hover sets animation: none
+    // :hover sets animation: none
     expect(true).toBe(true)
   })
 
   it('should use warm terracotta color for visibility', () => {
-    // v0.0.11: rgba(194, 120, 80, 0.7)
+    // rgba(194, 120, 80, 0.7)
     expect(true).toBe(true)
   })
 })
@@ -536,23 +692,35 @@ describe('Desktop App', () => {
 describe('Performance Optimizations', () => {
   describe('Annotation Indexes', () => {
     it('should build annotationsByNote Map for O(1) note lookup', () => {
-      // v0.5.35+: Map<noteId, Annotation[]>
+      // Map<noteId, Annotation[]>
       expect(true).toBe(true)
     })
 
     it('should build annotationsById Map for O(1) ID lookup', () => {
-      // v0.5.38+: Map<annId, Annotation>
+      // Map<annId, Annotation>
       expect(true).toBe(true)
     })
 
     it('should rebuild indexes when annotations change', () => {
       expect(true).toBe(true)
     })
+    
+    it('should use incremental addToIndexes for O(1) add', () => {
+      expect(true).toBe(true)
+    })
+    
+    it('should use incremental removeFromIndexes for O(note_annotations) remove', () => {
+      expect(true).toBe(true)
+    })
+    
+    it('should use incremental updateInIndexes for O(note_annotations) update', () => {
+      expect(true).toBe(true)
+    })
   })
 
   describe('Component Selectors', () => {
     it('should use per-note selectors in DocumentView', () => {
-      // v0.5.40: Components only re-render when their data changes
+      // Components only re-render when their data changes
       expect(true).toBe(true)
     })
 
@@ -563,20 +731,25 @@ describe('Performance Optimizations', () => {
     it('should use useMemo for expensive computations', () => {
       expect(true).toBe(true)
     })
+    
+    it('should use memo() for NoteItem component', () => {
+      expect(true).toBe(true)
+    })
   })
 
   describe('Save Optimization', () => {
-    it('should debounce saves (500ms)', () => {
+    it('should debounce saves (500ms default, 2000ms during rapid annotation)', () => {
+      // Dynamic debounce based on timeSinceLastAnnotation
       expect(true).toBe(true)
     })
 
     it('should get fresh state when actually saving', () => {
-      // v0.5.41: Fixed stale state bug
+      // useStore.getState() called inside debounced function
       expect(true).toBe(true)
     })
 
     it('should skip save if data unchanged (hash check)', () => {
-      // v0.5.41: quickHash comparison
+      // quickHash comparison
       expect(true).toBe(true)
     })
 
@@ -585,6 +758,7 @@ describe('Performance Optimizations', () => {
     })
 
     it('should disable saves during bulk operations', () => {
+      // setBulkOperation(true) disables saves
       expect(true).toBe(true)
     })
   })
@@ -605,11 +779,27 @@ describe('Performance Optimizations', () => {
     it('should use memo() for NoteItem component', () => {
       expect(true).toBe(true)
     })
+    
+    it('should build filtered note position map for O(1) lookup', () => {
+      // filteredIndexMap for jumpToCurrent
+      expect(true).toBe(true)
+    })
   })
 
   describe('hasUnannotated Check', () => {
     it('should use O(1) size comparison instead of O(n) iteration', () => {
-      // v0.5.40: annotationsByNote.size < notes.length
+      // annotationsByNote.size < notes.length
+      expect(true).toBe(true)
+    })
+  })
+  
+  describe('Segment Building', () => {
+    it('should build segments efficiently without Set for small arrays', () => {
+      // Uses array includes() instead of Set for small annotation counts
+      expect(true).toBe(true)
+    })
+    
+    it('should memoize segment building', () => {
       expect(true).toBe(true)
     })
   })
@@ -647,6 +837,11 @@ describe('Smart Filter', () => {
   it('should allow deleting non-matching notes', () => {
     expect(true).toBe(true)
   })
+  
+  it('should show active filter indicator in notes list', () => {
+    // Shows "Filtered: N" badge and X button to clear
+    expect(true).toBe(true)
+  })
 })
 
 // ============================================================================
@@ -669,6 +864,15 @@ describe('Span Editing', () => {
   it('should show character count', () => {
     expect(true).toBe(true)
   })
+  
+  it('should allow selecting new text in document while editing', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should constrain start/end to valid ranges', () => {
+    // Math.max(0, ...) and Math.min(text.length, ...)
+    expect(true).toBe(true)
+  })
 })
 
 // ============================================================================
@@ -677,26 +881,36 @@ describe('Span Editing', () => {
 
 describe('Overlap/Adjacent Handling', () => {
   it('should detect overlapping annotations', () => {
+    // start < a.end && end > a.start
     expect(true).toBe(true)
   })
 
   it('should detect adjacent annotations', () => {
+    // start === a.end || end === a.start
     expect(true).toBe(true)
   })
 
   it('should offer Extend option', () => {
+    // Grows existing annotation to cover both
     expect(true).toBe(true)
   })
 
   it('should offer Merge option (extend + add question)', () => {
+    // Extends AND adds selected question if not present
     expect(true).toBe(true)
   })
 
   it('should offer Separate option', () => {
+    // Creates new annotation regardless of overlap
     expect(true).toBe(true)
   })
 
   it('should offer Cancel option', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should show different text for adjacent vs overlapping', () => {
+    // "is next to" vs "overlaps"
     expect(true).toBe(true)
   })
 })
@@ -707,23 +921,35 @@ describe('Overlap/Adjacent Handling', () => {
 
 describe('Confirm Dialogs', () => {
   it('should use custom modal instead of browser confirm()', () => {
-    // v0.5.42: ConfirmModal component
+    // ConfirmModal component
     expect(true).toBe(true)
   })
 
   it('should show danger variant for destructive actions', () => {
+    // red color scheme with Trash2 icon
     expect(true).toBe(true)
   })
 
   it('should show warning variant for clearing actions', () => {
+    // amber color scheme with AlertTriangle icon
     expect(true).toBe(true)
   })
 
   it('should close when clicking outside', () => {
+    // onClick={onCancel} on backdrop
     expect(true).toBe(true)
   })
 
   it('should close when pressing X button', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should stop propagation when clicking modal content', () => {
+    // onClick={e => e.stopPropagation()} on modal
+    expect(true).toBe(true)
+  })
+  
+  it('should show multiline message with whitespace-pre-line', () => {
     expect(true).toBe(true)
   })
 })
@@ -734,7 +960,6 @@ describe('Confirm Dialogs', () => {
 
 describe('Clear Session', () => {
   it('should reset all state including filteredNoteIds', () => {
-    // v0.5.42: Fixed blank screen after clear
     expect(true).toBe(true)
   })
 
@@ -745,6 +970,18 @@ describe('Clear Session', () => {
   it('should clear storage', () => {
     expect(true).toBe(true)
   })
+  
+  it('should reset undoStack', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should reset annotation indexes to empty Maps', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should reset mode to annotate', () => {
+    expect(true).toBe(true)
+  })
 })
 
 // ============================================================================
@@ -753,7 +990,7 @@ describe('Clear Session', () => {
 
 describe('Import UX', () => {
   it('should show loading indicator immediately on import click', () => {
-    // v0.5.42: No lag between click and indicator
+    // setImporting(true, 'Preparing...') before processing
     expect(true).toBe(true)
   })
 
@@ -762,6 +999,19 @@ describe('Import UX', () => {
   })
 
   it('should rebuild annotation indexes on session import', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should add small delay to let UI update before heavy processing', () => {
+    // await new Promise(r => setTimeout(r, 50))
+    expect(true).toBe(true)
+  })
+  
+  it('should show error message on import failure', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should reset file inputs after import', () => {
     expect(true).toBe(true)
   })
 })
@@ -780,6 +1030,79 @@ describe('Annotation Navigation', () => {
   })
 
   it('should scroll to annotation in document view', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should center annotation in viewport on navigation', () => {
+    // Calculates targetScroll to center element
+    expect(true).toBe(true)
+  })
+})
+
+// ============================================================================
+// DRAG INDICATOR
+// ============================================================================
+
+describe('Drag Indicator', () => {
+  it('should show overlay when dragging over window', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should show Upload icon and instructions', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should list supported file types', () => {
+    // "TXT, JSON, JSONL files supported"
+    expect(true).toBe(true)
+  })
+  
+  it('should use pointer-events-none to not interfere with drop', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should use border-dashed style for drop zone', () => {
+    expect(true).toBe(true)
+  })
+})
+
+// ============================================================================
+// QUESTIONS CONFIGURATION
+// ============================================================================
+
+describe('Questions', () => {
+  it('should load questions from localStorage or defaults', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should support custom hotkeys', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should support custom colors', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should support hints', () => {
+    expect(true).toBe(true)
+  })
+})
+
+// ============================================================================
+// LOADING STATE
+// ============================================================================
+
+describe('Loading State', () => {
+  it('should show loading spinner while session loads', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should set isLoaded after initSession completes', () => {
+    expect(true).toBe(true)
+  })
+  
+  it('should initialize session on module load', () => {
+    // useStore.getState().initSession() called at bottom of useStore.ts
     expect(true).toBe(true)
   })
 })

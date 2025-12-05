@@ -151,8 +151,8 @@ export function NotesList() {
   const filtered = useMemo(() => {
     let candidates = notes
     
-    // Apply smart filter first if active
-    if (filteredNoteIds) {
+    // Apply smart filter first if active (check for non-null AND non-empty Set)
+    if (filteredNoteIds && filteredNoteIds.size > 0) {
       candidates = candidates.filter(n => filteredNoteIds.has(n.id))
     }
     
@@ -213,8 +213,13 @@ export function NotesList() {
       setFilter('all')
       setTypeFilter(null)
       setShowTypeFilter(false)
+      setShowSmartFilter(false)
+      // Also clear the global filter if notes are empty
+      if (filteredNoteIds) {
+        setFilteredNoteIds(null)
+      }
     }
-  }, [notes.length])
+  }, [notes.length, filteredNoteIds, setFilteredNoteIds])
   
   // Keep page in bounds when filter changes
   useEffect(() => {
@@ -295,17 +300,17 @@ export function NotesList() {
         <button
           onClick={() => setShowSmartFilter(true)}
           className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] rounded border transition-all ${
-            filteredNoteIds
+            filteredNoteIds && filteredNoteIds.size > 0
               ? 'bg-maple-100 dark:bg-maple-700 border-maple-400 dark:border-maple-500 text-maple-700 dark:text-maple-200 font-medium'
               : 'border-maple-200 dark:border-maple-600 text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'
           }`}
         >
           <Zap size={12} />
-          {filteredNoteIds ? `Filtered: ${filteredNoteIds.size}` : 'Smart Filter'}
+          {filteredNoteIds && filteredNoteIds.size > 0 ? `Filtered: ${filteredNoteIds.size}` : 'Smart Filter'}
         </button>
 
         {/* Active smart filter indicator */}
-        {filteredNoteIds && (
+        {filteredNoteIds && filteredNoteIds.size > 0 && (
           <div className="flex items-center gap-1 bg-maple-100 dark:bg-maple-700 text-maple-600 dark:text-maple-300 rounded px-2 py-1">
             <span className="text-[9px] flex-1">{filteredNoteIds.size} of {notes.length} notes</span>
             <button onClick={clearSmartFilter} className="hover:text-maple-800 dark:hover:text-maple-100">
@@ -441,7 +446,7 @@ export function NotesList() {
         
         {paged.length === 0 && (
           <div className="p-4 text-center text-[10px] text-maple-400 dark:text-maple-500">
-            {search || typeFilter || filteredNoteIds ? 'No matches' : 'No notes'}
+            {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) ? 'No matches' : 'No notes'}
           </div>
         )}
       </div>

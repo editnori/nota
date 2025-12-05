@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { X, Search, ChevronRight, Ban, Plus, Trash2 } from 'lucide-react'
 import { loadQuestions } from '../lib/questions'
+import { ConfirmModal } from './ConfirmModal'
 import type { Note } from '../lib/types'
 
 // Default patterns per question
@@ -79,6 +80,7 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
   const [expanded, setExpanded] = useState<string | null>(null)
   const [autoTag, setAutoTag] = useState(false)
   const [newTerm, setNewTerm] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Persist state on changes
   useEffect(() => {
@@ -368,12 +370,7 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
           <div className="flex items-center gap-2">
             {onDeleteNonMatching && matchingNotes.size > 0 && matchingNotes.size < notes.length && (
               <button 
-                onClick={() => {
-                  if (confirm(`Delete ${notes.length - matchingNotes.size} non-matching notes? This cannot be undone.`)) {
-                    onDeleteNonMatching(matchingNotes)
-                    onClose()
-                  }
-                }} 
+                onClick={() => setShowDeleteConfirm(true)} 
                 className="flex items-center gap-1 px-2 py-1 text-[10px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
                 title="Permanently delete notes that don't match filter"
               >
@@ -386,6 +383,20 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        title="Delete Non-Matching Notes"
+        message={`This will permanently delete ${notes.length - matchingNotes.size} notes that don't match the current filter.\n\nThis action cannot be undone.`}
+        confirmText={`Delete ${notes.length - matchingNotes.size} Notes`}
+        variant="danger"
+        onConfirm={() => {
+          onDeleteNonMatching?.(matchingNotes)
+          setShowDeleteConfirm(false)
+          onClose()
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   )
 }

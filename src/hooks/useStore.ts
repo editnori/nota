@@ -52,13 +52,13 @@ interface State {
 }
 
 // Build annotation indexes
-interface AnnotationIndexes {
+export interface AnnotationIndexes {
   byNote: Map<string, Annotation[]>
   byId: Map<string, Annotation>
 }
 
-// Full rebuild - only use when loading or clearing
-function buildAnnotationIndexes(annotations: Annotation[]): AnnotationIndexes {
+// Full rebuild - exported for session import
+export function buildAnnotationIndexes(annotations: Annotation[]): AnnotationIndexes {
   const byNote = new Map<string, Annotation[]>()
   const byId = new Map<string, Annotation>()
   
@@ -417,6 +417,9 @@ export const useStore = create<State>((set, get) => ({
 
   clearSession: async () => {
     await clearStorage()
+    // Reset saved hash to prevent stale comparison
+    lastSavedHash = ''
+    // Reset all state in a single batch
     set({
       notes: [],
       annotations: [],
@@ -428,7 +431,9 @@ export const useStore = create<State>((set, get) => ({
       lastSaved: null,
       undoStack: [],
       filteredNoteIds: null,
-      highlightedAnnotation: null
+      highlightedAnnotation: null,
+      isImporting: false,
+      importProgress: ''
     })
   },
 

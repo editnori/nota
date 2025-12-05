@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useStore } from './hooks/useStore'
 import { useKeyboard } from './hooks/useKeyboard'
 import { Header } from './components/Header'
@@ -8,15 +8,13 @@ import { ReviewView } from './components/ReviewView'
 import { FormatView } from './components/FormatView'
 import { QuestionPicker } from './components/QuestionPicker'
 import { AnnotationList } from './components/AnnotationList'
-import { importFromDrop } from './lib/importers'
-import { setBulkOperation } from './hooks/useStore'
+import { importFromDrop, handleImportWithProgress } from './lib/importers'
 import { Loader2, Upload } from 'lucide-react'
 
 export default function App() {
   const { 
     notes, mode, currentNoteIndex, selectedQuestion, addAnnotation, 
-    addNotes, setNotes, isLoaded, darkMode, 
-    isImporting, importProgress, setImporting 
+    isLoaded, darkMode, isImporting, importProgress, setImporting 
   } = useStore()
   const [isDragging, setIsDragging] = useState(false)
   const dragCountRef = useRef(0)
@@ -31,22 +29,12 @@ export default function App() {
     }
   }, [darkMode])
 
-  // Handle drag-drop folders
-  async function handleDrop(e: React.DragEvent) {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCountRef.current = 0
-    setIsDragging(false)
+  // Handle drag-drop import - uses shared import handler
+  const handleDropImport = useCallback(async (dataTransfer: DataTransfer) => {
+    if (!dataTransfer.items || dataTransfer.items.length === 0) return
     
-    if (!e.dataTransfer.items || e.dataTransfer.items.length === 0) return
-    
-    // Show loading immediately
-    setImporting(true, 'Preparing...')
-    
-    try {
-      setBulkOperation(true) // Disable saves during import
-      
-      const imported = await importFromDrop(e.dataTransfer, (progress) => {
+    await handleImportWithProgress(() => 
+      importFromDrop(dataTransfer, (progress) => {
         if (progress.phase === 'scanning') {
           setImporting(true, 'Scanning...')
         } else if (progress.phase === 'processing') {
@@ -55,33 +43,14 @@ export default function App() {
           setImporting(true, `${progress.current} notes`)
         }
       })
-      
-      if (imported.length > 0) {
-        // Use requestIdleCallback for smoother UI during large imports
-        if (notes.length > 0) {
-          addNotes(imported)
-        } else {
-          setNotes(imported)
-        }
-        setBulkOperation(false) // Re-enable saves
-        setTimeout(() => setImporting(false), 300)
-      } else {
-        setBulkOperation(false)
-        setImporting(true, 'No valid files found')
-        setTimeout(() => setImporting(false), 800)
-      }
-    } catch (err) {
-      console.error('Import error:', err)
-      setBulkOperation(false)
-      setImporting(true, 'Import failed')
-      setTimeout(() => setImporting(false), 1000)
-    }
-  }
+    )
+  }, [setImporting])
 
-  // Use window-level drag events for more reliable capture
+  // Use window-level drag events for reliable capture
   useEffect(() => {
     function onDragEnter(e: DragEvent) {
       e.preventDefault()
+      e.stopPropagation()
       dragCountRef.current++
       if (dragCountRef.current === 1) {
         setIsDragging(true)
@@ -90,6 +59,7 @@ export default function App() {
     
     function onDragOver(e: DragEvent) {
       e.preventDefault()
+      e.stopPropagation()
       // Required to allow drop
       if (e.dataTransfer) {
         e.dataTransfer.dropEffect = 'copy'
@@ -98,6 +68,7 @@ export default function App() {
     
     function onDragLeave(e: DragEvent) {
       e.preventDefault()
+      e.stopPropagation()
       dragCountRef.current--
       if (dragCountRef.current <= 0) {
         dragCountRef.current = 0
@@ -105,10 +76,16 @@ export default function App() {
       }
     }
     
-    function onDrop(e: DragEvent) {
+    async function onDrop(e: DragEvent) {
       e.preventDefault()
+      e.stopPropagation()
       dragCountRef.current = 0
       setIsDragging(false)
+      
+      // Process the dropped files
+      if (e.dataTransfer) {
+        handleDropImport(e.dataTransfer)
+      }
     }
     
     window.addEventListener('dragenter', onDragEnter)
@@ -122,7 +99,7 @@ export default function App() {
       window.removeEventListener('dragleave', onDragLeave)
       window.removeEventListener('drop', onDrop)
     }
-  }, [])
+  }, [handleDropImport])
   
   const handleTagSelection = useCallback((questionId: string) => {
     const sel = window.getSelection()
@@ -185,11 +162,7 @@ export default function App() {
   }
 
   return (
-    <div 
-      className="h-screen flex flex-col bg-maple-50 dark:bg-maple-900 relative"
-      onDrop={handleDrop}
-      onDragOver={(e) => e.preventDefault()}
-    >
+    <div className="h-screen flex flex-col bg-maple-50 dark:bg-maple-900 relative">
       <Header />
       
       <div className="flex-1 flex min-h-0">
@@ -211,13 +184,15 @@ export default function App() {
         {mode === 'format' && <FormatView />}
       </div>
 
-      {/* Drag overlay */}
+      {/* Drag overlay - more visible indicator */}
       {isDragging && (
-        <div className="absolute inset-0 bg-maple-600/20 dark:bg-maple-400/20 flex items-center justify-center z-50 pointer-events-none border-4 border-dashed border-maple-500 dark:border-maple-400 m-2 rounded-xl">
-          <div className="bg-white dark:bg-maple-800 rounded-xl p-8 shadow-2xl text-center">
-            <Upload className="w-12 h-12 text-maple-600 dark:text-maple-300 mx-auto mb-3" />
-            <p className="text-lg font-medium text-maple-700 dark:text-maple-200">Drop files or folders here</p>
-            <p className="text-sm text-maple-500 dark:text-maple-400 mt-1">TXT, JSON, JSONL files supported</p>
+        <div className="fixed inset-0 bg-maple-600/30 dark:bg-maple-400/30 backdrop-blur-sm flex items-center justify-center z-[60] pointer-events-none">
+          <div className="border-4 border-dashed border-maple-600 dark:border-maple-400 rounded-2xl p-12 m-8 bg-maple-100/90 dark:bg-maple-800/90 shadow-2xl text-center animate-pulse">
+            <div className="bg-maple-600 dark:bg-maple-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Upload className="w-10 h-10 text-white" />
+            </div>
+            <p className="text-xl font-semibold text-maple-800 dark:text-maple-100">Drop files or folders here</p>
+            <p className="text-sm text-maple-600 dark:text-maple-300 mt-2">Supports: TXT, JSON, JSONL</p>
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useStore } from '../hooks/useStore'
 import { useDebounce } from '../hooks/useDebounce'
 import { loadQuestions, getQuestion } from '../lib/questions'
+import { ConfirmModal } from './ConfirmModal'
 import { X, ExternalLink, Search, Wand2, Loader2, MessageSquare } from 'lucide-react'
 
 const PAGE_SIZE = 50
@@ -17,6 +18,7 @@ export function ReviewView() {
   const [excludedMatches, setExcludedMatches] = useState<Set<string>>(new Set())
   const [page, setPage] = useState(0)
   const [highlightedCard, setHighlightedCard] = useState<string | null>(null)
+  const [bulkTagConfirm, setBulkTagConfirm] = useState<{ questionId: string; name: string } | null>(null)
   const questions = loadQuestions()
 
   // Debounce searches
@@ -161,18 +163,24 @@ export function ReviewView() {
 
   function handleBulkTag(questionId: string) {
     if (activeMatches.length === 0) return
-    if (!confirm(`Tag ${activeMatches.length} matches as "${getQuestion(questionId)?.name}"?`)) return
+    const q = getQuestion(questionId)
+    setBulkTagConfirm({ questionId, name: q?.name || questionId })
+  }
+  
+  function confirmBulkTag() {
+    if (!bulkTagConfirm) return
     
     addBulkAnnotations(activeMatches.map(m => ({
       noteId: m.noteId,
       start: m.start,
       end: m.end,
       text: m.text,
-      questions: [questionId]
+      questions: [bulkTagConfirm.questionId]
     })))
     setBulkSearch('')
     setExcludedMatches(new Set())
     setShowBulkTag(false)
+    setBulkTagConfirm(null)
   }
 
   // Scroll to card when highlighted
@@ -517,6 +525,16 @@ export function ReviewView() {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={!!bulkTagConfirm}
+        title="Bulk Tag Matches"
+        message={`Tag ${activeMatches.length} matches as "${bulkTagConfirm?.name}"?\n\nThis will create ${activeMatches.length} suggested annotations.`}
+        confirmText={`Tag ${activeMatches.length} Matches`}
+        variant="default"
+        onConfirm={confirmBulkTag}
+        onCancel={() => setBulkTagConfirm(null)}
+      />
     </div>
   )
 }

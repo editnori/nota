@@ -1,7 +1,8 @@
 import type { Note } from './types'
+import { useStore, setBulkOperation } from '../hooks/useStore'
 
-// Auto-format note text during import
-function formatNoteText(raw: string): string {
+// Auto-format note text during import - exported for use in FormatView
+export function formatNoteText(raw: string): string {
   let text = raw
 
   // normalize line endings
@@ -114,7 +115,40 @@ export interface ImportProgress {
 
 type ProgressCallback = (progress: ImportProgress) => void
 
-// Unified import function for both file input and drag-drop
+// Shared file processing - used by both importFiles and importFromDrop
+async function processFileWithFolder(
+  file: File, 
+  folder: string,
+  notes: Note[]
+): Promise<void> {
+  try {
+    if (file.name.endsWith('.txt')) {
+      const rawText = await file.text()
+      const text = formatNoteText(rawText)
+      notes.push({
+        id: file.name.replace(/\.txt$/, ''),
+        text,
+        meta: { source: file.name, type: folder || undefined }
+      })
+    } else if (file.name.endsWith('.json')) {
+      const imported = await importJSON(file)
+      imported.forEach(n => {
+        if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
+        notes.push(n)
+      })
+    } else if (file.name.endsWith('.jsonl')) {
+      const imported = await importJSONL(file)
+      imported.forEach(n => {
+        if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
+        notes.push(n)
+      })
+    }
+  } catch (err) {
+    console.error(`Failed to import ${file.name}:`, err)
+  }
+}
+
+// Unified import function for file input
 export async function importFiles(
   files: FileList | File[],
   onProgress?: ProgressCallback
@@ -150,31 +184,7 @@ export async function importFiles(
         currentFolder: folder || undefined
       })
       
-      try {
-        if (file.name.endsWith('.txt')) {
-          const rawText = await file.text()
-          const text = formatNoteText(rawText)
-          notes.push({
-            id: file.name.replace(/\.txt$/, ''),
-            text,
-            meta: { source: file.name, type: folder || undefined }
-          })
-        } else if (file.name.endsWith('.json')) {
-          const imported = await importJSON(file)
-          imported.forEach(n => {
-            if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
-            notes.push(n)
-          })
-        } else if (file.name.endsWith('.jsonl')) {
-          const imported = await importJSONL(file)
-          imported.forEach(n => {
-            if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
-            notes.push(n)
-          })
-        }
-      } catch (err) {
-        console.error(`Failed to import ${file.name}:`, err)
-      }
+      await processFileWithFolder(file, folder, notes)
     }
   }
   
@@ -187,7 +197,6 @@ export async function importFromDrop(
   dataTransfer: DataTransfer,
   onProgress?: ProgressCallback
 ): Promise<Note[]> {
-  const notes: Note[] = []
   const entries: FileSystemEntry[] = []
   
   // Get entries from DataTransfer
@@ -229,6 +238,7 @@ export async function importFromDrop(
     await collectFiles(entry, '')
   }
   
+  const notes: Note[] = []
   const total = allFiles.length
   let processed = 0
   
@@ -242,35 +252,57 @@ export async function importFromDrop(
       currentFolder: folder || undefined
     })
     
-    try {
-      if (file.name.endsWith('.txt')) {
-        const rawText = await file.text()
-        const text = formatNoteText(rawText)
-        notes.push({
-          id: file.name.replace(/\.txt$/, ''),
-          text,
-          meta: { source: file.name, type: folder || undefined }
-        })
-      } else if (file.name.endsWith('.json')) {
-        const imported = await importJSON(file)
-        imported.forEach(n => {
-          if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
-          notes.push(n)
-        })
-      } else if (file.name.endsWith('.jsonl')) {
-        const imported = await importJSONL(file)
-        imported.forEach(n => {
-          if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
-          notes.push(n)
-        })
-      }
-    } catch (err) {
-      console.error(`Failed to import ${file.name}:`, err)
-    }
+    await processFileWithFolder(file, folder, notes)
   }
   
   onProgress?.({ phase: 'done', current: notes.length, total: notes.length })
   return notes
+}
+
+/**
+ * Unified import handler - handles all the common import logic
+ * Used by both App.tsx (drag-drop) and Header.tsx (file input)
+ */
+export async function handleImportWithProgress(
+  importFn: () => Promise<Note[]>,
+  options: {
+    onProgress?: (msg: string) => void
+    onSuccess?: (notes: Note[]) => void
+    onError?: (error: Error) => void
+  } = {}
+): Promise<void> {
+  const { setImporting, notes: currentNotes, addNotes, setNotes } = useStore.getState()
+  
+  setImporting(true, 'Preparing...')
+  
+  try {
+    setBulkOperation(true)
+    
+    const imported = await importFn()
+    
+    if (imported.length > 0) {
+      // Add or set notes based on whether we have existing notes
+      if (currentNotes.length > 0) {
+        addNotes(imported)
+      } else {
+        setNotes(imported)
+      }
+      setBulkOperation(false)
+      setImporting(true, `${imported.length} notes imported`)
+      options.onSuccess?.(imported)
+      setTimeout(() => setImporting(false), 300)
+    } else {
+      setBulkOperation(false)
+      setImporting(true, 'No valid files found')
+      setTimeout(() => setImporting(false), 800)
+    }
+  } catch (err) {
+    console.error('Import error:', err)
+    setBulkOperation(false)
+    setImporting(true, 'Import failed')
+    options.onError?.(err as Error)
+    setTimeout(() => setImporting(false), 1000)
+  }
 }
 
 function normalizeNote(raw: Record<string, unknown>): Note {

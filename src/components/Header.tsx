@@ -1,8 +1,8 @@
-import { useStore, setBulkOperation } from '../hooks/useStore'
+import { useStore, buildAnnotationIndexes } from '../hooks/useStore'
 import { exportJSON, exportCSV, downloadFile, exportSession, importSession } from '../lib/exporters'
 import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown, Moon, Sun } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { importFiles } from '../lib/importers'
+import { importFiles, handleImportWithProgress } from '../lib/importers'
 import { SettingsModal } from './SettingsModal'
 import { ConfirmModal } from './ConfirmModal'
 import { loadQuestions } from '../lib/questions'
@@ -21,8 +21,6 @@ export function Header() {
   const notes = useStore(s => s.notes)
   const mode = useStore(s => s.mode)
   const setMode = useStore(s => s.setMode)
-  const setNotes = useStore(s => s.setNotes)
-  const addNotes = useStore(s => s.addNotes)
   const clearSession = useStore(s => s.clearSession)
   const clearNoteAnnotations = useStore(s => s.clearNoteAnnotations)
   const clearAllAnnotations = useStore(s => s.clearAllAnnotations)
@@ -89,21 +87,35 @@ export function Header() {
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
-  // Unified import handler for both files and folders
+  // Show loading immediately when user clicks import (before file dialog)
+  function handleImportClick() {
+    setImporting(true, 'Select files...')
+  }
+  
+  // Hide loading if user cancels file dialog
+  function handleImportBlur() {
+    // Small delay to allow onChange to fire first if files were selected
+    setTimeout(() => {
+      const files = fileInputRef.current?.files || folderInputRef.current?.files
+      if (!files || files.length === 0) {
+        setImporting(false)
+      }
+    }, 300)
+  }
+
+  // Unified import handler for both files and folders - uses shared handler
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
-    if (!files || files.length === 0) return
+    if (!files || files.length === 0) {
+      setImporting(false)
+      return
+    }
 
-    // Show loading immediately
-    setImporting(true, 'Preparing...')
-    
-    // Small delay to let UI update before heavy processing
+    // Small delay to ensure UI updates before heavy processing
     await new Promise(r => setTimeout(r, 50))
 
-    try {
-      setBulkOperation(true) // Disable saves during import
-      
-      const imported = await importFiles(files, (progress) => {
+    await handleImportWithProgress(() => 
+      importFiles(files, (progress) => {
         if (progress.phase === 'scanning') {
           setImporting(true, 'Scanning...')
         } else if (progress.phase === 'processing') {
@@ -112,26 +124,7 @@ export function Header() {
           setImporting(true, `${progress.current} notes`)
         }
       })
-
-      if (imported.length > 0) {
-        if (notes.length > 0) {
-          addNotes(imported)
-        } else {
-          setNotes(imported)
-        }
-        setBulkOperation(false) // Re-enable saves
-        setTimeout(() => setImporting(false), 300)
-      } else {
-        setBulkOperation(false)
-        setImporting(true, 'No valid files found')
-        setTimeout(() => setImporting(false), 800)
-      }
-    } catch (err) {
-      console.error('Import error:', err)
-      setBulkOperation(false)
-      setImporting(true, 'Import failed')
-      setTimeout(() => setImporting(false), 1500)
-    }
+    )
 
     // Reset inputs
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -149,21 +142,14 @@ export function Header() {
       const result = importSession(text)
       
       if (result.notes.length > 0 || result.annotations.length > 0) {
-        // Build annotation indexes
-        const annotationsByNote = new Map<string, typeof result.annotations>()
-        const annotationsById = new Map<string, typeof result.annotations[0]>()
-        for (const ann of result.annotations) {
-          const existing = annotationsByNote.get(ann.noteId)
-          if (existing) existing.push(ann)
-          else annotationsByNote.set(ann.noteId, [ann])
-          annotationsById.set(ann.id, ann)
-        }
+        // Build annotation indexes using shared function
+        const indexes = buildAnnotationIndexes(result.annotations)
         
         useStore.setState({
           notes: result.notes,
           annotations: result.annotations,
-          annotationsByNote,
-          annotationsById,
+          annotationsByNote: indexes.byNote,
+          annotationsById: indexes.byId,
           currentNoteIndex: 0,
           filteredNoteIds: null
         })
@@ -310,9 +296,28 @@ export function Header() {
         </div>
       )}
 
-      <input ref={fileInputRef} type="file" multiple accept=".json,.jsonl,.txt" onChange={handleImport} className="hidden" />
-      {/* @ts-expect-error webkitdirectory is non-standard but widely supported */}
-      <input ref={folderInputRef} type="file" webkitdirectory="" directory="" multiple onChange={handleImport} className="hidden" />
+      <input 
+        ref={fileInputRef} 
+        type="file" 
+        multiple 
+        accept=".json,.jsonl,.txt" 
+        onChange={handleImport} 
+        onClick={handleImportClick}
+        onBlur={handleImportBlur}
+        className="hidden" 
+      />
+      <input 
+        ref={folderInputRef} 
+        type="file" 
+        // @ts-expect-error webkitdirectory is non-standard but widely supported
+        webkitdirectory="" 
+        directory="" 
+        multiple 
+        onChange={handleImport}
+        onClick={handleImportClick}
+        onBlur={handleImportBlur}
+        className="hidden" 
+      />
       <input ref={sessionInputRef} type="file" accept=".json" onChange={handleSessionImport} className="hidden" />
 
       <div className="relative">
@@ -326,20 +331,31 @@ export function Header() {
         {showImportMenu && (
           <div className="absolute right-0 top-full mt-1 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg z-50 overflow-hidden min-w-[160px]" onClick={e => e.stopPropagation()}>
             <button
-              onClick={() => { fileInputRef.current?.click(); setShowImportMenu(false) }}
+              onClick={() => { 
+                setShowImportMenu(false)
+                // Small delay to close menu before opening dialog
+                setTimeout(() => fileInputRef.current?.click(), 50)
+              }}
               className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 dark:text-maple-200"
             >
               Import Files
             </button>
             <button
-              onClick={() => { folderInputRef.current?.click(); setShowImportMenu(false) }}
+              onClick={() => { 
+                setShowImportMenu(false)
+                // Small delay to close menu before opening dialog
+                setTimeout(() => folderInputRef.current?.click(), 50)
+              }}
               className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 dark:text-maple-200"
             >
               Import Folder
             </button>
             <div className="h-px bg-maple-100 dark:bg-maple-700" />
             <button
-              onClick={() => { sessionInputRef.current?.click(); setShowImportMenu(false) }}
+              onClick={() => { 
+                setShowImportMenu(false)
+                setTimeout(() => sessionInputRef.current?.click(), 50)
+              }}
               className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 text-amber-700 dark:text-amber-400"
             >
               Load Shared Session

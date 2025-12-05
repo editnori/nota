@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X, Plus, Trash2, RotateCcw } from 'lucide-react'
 import { loadQuestions, saveQuestions, DEFAULT_QUESTIONS } from '../lib/questions'
+import { ConfirmModal } from './ConfirmModal'
 import type { Question } from '../lib/types'
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 
 export function SettingsModal({ onClose }: Props) {
   const [questions, setQuestions] = useState<Question[]>(loadQuestions)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
 
   function handleSave() {
     saveQuestions(questions)
@@ -17,9 +19,12 @@ export function SettingsModal({ onClose }: Props) {
   }
 
   function handleReset() {
-    if (confirm('Reset to default questions?')) {
-      setQuestions(DEFAULT_QUESTIONS)
-    }
+    setShowResetConfirm(true)
+  }
+  
+  function confirmReset() {
+    setQuestions(DEFAULT_QUESTIONS)
+    setShowResetConfirm(false)
   }
 
   function handleUpdate(id: string, field: keyof Question, value: string) {
@@ -139,6 +144,16 @@ export function SettingsModal({ onClose }: Props) {
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showResetConfirm}
+        title="Reset Questions"
+        message="This will reset all questions to their default values.\n\nAny custom questions you've added will be lost."
+        confirmText="Reset to Defaults"
+        variant="warning"
+        onConfirm={confirmReset}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </div>
   )
 }
