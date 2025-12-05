@@ -262,6 +262,9 @@ export async function importFromDrop(
 /**
  * Unified import handler - handles all the common import logic
  * Used by both App.tsx (drag-drop) and Header.tsx (file input)
+ * 
+ * Note: Gets fresh state at decision time to avoid stale closure issues
+ * when clearSession is called during import.
  */
 export async function handleImportWithProgress(
   importFn: () => Promise<Note[]>,
@@ -271,7 +274,7 @@ export async function handleImportWithProgress(
     onError?: (error: Error) => void
   } = {}
 ): Promise<void> {
-  const { setImporting, notes: currentNotes, addNotes, setNotes } = useStore.getState()
+  const { setImporting } = useStore.getState()
   
   setImporting(true, 'Preparing...')
   
@@ -281,6 +284,10 @@ export async function handleImportWithProgress(
     const imported = await importFn()
     
     if (imported.length > 0) {
+      // Get FRESH state at decision time to handle case where
+      // clearSession was called during the async import operation
+      const { notes: currentNotes, addNotes, setNotes } = useStore.getState()
+      
       // Add or set notes based on whether we have existing notes
       if (currentNotes.length > 0) {
         addNotes(imported)

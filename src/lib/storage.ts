@@ -75,10 +75,9 @@ export async function saveSession(data: SessionData): Promise<boolean> {
     }
   }
   
-  // Fallback to localStorage - serialize in microtask to avoid blocking
+  // Fallback to localStorage - use requestIdleCallback for non-blocking serialization
   return new Promise((resolve) => {
-    // Use setTimeout(0) to yield to the event loop before heavy JSON.stringify
-    setTimeout(() => {
+    const doSave = () => {
       try {
         const json = JSON.stringify(data)
         localStorage.setItem(STORAGE_KEY, json)
@@ -86,7 +85,16 @@ export async function saveSession(data: SessionData): Promise<boolean> {
       } catch {
         resolve(false)
       }
-    }, 0)
+    }
+    
+    // Use requestIdleCallback if available to avoid blocking UI during heavy serialization
+    // This is especially important for large datasets (10k+ notes, 50k+ annotations)
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(doSave, { timeout: 5000 })
+    } else {
+      // Fallback: use setTimeout to at least yield to event loop
+      setTimeout(doSave, 0)
+    }
   })
 }
 

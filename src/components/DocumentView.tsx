@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useMemo, useEffect, useDeferredValue } from 'react'
+import { useCallback, useRef, useState, useMemo, useEffect } from 'react'
 import { useStore } from '../hooks/useStore'
 import { getQuestion, loadQuestions } from '../lib/questions'
 import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus, Check, Trash2 } from 'lucide-react'
@@ -41,13 +41,12 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const note = notes[currentNoteIndex]
   
   // Get annotations for current note only - memoized for performance
-  const noteAnnotationsRaw = useMemo(() => {
+  // Note: We rely on annotation batching (16ms) for performance instead of useDeferredValue
+  // which was causing highlights to not appear during rapid annotation
+  const noteAnnotations = useMemo(() => {
     if (!note) return []
     return annotationsByNote.get(note.id) || []
   }, [note?.id, annotationsByNote])
-  
-  // Defer annotation updates to keep UI responsive during rapid highlighting
-  const noteAnnotations = useDeferredValue(noteAnnotationsRaw)
   
   // For hasUnannotated check - just need size comparison
   const annotationsByNoteSize = annotationsByNote.size
@@ -194,9 +193,15 @@ export function DocumentView({ onCreateAnnotation }: Props) {
       return
     }
 
+    // Clear any existing overlap prompt before creating new annotation
+    // This ensures new selections dismiss stale prompts immediately
+    if (overlapPrompt) {
+      setOverlapPrompt(null)
+    }
+    
     onCreateAnnotation(text, start, end)
     window.getSelection()?.removeAllRanges()
-  }, [getSelectionCoords, onCreateAnnotation, spanEditor, noteAnnotations])
+  }, [getSelectionCoords, onCreateAnnotation, spanEditor, noteAnnotations, overlapPrompt])
 
   function handleOverlapExtend() {
     if (!overlapPrompt || !note) return
@@ -333,7 +338,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
       <div className="flex-1 flex items-center justify-center bg-maple-50 dark:bg-maple-900">
         <div className="text-center p-8">
           <div className="w-16 h-16 bg-maple-200 dark:bg-maple-700 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">📝</span>
+            <span className="text-2xl text-maple-400 dark:text-maple-500">N</span>
           </div>
           <p className="text-maple-600 dark:text-maple-300 font-medium mb-2">No notes loaded</p>
           <p className="text-sm text-maple-500 dark:text-maple-400">Import or drag-drop notes to begin</p>
@@ -431,6 +436,13 @@ export function DocumentView({ onCreateAnnotation }: Props) {
               ref={docRef}
               className="leading-[1.8] text-maple-700 dark:text-maple-200 whitespace-pre-wrap font-mono selection:bg-amber-200 dark:selection:bg-amber-700"
               style={{ fontSize: `${fontSize}px` }}
+              onMouseDown={() => {
+                // Dismiss overlap prompt when starting new selection
+                // This prevents stale prompts from blocking new highlights
+                if (overlapPrompt && !justOpenedPopupRef.current) {
+                  setOverlapPrompt(null)
+                }
+              }}
               onMouseUp={handleTextSelect}
             >
               {segments.map((seg, i) => {

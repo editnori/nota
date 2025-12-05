@@ -8,7 +8,14 @@ import { X, ExternalLink, Search, Wand2, Loader2, MessageSquare } from 'lucide-r
 const PAGE_SIZE = 50
 
 export function ReviewView() {
-  const { notes, annotations, removeAnnotation, setMode, setCurrentNoteIndex, addBulkAnnotations, setHighlightedAnnotation } = useStore()
+  // Use individual selectors to minimize re-renders
+  const notes = useStore(s => s.notes)
+  const annotations = useStore(s => s.annotations)
+  const removeAnnotation = useStore(s => s.removeAnnotation)
+  const setMode = useStore(s => s.setMode)
+  const setCurrentNoteIndex = useStore(s => s.setCurrentNoteIndex)
+  const addBulkAnnotations = useStore(s => s.addBulkAnnotations)
+  const setHighlightedAnnotation = useStore(s => s.setHighlightedAnnotation)
   const [selectedQ, setSelectedQ] = useState<string | null>(null)
   const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'auto'>('all')
   const [commentFilter, setCommentFilter] = useState<'all' | 'with' | 'without'>('all')
@@ -440,7 +447,7 @@ export function ReviewView() {
           <div className="flex items-center justify-center h-64 bg-maple-50 dark:bg-maple-900">
             <div className="text-center p-6">
               <div className="w-12 h-12 bg-maple-200 dark:bg-maple-700 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span className="text-xl">🏷️</span>
+                <span className="text-lg text-maple-400 dark:text-maple-500">A</span>
               </div>
               <p className="text-sm text-maple-600 dark:text-maple-300 font-medium">
                 {searchText || selectedQ || sourceFilter !== 'all' || commentFilter !== 'all' ? 'No matches found' : 'No annotations yet'}

@@ -156,6 +156,17 @@ let isSaving = false
 let lastSavedHash = ''
 let lastAnnotationTime = 0
 
+// Reset all module-level save state - called by clearSession
+function resetSaveState() {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout)
+    saveTimeout = null
+  }
+  isSaving = false
+  lastSavedHash = ''
+  lastAnnotationTime = 0
+}
+
 // Annotation batching for rapid highlight spam
 let pendingAnnotations: Annotation[] = []
 let batchTimeout: ReturnType<typeof setTimeout> | null = null
@@ -363,11 +374,27 @@ export const useStore = create<State>((set, get) => ({
     }))
     set(s => {
       const allAnnotations = [...s.annotations, ...newAnnotations]
-      const indexes = buildAnnotationIndexes(allAnnotations)
+      
+      // Incremental index update - O(new) instead of O(all)
+      const newByNote = new Map(s.annotationsByNote)
+      const newById = new Map(s.annotationsById)
+      
+      for (const ann of newAnnotations) {
+        // Add to byNote
+        const existing = newByNote.get(ann.noteId)
+        if (existing) {
+          newByNote.set(ann.noteId, [...existing, ann])
+        } else {
+          newByNote.set(ann.noteId, [ann])
+        }
+        // Add to byId
+        newById.set(ann.id, ann)
+      }
+      
       return { 
         annotations: allAnnotations,
-        annotationsByNote: indexes.byNote,
-        annotationsById: indexes.byId,
+        annotationsByNote: newByNote,
+        annotationsById: newById,
         lastSaved: debouncedSave()
       }
     })
@@ -456,15 +483,19 @@ export const useStore = create<State>((set, get) => ({
   },
 
   clearSession: async () => {
-    await clearStorage()
-    // Reset saved hash to prevent stale comparison
-    lastSavedHash = ''
+    // Cancel any pending saves FIRST to prevent race conditions
+    resetSaveState()
+    
     // Clear any pending annotation batch
     pendingAnnotations = []
     if (batchTimeout) {
       clearTimeout(batchTimeout)
       batchTimeout = null
     }
+    
+    // Clear persistent storage
+    await clearStorage()
+    
     // Reset all state in a single batch
     set({
       notes: [],

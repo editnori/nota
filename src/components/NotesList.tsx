@@ -64,7 +64,8 @@ interface MatchLocation {
 export function NotesList() {
   // Use individual selectors to minimize re-renders
   const notes = useStore(s => s.notes)
-  const annotations = useStore(s => s.annotations)
+  // Use annotationsByNote instead of full annotations array for O(1) access
+  const annotationsByNote = useStore(s => s.annotationsByNote)
   const currentNoteIndex = useStore(s => s.currentNoteIndex)
   const setCurrentNoteIndex = useStore(s => s.setCurrentNoteIndex)
   const addBulkAnnotations = useStore(s => s.addBulkAnnotations)
@@ -82,22 +83,25 @@ export function NotesList() {
   const debouncedSearch = useDebounce(search, 200)
   const isSearching = search !== debouncedSearch
 
-  // Memoize annotation counts for performance with large datasets
+  // Derive annotation counts from indexed Map - O(notes) instead of O(annotations)
   const annotationCounts = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const a of annotations) {
-      counts.set(a.noteId, (counts.get(a.noteId) || 0) + 1)
+    for (const [noteId, anns] of annotationsByNote) {
+      counts.set(noteId, anns.length)
     }
     return counts
-  }, [annotations])
+  }, [annotationsByNote])
 
+  // Derive suggested notes from indexed Map - O(notes) instead of O(annotations)
   const suggestedNotes = useMemo(() => {
-    const set = new Set<string>()
-    for (const a of annotations) {
-      if (a.source === 'suggested') set.add(a.noteId)
+    const result = new Set<string>()
+    for (const [noteId, anns] of annotationsByNote) {
+      if (anns.some(a => a.source === 'suggested')) {
+        result.add(noteId)
+      }
     }
-    return set
-  }, [annotations])
+    return result
+  }, [annotationsByNote])
 
   // Build note ID -> index map for O(1) lookups
   const noteIndexMap = useMemo(() => {
@@ -120,8 +124,9 @@ export function NotesList() {
   }, [notes])
 
   // Build search index for faster lookups
+  // Threshold lowered to 100 for better search performance at moderate scale
   const searchIndex = useMemo(() => {
-    if (notes.length < 500) return null // Only build index for large datasets
+    if (notes.length < 100) return null
     
     const index = new Map<string, Set<number>>()
     
@@ -148,7 +153,8 @@ export function NotesList() {
   }, [notes])
 
   // Filter notes - memoized for performance
-  const filtered = useMemo(() => {
+  // Split into two stages to avoid recalculating everything when annotations change
+  const baseFiltered = useMemo(() => {
     let candidates = notes
     
     // Apply smart filter first if active (check for non-null AND non-empty Set)
@@ -190,14 +196,23 @@ export function NotesList() {
         }
       }
       
-      // Status filter
-      const count = annotationCounts.get(note.id) || 0
-      if (filter === 'done' && count === 0) return false
-      if (filter === 'todo' && count > 0) return false
-      
       return true
     })
-  }, [notes, debouncedSearch, filter, typeFilter, annotationCounts, searchIndex, filteredNoteIds])
+  }, [notes, debouncedSearch, typeFilter, searchIndex, filteredNoteIds])
+
+  // Apply status filter separately - only recalculates when filter or annotations change
+  // This prevents recalculating text search when only annotations change
+  const filtered = useMemo(() => {
+    if (filter === 'all') return baseFiltered
+    
+    // Use annotationsByNote.has() for O(1) check instead of count lookup
+    return baseFiltered.filter(note => {
+      const hasAnnotations = annotationsByNote.has(note.id)
+      if (filter === 'done') return hasAnnotations
+      if (filter === 'todo') return !hasAnnotations
+      return true
+    })
+  }, [baseFiltered, filter, annotationsByNote])
 
   // Pagination
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
@@ -447,7 +462,10 @@ export function NotesList() {
         {paged.length === 0 && (
           <div className="p-6 text-center">
             <div className="w-10 h-10 bg-maple-100 dark:bg-maple-700 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-base">{search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) ? '🔍' : '📄'}</span>
+              {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) 
+                ? <Search size={16} className="text-maple-400 dark:text-maple-500" />
+                : <span className="text-sm text-maple-400 dark:text-maple-500">N</span>
+              }
             </div>
             <p className="text-xs text-maple-600 dark:text-maple-300 font-medium">
               {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) ? 'No matches' : 'No notes'}

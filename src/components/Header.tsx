@@ -43,14 +43,16 @@ export function Header() {
     return annotationsByNote.get(currentNote.id)?.length || 0
   }, [currentNote?.id, annotationsByNote])
   
-  // Suggested count - memoized
+  // Suggested count - derived from indexed map for better performance
   const suggestedCount = useMemo(() => {
     let count = 0
-    for (const a of annotations) {
-      if (a.source === 'suggested') count++
+    for (const anns of annotationsByNote.values()) {
+      for (const a of anns) {
+        if (a.source === 'suggested') count++
+      }
     }
     return count
-  }, [annotations])
+  }, [annotationsByNote])
   
   const [showSettings, setShowSettings] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)

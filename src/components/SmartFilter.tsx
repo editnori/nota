@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { X, Search, ChevronRight, Ban, Plus, Trash2 } from 'lucide-react'
+import { X, Search, ChevronRight, Ban, Plus, Trash2, Check } from 'lucide-react'
 import { loadQuestions } from '../lib/questions'
 import { ConfirmModal } from './ConfirmModal'
 import type { Note } from '../lib/types'
@@ -255,7 +255,7 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
                     }`}
                     style={{ backgroundColor: q.color }}
                   >
-                    {isActive ? '✓' : q.hotkey}
+                    {isActive ? <Check size={12} /> : q.hotkey}
                   </button>
                   
                   <button onClick={() => toggle(q.id)} className="flex-1 text-left text-[11px] font-medium text-maple-700 dark:text-maple-200">
