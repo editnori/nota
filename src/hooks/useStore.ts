@@ -506,10 +506,7 @@ export const useStore = create<State>((set, get) => ({
     // Clear persistent storage
     await clearStorage()
     
-    // Small delay to ensure storage is fully cleared and React can detect state change
-    await new Promise(resolve => setTimeout(resolve, 50))
-    
-    // Reset all state in a single batch with fresh Map instances
+    // Reset all state EXCEPT isLoaded first
     set({
       notes: [],
       annotations: [],
@@ -523,8 +520,18 @@ export const useStore = create<State>((set, get) => ({
       filteredNoteIds: null,
       highlightedAnnotation: null,
       isImporting: false,
-      importProgress: '',
-      isLoaded: true  // Re-enable UI after state is fully reset
+      importProgress: ''
+    })
+    
+    // Use requestAnimationFrame to ensure React has processed the state reset
+    // before we re-enable the UI - this prevents the empty state flash
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          set({ isLoaded: true })
+          resolve()
+        }, 50)
+      })
     })
   },
 

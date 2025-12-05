@@ -2,6 +2,18 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.5.61] - 2025-12-05
+
+### Fix: State Synchronization Issues
+- **Fixed clear/import requiring manual refresh** - UI now properly updates after:
+  - Clearing everything (notes + annotations)
+  - Uploading new notes via drag-drop or Import button
+  - Loading session files
+- **Improved state transition timing**:
+  - `clearSession` now uses requestAnimationFrame to ensure React processes state reset before re-enabling UI
+  - Import flows wait for React to process state updates before triggering debounced save
+- **Removed stale `mode` dependency** from Tauri drag-drop useEffect (no longer needed since drag-drop is now global)
+
 ## [0.5.60] - 2025-12-05
 
 ### Polish: Windows Installer Icons

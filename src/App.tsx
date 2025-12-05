@@ -175,13 +175,18 @@ export default function App() {
         } else {
           doSetNotes(importedNotes)
         }
-        setBulkOperation(false) // Re-enable saves, triggers debounced save
-        setImporting(true, `${importedNotes.length} notes imported`)
         
-        // Allow state to fully settle before hiding the indicator
-        // Use requestAnimationFrame + setTimeout to ensure React has re-rendered
-        requestAnimationFrame(() => {
-          setTimeout(() => setImporting(false), 800)
+        // Wait for React to process the state update before triggering save
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() => {
+            setBulkOperation(false) // Re-enable saves, triggers debounced save
+            setImporting(true, `${importedNotes.length} notes imported`)
+            // Allow UI to fully render before hiding indicator
+            setTimeout(() => {
+              setImporting(false)
+              resolve()
+            }, 800)
+          })
         })
       } else {
         setBulkOperation(false)
@@ -249,7 +254,7 @@ export default function App() {
       unlistenEnter?.()
       unlistenLeave?.()
     }
-  }, [mode, handleTauriDrop])
+  }, [handleTauriDrop]) // Removed mode - now global for all modes
 
   // Web-based drag events (fallback for browser) - global for all modes
   useEffect(() => {
