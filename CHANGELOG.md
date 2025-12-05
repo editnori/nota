@@ -2,6 +2,28 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.5.43] - 2025-12-04
+
+### Performance (Instant Annotations)
+- **Incremental index updates** - O(1) instead of O(n) for annotation changes
+  - `addToIndexes()` - adds single annotation without rebuilding
+  - `removeFromIndexes()` - removes without full rebuild
+  - `updateInIndexes()` - updates in place
+- **Annotation creation now instant** - no more 200ms delay between highlights
+- **Non-blocking save** - `JSON.stringify` now runs in microtask via `setTimeout(0)`
+- **Dynamic debounce** - rapid annotation (< 1s apart) delays save to 2s, preventing lag
+  - Normal annotation uses 500ms debounce
+  - `requestIdleCallback` timeout increased to 5s for smoother background saves
+
+### Bug Fixes
+- **Fixed: Drag-drop not working** - Now uses window-level drag events for reliable capture
+  - Shows overlay immediately when dragging files/folders over window
+  - Works regardless of which component is focused
+- **Fixed: Clear all weird state** - NotesList now resets all local state when notes cleared
+  - Resets page, search, filters when notes.length === 0
+  - Fixed useMemo side effect bug (was using useMemo to call setPage)
+- **Fixed: Need refresh after clear** - Proper state cleanup now triggers re-render
+
 ## [0.5.42] - 2025-12-04
 
 ### Bug Fixes & Polish

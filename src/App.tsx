@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState, useRef } from 'react'
 import { useStore } from './hooks/useStore'
 import { useKeyboard } from './hooks/useKeyboard'
 import { Header } from './components/Header'
@@ -19,6 +19,7 @@ export default function App() {
     isImporting, importProgress, setImporting 
   } = useStore()
   const [isDragging, setIsDragging] = useState(false)
+  const dragCountRef = useRef(0)
 
   const currentNote = notes[currentNoteIndex]
   
@@ -34,9 +35,13 @@ export default function App() {
   async function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     e.stopPropagation()
+    dragCountRef.current = 0
     setIsDragging(false)
     
-    if (e.dataTransfer.items.length === 0) return
+    if (!e.dataTransfer.items || e.dataTransfer.items.length === 0) return
+    
+    // Show loading immediately
+    setImporting(true, 'Preparing...')
     
     try {
       setBulkOperation(true) // Disable saves during import
@@ -73,31 +78,51 @@ export default function App() {
     }
   }
 
-  // Track drag enter/leave count to handle nested elements
-  const dragCountRef = React.useRef(0)
-
-  function handleDragEnter(e: React.DragEvent) {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCountRef.current++
-    if (dragCountRef.current === 1) {
-      setIsDragging(true)
+  // Use window-level drag events for more reliable capture
+  useEffect(() => {
+    function onDragEnter(e: DragEvent) {
+      e.preventDefault()
+      dragCountRef.current++
+      if (dragCountRef.current === 1) {
+        setIsDragging(true)
+      }
     }
-  }
-
-  function handleDragOver(e: React.DragEvent) {
-    e.preventDefault()
-    e.stopPropagation()
-  }
-
-  function handleDragLeave(e: React.DragEvent) {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCountRef.current--
-    if (dragCountRef.current === 0) {
+    
+    function onDragOver(e: DragEvent) {
+      e.preventDefault()
+      // Required to allow drop
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy'
+      }
+    }
+    
+    function onDragLeave(e: DragEvent) {
+      e.preventDefault()
+      dragCountRef.current--
+      if (dragCountRef.current <= 0) {
+        dragCountRef.current = 0
+        setIsDragging(false)
+      }
+    }
+    
+    function onDrop(e: DragEvent) {
+      e.preventDefault()
+      dragCountRef.current = 0
       setIsDragging(false)
     }
-  }
+    
+    window.addEventListener('dragenter', onDragEnter)
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('dragleave', onDragLeave)
+    window.addEventListener('drop', onDrop)
+    
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter)
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('dragleave', onDragLeave)
+      window.removeEventListener('drop', onDrop)
+    }
+  }, [])
   
   const handleTagSelection = useCallback((questionId: string) => {
     const sel = window.getSelection()
@@ -162,10 +187,8 @@ export default function App() {
   return (
     <div 
       className="h-screen flex flex-col bg-maple-50 dark:bg-maple-900 relative"
-      onDrop={(e) => { dragCountRef.current = 0; handleDrop(e) }}
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onDragOver={(e) => e.preventDefault()}
     >
       <Header />
       

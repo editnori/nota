@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, memo } from 'react'
+import { useState, useMemo, useCallback, memo, useEffect } from 'react'
 import { useStore } from '../hooks/useStore'
 import { useDebounce } from '../hooks/useDebounce'
 import { Search, ChevronUp, ChevronDown, Filter, X, Loader2, Zap } from 'lucide-react'
@@ -205,9 +205,22 @@ export function NotesList() {
     return filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   }, [filtered, page])
   
+  // Reset state when notes are cleared
+  useEffect(() => {
+    if (notes.length === 0) {
+      setPage(0)
+      setSearch('')
+      setFilter('all')
+      setTypeFilter(null)
+      setShowTypeFilter(false)
+    }
+  }, [notes.length])
+  
   // Keep page in bounds when filter changes
-  useMemo(() => {
-    if (page >= totalPages && totalPages > 0) {
+  useEffect(() => {
+    if (totalPages === 0) {
+      setPage(0)
+    } else if (page >= totalPages) {
       setPage(totalPages - 1)
     }
   }, [totalPages, page])

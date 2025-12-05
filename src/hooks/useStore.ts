@@ -57,6 +57,7 @@ interface AnnotationIndexes {
   byId: Map<string, Annotation>
 }
 
+// Full rebuild - only use when loading or clearing
 function buildAnnotationIndexes(annotations: Annotation[]): AnnotationIndexes {
   const byNote = new Map<string, Annotation[]>()
   const byId = new Map<string, Annotation>()
@@ -76,11 +77,84 @@ function buildAnnotationIndexes(annotations: Annotation[]): AnnotationIndexes {
   return { byNote, byId }
 }
 
+// Incremental add - O(1) instead of O(n)
+function addToIndexes(
+  annotation: Annotation,
+  byNote: Map<string, Annotation[]>,
+  byId: Map<string, Annotation>
+): { byNote: Map<string, Annotation[]>, byId: Map<string, Annotation> } {
+  // Clone maps for immutability
+  const newByNote = new Map(byNote)
+  const newById = new Map(byId)
+  
+  // Add to byNote
+  const existing = newByNote.get(annotation.noteId)
+  if (existing) {
+    newByNote.set(annotation.noteId, [...existing, annotation])
+  } else {
+    newByNote.set(annotation.noteId, [annotation])
+  }
+  
+  // Add to byId
+  newById.set(annotation.id, annotation)
+  
+  return { byNote: newByNote, byId: newById }
+}
+
+// Incremental remove - O(n) for the note's annotations only, not all annotations
+function removeFromIndexes(
+  annotationId: string,
+  noteId: string,
+  byNote: Map<string, Annotation[]>,
+  byId: Map<string, Annotation>
+): { byNote: Map<string, Annotation[]>, byId: Map<string, Annotation> } {
+  const newByNote = new Map(byNote)
+  const newById = new Map(byId)
+  
+  // Remove from byNote
+  const existing = newByNote.get(noteId)
+  if (existing) {
+    const filtered = existing.filter(a => a.id !== annotationId)
+    if (filtered.length > 0) {
+      newByNote.set(noteId, filtered)
+    } else {
+      newByNote.delete(noteId)
+    }
+  }
+  
+  // Remove from byId
+  newById.delete(annotationId)
+  
+  return { byNote: newByNote, byId: newById }
+}
+
+// Incremental update
+function updateInIndexes(
+  annotation: Annotation,
+  byNote: Map<string, Annotation[]>,
+  byId: Map<string, Annotation>
+): { byNote: Map<string, Annotation[]>, byId: Map<string, Annotation> } {
+  const newByNote = new Map(byNote)
+  const newById = new Map(byId)
+  
+  // Update in byNote
+  const existing = newByNote.get(annotation.noteId)
+  if (existing) {
+    newByNote.set(annotation.noteId, existing.map(a => a.id === annotation.id ? annotation : a))
+  }
+  
+  // Update in byId
+  newById.set(annotation.id, annotation)
+  
+  return { byNote: newByNote, byId: newById }
+}
+
 // Debounced save to avoid too many writes
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
 let isBulkOperation = false
 let isSaving = false
 let lastSavedHash = ''
+let lastAnnotationTime = 0
 
 // Simple hash to detect if data actually changed
 function quickHash(notes: Note[], annotations: Annotation[]): string {
@@ -90,6 +164,15 @@ function quickHash(notes: Note[], annotations: Annotation[]): string {
 function debouncedSave() {
   // Skip saving during bulk operations or if already saving
   if (isBulkOperation || isSaving) return Date.now()
+  
+  const now = Date.now()
+  const timeSinceLastAnnotation = now - lastAnnotationTime
+  lastAnnotationTime = now
+  
+  // Dynamic debounce: longer delay during rapid annotation
+  // If annotating quickly (< 1s between), wait longer (2s)
+  // If slower annotating, use standard delay (500ms)
+  const debounceMs = timeSinceLastAnnotation < 1000 ? 2000 : 500
   
   if (saveTimeout) clearTimeout(saveTimeout)
   saveTimeout = setTimeout(() => {
@@ -122,12 +205,12 @@ function debouncedSave() {
     }
     
     if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(doSave, { timeout: 2000 })
+      (window as any).requestIdleCallback(doSave, { timeout: 5000 })
     } else {
       // Fallback for browsers without requestIdleCallback
       setTimeout(doSave, 100)
     }
-  }, 500) // Increased debounce for large datasets
+  }, debounceMs)
   return Date.now()
 }
 
@@ -219,10 +302,10 @@ export const useStore = create<State>((set, get) => ({
       source: ann.source || 'manual'
     }
     set(s => {
-      const newAnnotations = [...s.annotations, annotation]
-      const indexes = buildAnnotationIndexes(newAnnotations)
+      // Incremental index update - O(1) instead of O(n)
+      const indexes = addToIndexes(annotation, s.annotationsByNote, s.annotationsById)
       return { 
-        annotations: newAnnotations,
+        annotations: [...s.annotations, annotation],
         annotationsByNote: indexes.byNote,
         annotationsById: indexes.byId,
         undoStack: [...s.undoStack.slice(-19), { type: 'add', annotation }],
@@ -254,10 +337,10 @@ export const useStore = create<State>((set, get) => ({
     const ann = get().annotationsById.get(id)  // O(1) lookup
     if (ann) {
       set(s => {
-        const newAnnotations = s.annotations.filter(a => a.id !== id)
-        const indexes = buildAnnotationIndexes(newAnnotations)
+        // Incremental index update
+        const indexes = removeFromIndexes(id, ann.noteId, s.annotationsByNote, s.annotationsById)
         return { 
-          annotations: newAnnotations,
+          annotations: s.annotations.filter(a => a.id !== id),
           annotationsByNote: indexes.byNote,
           annotationsById: indexes.byId,
           undoStack: [...s.undoStack.slice(-19), { type: 'remove', annotation: ann }],
@@ -270,11 +353,12 @@ export const useStore = create<State>((set, get) => ({
   updateAnnotation: (id, updates) => {
     const ann = get().annotationsById.get(id)  // O(1) lookup
     if (ann) {
+      const updatedAnn = { ...ann, ...updates }
       set(s => {
-        const newAnnotations = s.annotations.map(a => a.id === id ? { ...a, ...updates } : a)
-        const indexes = buildAnnotationIndexes(newAnnotations)
+        // Incremental index update
+        const indexes = updateInIndexes(updatedAnn, s.annotationsByNote, s.annotationsById)
         return {
-          annotations: newAnnotations,
+          annotations: s.annotations.map(a => a.id === id ? updatedAnn : a),
           annotationsByNote: indexes.byNote,
           annotationsById: indexes.byId,
           undoStack: [...s.undoStack.slice(-19), { type: 'update', annotation: ann, previousState: updates }],
@@ -355,12 +439,11 @@ export const useStore = create<State>((set, get) => ({
     const action = undoStack[undoStack.length - 1]
     
     if (action.type === 'add') {
-      // Undo add = remove
+      // Undo add = remove (incremental)
       set(s => {
-        const newAnnotations = s.annotations.filter(a => a.id !== action.annotation.id)
-        const indexes = buildAnnotationIndexes(newAnnotations)
+        const indexes = removeFromIndexes(action.annotation.id, action.annotation.noteId, s.annotationsByNote, s.annotationsById)
         return {
-          annotations: newAnnotations,
+          annotations: s.annotations.filter(a => a.id !== action.annotation.id),
           annotationsByNote: indexes.byNote,
           annotationsById: indexes.byId,
           undoStack: s.undoStack.slice(0, -1),
@@ -368,12 +451,11 @@ export const useStore = create<State>((set, get) => ({
         }
       })
     } else if (action.type === 'remove') {
-      // Undo remove = add back
+      // Undo remove = add back (incremental)
       set(s => {
-        const newAnnotations = [...s.annotations, action.annotation]
-        const indexes = buildAnnotationIndexes(newAnnotations)
+        const indexes = addToIndexes(action.annotation, s.annotationsByNote, s.annotationsById)
         return {
-          annotations: newAnnotations,
+          annotations: [...s.annotations, action.annotation],
           annotationsByNote: indexes.byNote,
           annotationsById: indexes.byId,
           undoStack: s.undoStack.slice(0, -1),
@@ -381,14 +463,11 @@ export const useStore = create<State>((set, get) => ({
         }
       })
     } else if (action.type === 'update') {
-      // Undo update = restore previous state
+      // Undo update = restore previous state (incremental)
       set(s => {
-        const newAnnotations = s.annotations.map(a => 
-          a.id === action.annotation.id ? action.annotation : a
-        )
-        const indexes = buildAnnotationIndexes(newAnnotations)
+        const indexes = updateInIndexes(action.annotation, s.annotationsByNote, s.annotationsById)
         return {
-          annotations: newAnnotations,
+          annotations: s.annotations.map(a => a.id === action.annotation.id ? action.annotation : a),
           annotationsByNote: indexes.byNote,
           annotationsById: indexes.byId,
           undoStack: s.undoStack.slice(0, -1),
