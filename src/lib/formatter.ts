@@ -1687,6 +1687,936 @@ function splitBMILines(text: string): string {
 }
 
 // =============================================================================
+// ADDITIONAL MISSING FUNCTIONS - Complete coverage
+// =============================================================================
+
+// Social History patterns
+const SOCIAL_HISTORY_HEADERS = [
+  'Substance Use Topics', 'Tobacco Use', 'Smoking Status', 'Alcohol Use',
+  'Drug Use', 'Sexual Activity', 'Exercise', 'Diet', 'Occupation'
+] as const
+
+const SOCIAL_HISTORY_ITEM_PATTERNS = [
+  /^-?\s*smoking status/i,
+  /^-?\s*alcohol use/i,
+  /^-?\s*drug use/i,
+  /^-?\s*tobacco use/i,
+  /^-?\s*substance use/i,
+  /^never smoker$/i,
+  /^current smoker/i,
+  /^former smoker/i,
+] as const
+
+function isSocialHistoryHeader(line: string): boolean {
+  const stripped = line.trim().replace(/:$/, '')
+  if (!stripped) return false
+  return SOCIAL_HISTORY_HEADERS.some(h => 
+    h.toLowerCase() === stripped.toLowerCase()
+  )
+}
+
+function isSocialHistoryItem(line: string): boolean {
+  const stripped = line.trim()
+  if (!stripped) return false
+  return SOCIAL_HISTORY_ITEM_PATTERNS.some(pat => pat.test(stripped))
+}
+
+function fixBrokenWords(text: string): string {
+  // Fix words broken across lines with hyphen
+  // e.g., "pre-\ndiabetic" -> "pre-diabetic"
+  return text.replace(/(\w+)-\s*\n\s*([a-z])/g, '$1-$2')
+}
+
+function normalizeBullets(text: string): string {
+  let result = text
+  // Turn inline bullets (~, •) into real list lines
+  result = result.replace(/\s+[~•]\s+/g, '\n- ')
+  // Split inline dash bullets separated by multiple spaces
+  result = result.replace(/\s{2,}-\s+/g, '\n- ')
+  // Normalize existing bullet formatting
+  result = result.replace(/(?<=\n)\s*-\s+/g, '- ')
+  // Convert asterisk bullets
+  result = result.replace(/\s+\*\s+/g, '\n- ')
+  return result
+}
+
+function breakNumberedLists(text: string): string {
+  // Start numbered items on their own lines
+  let result = text.replace(/(?<=:)\s*(\d+\.)/g, '\n$1')
+  result = result.replace(/(?<=[.!?])\s+(\d+\.)/g, '\n$1')
+  return result
+}
+
+function breakAfterColonKeywords(text: string): string {
+  const keywords = [
+    'Normal ', 'Skin ', 'No ', 'Trace ', 'AROM', 'PROM', 'Pain ',
+    'Good strength', 'Legs ', 'Examination ', 'Description', 'Status',
+    'Surgery Type', 'General anesthesia', 'Supine Position', 'Specials',
+    'Post Op', 'PT ',
+  ]
+  const keysPattern = keywords.map(escapeRegex).join('|')
+  let result = text.replace(new RegExp(`(?<!\\d):\\s+(?=(${keysPattern}))`, 'g'), ':\n')
+  
+  const secondary = [
+    'Skin ', 'No ', 'Trace ', 'Pain ', 'Legs ', 'Good strength',
+    'Lateral ', 'AROM', 'PROM', 'Examination ',
+  ]
+  const secPattern = secondary.map(escapeRegex).join('|')
+  result = result.replace(new RegExp(`(?<=[a-z,])\\s+(?=(${secPattern}))`, 'g'), '\n')
+  return result
+}
+
+function breakKnownInlinePhrases(text: string): string {
+  const phrases = [
+    'Pain with', 'Good strength', 'Legs warm', 'No swelling',
+    'No ligament instability', 'No deformity',
+  ]
+  const pattern = phrases.map(escapeRegex).join('|')
+  return text.replace(new RegExp(`\\s+(?=(${pattern}))`, 'g'), '\n')
+}
+
+function fixBrokenBulletLines(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let i = 0
+  
+  while (i < lines.length) {
+    const line = lines[i]
+    
+    if (line.trimStart().startsWith('- ')) {
+      let current = line.trimEnd()
+      const bulletBody = current.replace(/^\s*-\s*/, '').trim().toLowerCase().replace(/:$/, '')
+      
+      // Don't merge if bullet is a header
+      if (SECTION_HEADERS_LOWER.has(bulletBody)) {
+        output.push(current)
+        i++
+        continue
+      }
+      
+      let j = i + 1
+      while (j < lines.length) {
+        const nxt = lines[j]
+        const nxtStripped = nxt.trim()
+        const nxtLower = nxtStripped.toLowerCase().replace(/:$/, '')
+        
+        // Stop conditions
+        if (!nxt) break
+        if (nxt.trimStart().startsWith('- ') || /^\d+\.(\s|$)/.test(nxt)) break
+        if (/^[A-Z][A-Z /&'-]{2,}:$/.test(nxtStripped)) break
+        if (isAsciiTableLine(nxt)) break
+        if (SECTION_HEADERS_LOWER.has(nxtLower)) break
+        if (isROSOrPELine(nxt)) break
+        if (isHeaderCandidate(nxt)) break
+        if (isSocialHistoryHeader(nxt)) break
+        
+        current += ' ' + nxtStripped
+        j++
+      }
+      output.push(current)
+      i = j
+      continue
+    }
+    output.push(line)
+    i++
+  }
+  
+  return output.join('\n')
+}
+
+function joinROSPEContinuations(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let i = 0
+  
+  while (i < lines.length) {
+    const line = lines[i]
+    
+    if (isROSOrPELine(line)) {
+      let merged = line.trim()
+      let j = i + 1
+      
+      while (j < lines.length) {
+        const nxt = lines[j]
+        const nxtStripped = nxt.trim()
+        
+        if (!nxtStripped) break
+        if (isHeaderCandidate(nxt) || isROSOrPELine(nxt)) break
+        if (nxt.trimStart().startsWith('- ') || nxt.trimStart().startsWith('* ') || 
+            nxt.trimStart().startsWith('• ')) break
+        if (/^\d+\.\s/.test(nxtStripped)) break
+        
+        merged += ' ' + nxtStripped
+        j++
+      }
+      output.push(merged)
+      i = j
+      continue
+    }
+    output.push(line)
+    i++
+  }
+  
+  return output.join('\n')
+}
+
+function normalizeROSLayout(text: string, maxSingleLine: number = 110): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  const rosLabelsLower = new Set(ROS_LABELS.map(l => l.toLowerCase()))
+  let i = 0
+  
+  while (i < lines.length) {
+    const line = lines[i]
+    const stripped = line.trim()
+    
+    if (!stripped) {
+      output.push(line)
+      i++
+      continue
+    }
+    
+    // Detect ROS label line
+    const labelMatch = stripped.match(/^([A-Za-z/ ]+):\s*(.*)$/)
+    if (labelMatch && rosLabelsLower.has(labelMatch[1].toLowerCase())) {
+      const label = labelMatch[1].trim()
+      const contentParts: string[] = []
+      
+      if (labelMatch[2]) {
+        contentParts.push(labelMatch[2].trim())
+      }
+      
+      let j = i + 1
+      while (j < lines.length) {
+        const nxt = lines[j]
+        const nxtStripped = nxt.trim()
+        
+        if (!nxtStripped) break
+        if (isHeaderCandidate(nxt) || isROSOrPELine(nxt)) break
+        if (nxt.trimStart().startsWith('- ') || /^\d+\.\s/.test(nxtStripped)) break
+        
+        contentParts.push(nxtStripped)
+        j++
+      }
+      
+      const content = contentParts.join(' ').trim()
+      if (content && `${label}: ${content}`.length <= maxSingleLine) {
+        output.push(`${label}: ${content}`)
+      } else {
+        output.push(`${label}:`)
+        if (content) output.push(content)
+      }
+      i = j
+      continue
+    }
+    
+    output.push(line)
+    i++
+  }
+  
+  return output.join('\n')
+}
+
+function joinSocialHistoryValues(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let i = 0
+  
+  while (i < lines.length) {
+    const line = lines[i]
+    
+    if (isSocialHistoryHeader(line)) {
+      output.push(line)
+      i++
+      continue
+    }
+    
+    if (isSocialHistoryItem(line)) {
+      let j = i + 1
+      // Skip blank lines
+      while (j < lines.length && !lines[j].trim()) j++
+      
+      if (j < lines.length) {
+        const nxt = lines[j].trim()
+        if (nxt && !isHeaderCandidate(lines[j]) && !isSocialHistoryHeader(lines[j]) &&
+            !nxt.startsWith('-') && !nxt.startsWith('*') && !/^\d+\./.test(nxt)) {
+          output.push(line.trimEnd() + ' ' + nxt)
+          i = j + 1
+          continue
+        }
+      }
+    }
+    
+    // Attach smoking metadata
+    const lower = line.trim().toLowerCase()
+    if (lower.startsWith('types:') || lower.startsWith('packs/day') || 
+        lower.startsWith('years:') || lower.startsWith('start date') || 
+        lower.startsWith('quit date')) {
+      if (output.length && output[output.length - 1].toLowerCase().includes('smoking status')) {
+        output[output.length - 1] = output[output.length - 1].trimEnd() + ' ' + line.trim()
+        i++
+        continue
+      }
+    }
+    
+    output.push(line)
+    i++
+  }
+  
+  return output.join('\n')
+}
+
+function formatPESubLabels(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  const mainLabels = new Set(EXAM_LABELS.map(l => l.toLowerCase()))
+  const subLabels = new Set(PE_SUB_LABELS.map(l => l.toLowerCase()))
+  let inPESection = false
+  let i = 0
+  
+  while (i < lines.length) {
+    const line = lines[i]
+    const stripped = line.trim()
+    const lower = stripped.toLowerCase().replace(/:$/, '')
+    
+    if (PE_SECTION_HEADERS.has(lower)) {
+      inPESection = true
+      output.push(line)
+      i++
+      continue
+    }
+    
+    if (inPESection && isHeaderCandidate(line) && !isPELine(line)) {
+      inPESection = false
+    }
+    
+    if (!inPESection || !stripped) {
+      output.push(line)
+      i++
+      continue
+    }
+    
+    // Check for combined MAIN: SUB: content pattern
+    const combo = stripped.match(/^([A-Za-z/ &'-]+):\s*(-\s*)?([A-Za-z/ &'-]+):\s*(.*)$/)
+    if (combo && mainLabels.has(combo[1].toLowerCase()) && subLabels.has(combo[3].toLowerCase())) {
+      const [, main, , sub, rest] = combo
+      if (!output.length || !output[output.length - 1].trim().toLowerCase().startsWith(main.toLowerCase() + ':')) {
+        output.push(`${main}:`)
+      }
+      output.push(`  - ${sub}: ${rest.trim()}`)
+      i++
+      continue
+    }
+    
+    output.push(line)
+    i++
+  }
+  
+  return output.join('\n')
+}
+
+function formatRadiologyComparisonDates(text: string): string {
+  return text.replace(
+    /(COMPARISON:)[ ]*((?:\d{2}\/\d{2}\/\d{4}[, ]*)+)/gi,
+    (_, header, dates) => {
+      const dateList = dates.split(/,\s*/).map((d: string) => d.trim()).filter(Boolean)
+      if (dateList.length > 3) {
+        return `${header}\n` + dateList.map((d: string) => `- ${d}`).join('\n') + '\n'
+      }
+      return `${header} ${dateList.join(', ')}`
+    }
+  )
+}
+
+function formatRadiologySignatureBlock(text: string): string {
+  let result = text
+  
+  // Fix broken signature lines
+  result = result.replace(
+    /Images and interpretation reviewed and\s+verified by/gi,
+    'Images and interpretation reviewed and verified by'
+  )
+  
+  // Ensure signature blocks start on their own line
+  const sigStarts = [
+    'Electronically signed by',
+    'Images and interpretation reviewed and verified by',
+    'Dictated by',
+    'Transcribed by',
+    'Verified by',
+  ]
+  
+  for (const pattern of sigStarts) {
+    result = result.replace(
+      new RegExp(`([.!?])\\s*(${escapeRegex(pattern)})`, 'gi'),
+      '$1\n\n$2'
+    )
+  }
+  
+  return result
+}
+
+function fixFragmentedLabels(text: string): string {
+  const labelMap = new Map<string, string>()
+  for (const l of [...ROS_LABELS, ...EXAM_LABELS, ...PE_SUB_LABELS]) {
+    labelMap.set(l.toLowerCase(), l)
+  }
+  
+  const lines = text.split('\n')
+  const output: string[] = []
+  let i = 0
+  
+  while (i < lines.length) {
+    const line = lines[i]
+    const stripped = line.trim()
+    
+    // Check for prefix on current line, suffix on next
+    if (stripped && !stripped.includes(' ') && !stripped.endsWith(':') && 
+        stripped.length <= 20 && i + 1 < lines.length) {
+      const nxtLine = lines[i + 1]
+      const nxtStripped = nxtLine.trim()
+      
+      if (nxtStripped.includes(':')) {
+        const colonIdx = nxtStripped.indexOf(':')
+        const suffix = nxtStripped.slice(0, colonIdx)
+        const combined = (stripped + suffix).toLowerCase()
+        
+        if (labelMap.has(combined)) {
+          const properLabel = labelMap.get(combined)!
+          output.push(`${properLabel}:${nxtStripped.slice(colonIdx + 1)}`)
+          i += 2
+          continue
+        }
+      }
+    }
+    
+    output.push(line)
+    i++
+  }
+  
+  return output.join('\n')
+}
+
+function fixPrepositionLineBreaks(text: string): string {
+  // Join lines where a preposition was orphaned at the end
+  const prepositions = ['of', 'in', 'to', 'for', 'with', 'on', 'at', 'by', 'from', 'as', 'or', 'and', 'the', 'a', 'an']
+  const lines = text.split('\n')
+  const output: string[] = []
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const stripped = line.trim()
+    const nextLine = lines[i + 1]
+    
+    if (nextLine && stripped) {
+      const words = stripped.split(/\s+/)
+      const lastWord = words[words.length - 1].toLowerCase()
+      
+      if (prepositions.includes(lastWord) && !stripped.endsWith(':')) {
+        const nextStripped = nextLine.trim()
+        if (nextStripped && !isHeaderCandidate(nextLine) && /^[a-z]/.test(nextStripped)) {
+          output.push(line.trimEnd() + ' ' + nextStripped)
+          i++
+          continue
+        }
+      }
+    }
+    output.push(line)
+  }
+  
+  return output.join('\n')
+}
+
+function insertMissingSpaces(text: string): string {
+  let result = text
+  // Add space when lowercase immediately followed by uppercase
+  result = result.replace(/([a-z])([A-Z][a-z]{2,})/g, '$1 $2')
+  result = result.replace(/([0-9])([A-Z][a-z]{2,})/g, '$1 $2')
+  result = result.replace(/\)([A-Za-z])/g, ') $1')
+  return result
+}
+
+function headerNumberNewline(text: string): string {
+  // Ensure headers like "PLAN: 1." become two lines
+  return text.replace(/^([A-Z][A-Z /&'-]{2,40}):\s+(\d+\.)/gm, '$1:\n$2')
+}
+
+function splitPEAtSemicolons(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let inPE = false
+  
+  for (const line of lines) {
+    const stripped = line.trim().toLowerCase().replace(/:$/, '')
+    
+    if (PE_SECTION_HEADERS.has(stripped)) {
+      inPE = true
+    } else if (isHeaderCandidate(line) && !isPELine(line)) {
+      inPE = false
+    }
+    
+    if (inPE && line.includes(';')) {
+      // Split PE findings at semicolons
+      const parts = line.split(';').map(p => p.trim()).filter(Boolean)
+      if (parts.length > 1) {
+        output.push(...parts)
+        continue
+      }
+    }
+    output.push(line)
+  }
+  
+  return output.join('\n')
+}
+
+function splitAlsoKnownAsMeds(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  
+  for (const line of lines) {
+    const stripped = line.trim()
+    
+    // Pattern: dosing followed by new drug name with strength
+    if (stripped.length > 120 && /also known as/i.test(stripped)) {
+      const parts = stripped.split(/\s{2,}/).filter(Boolean)
+      if (parts.length > 1) {
+        output.push(...parts)
+        continue
+      }
+    }
+    
+    // Split after dosing instructions followed by drug name
+    const splitResult = stripped.replace(
+      /((?:daily|twice a day|three times a day|every \d+ hours|as needed|at bedtime)\s+)([a-z][a-zA-Z-]+\s+\d+(?:[.,]\d+)?\s*(?:mg|mcg|mL|g|%))/gi,
+      '$1\n$2'
+    )
+    
+    if (splitResult.includes('\n')) {
+      output.push(...splitResult.split('\n'))
+      continue
+    }
+    
+    output.push(line)
+  }
+  
+  return output.join('\n')
+}
+
+function cleanVitalsHeaders(text: string): string {
+  // Remove redundant vitals column headers
+  return text.replace(/^\s*(?:Temp|Pulse|Resp|BP|SpO2)\s+(?:Temp|Pulse|Resp|BP|SpO2).*$/gm, '')
+}
+
+function joinSplitMedicationLines(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let i = 0
+  
+  while (i < lines.length) {
+    const line = lines[i]
+    
+    if (isMedicationLine(line)) {
+      let merged = line.trimEnd()
+      let j = i + 1
+      
+      // Check if next line is a continuation (starts with lowercase or dosing info)
+      while (j < lines.length) {
+        const nxt = lines[j]
+        const nxtStripped = nxt.trim()
+        
+        if (!nxtStripped) break
+        if (isHeaderCandidate(nxt) || isMedicationLine(nxt)) break
+        if (nxt.trimStart().startsWith('-')) break
+        
+        // Continuation patterns
+        if (/^(?:by mouth|oral|topical|take|inhale|\d+\s*(?:mg|mL|tablet))/i.test(nxtStripped) ||
+            /^[a-z]/.test(nxtStripped)) {
+          merged += ' ' + nxtStripped
+          j++
+          continue
+        }
+        break
+      }
+      output.push(merged)
+      i = j
+      continue
+    }
+    output.push(line)
+    i++
+  }
+  
+  return output.join('\n')
+}
+
+function mergePlanBlankLines(text: string): string {
+  // Reduce excessive blank lines in PLAN sections
+  const lines = text.split('\n')
+  const output: string[] = []
+  let inPlan = false
+  let blankCount = 0
+  
+  for (const line of lines) {
+    const stripped = line.trim().toLowerCase()
+    
+    if (stripped === 'plan' || stripped === 'plan:' || 
+        stripped.startsWith('assessment and plan') || stripped.startsWith('plan of care')) {
+      inPlan = true
+    } else if (isHeaderCandidate(line) && !stripped.includes('plan')) {
+      inPlan = false
+    }
+    
+    if (!line.trim()) {
+      blankCount++
+      if (inPlan && blankCount > 1) continue
+    } else {
+      blankCount = 0
+    }
+    
+    output.push(line)
+  }
+  
+  return output.join('\n')
+}
+
+function fixExamConductedSplit(text: string): string {
+  // Fix "Exam conducted with..." split across lines
+  return text.replace(
+    /(Exam)\s*\n+\s*(conducted\s+with)/gi,
+    '$1 $2'
+  )
+}
+
+function fixStuckMedicationHeader(text: string): string {
+  // Ensure 'Medications' headers are separated from following content
+  let result = text.replace(/(?<!\n)(Medications)(?=\S)/gi, '\n$1')
+  result = result.replace(/(Medications)(?=\S)/gi, '$1\n')
+  return result
+}
+
+function cleanSectionColons(text: string): string {
+  // Put a newline after section headers with trailing content
+  return text.replace(/(:)\s*\n?\s*\n/g, ':\n')
+}
+
+function addMedicationBullets(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let inMeds = false
+  
+  const drugStartPattern = /^([a-z][a-zA-Z-]+(?:\s+[a-zA-Z-]+)*)\s+(?:\d|\([A-Z]|[a-z]*[A-Z])/
+  const camelCaseDrug = /^[a-z]+[A-Z]+[a-zA-Z]*\s+\d/
+  
+  for (const line of lines) {
+    const stripped = line.trim()
+    const lower = stripped.toLowerCase()
+    
+    if (lower.includes('medications') && line.includes(':')) {
+      inMeds = true
+      output.push(line)
+      continue
+    }
+    
+    if (inMeds && isHeaderCandidate(line) && !lower.includes('medication')) {
+      inMeds = false
+    }
+    
+    if (inMeds && stripped && !stripped.startsWith('-') && !stripped.startsWith('•')) {
+      if (drugStartPattern.test(stripped) || camelCaseDrug.test(stripped)) {
+        output.push('- ' + stripped)
+        continue
+      }
+    }
+    
+    output.push(line)
+  }
+  
+  return output.join('\n')
+}
+
+function fixHistoryOfInLists(text: string): string {
+  // Fix "History of X" being split from lists
+  const lines = text.split('\n')
+  const output: string[] = []
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const stripped = line.trim()
+    
+    // Check if line is just "History" followed by "of ..." on next line
+    if (/^-?\s*History$/i.test(stripped) && i + 1 < lines.length) {
+      const nextLine = lines[i + 1].trim()
+      if (/^of\s/i.test(nextLine)) {
+        output.push(line.trimEnd() + ' ' + nextLine)
+        i++
+        continue
+      }
+    }
+    
+    output.push(line)
+  }
+  
+  return output.join('\n')
+}
+
+function fixSlashSplitLabels(text: string): string {
+  // Fix labels like "GI/" split from "GU:"
+  let result = text
+  result = result.replace(/\bGI\/\s*\n+\s*GU:/gi, 'GI/GU:')
+  result = result.replace(/\bHEENT\/\s*\n+\s*Neck:/gi, 'HEENT/Neck:')
+  result = result.replace(/\bPulmonary\/\s*\n+\s*Chest:/gi, 'Pulmonary/Chest:')
+  result = result.replace(/\bPsychiatric\/\s*\n+\s*Behavioral:/gi, 'Psychiatric/Behavioral:')
+  return result
+}
+
+function insertUppercaseHeaderBreaks(text: string): string {
+  // Insert breaks before ALL-CAPS headers that are stuck to content
+  return text.replace(/([a-z.!?])(\s*)([A-Z][A-Z\s]{3,}:)/g, '$1\n\n$3')
+}
+
+function enforceOneMedPerLine(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let inMeds = false
+  
+  for (const line of lines) {
+    const stripped = line.trim()
+    const lower = stripped.toLowerCase()
+    
+    if (lower.includes('medications') && stripped.includes(':')) {
+      inMeds = true
+      output.push(line)
+      continue
+    }
+    
+    if (inMeds && isHeaderCandidate(line) && !lower.includes('medication')) {
+      inMeds = false
+    }
+    
+    // Check for multiple medications on one line (pattern: "drug1 dose  drug2 dose")
+    if (inMeds && stripped.length > 100) {
+      const parts = stripped.split(/\s{3,}/).filter(Boolean)
+      if (parts.length > 1 && parts.every(p => /^[a-z]/i.test(p) && /\d/.test(p))) {
+        output.push(...parts.map(p => p.startsWith('-') ? p : '- ' + p))
+        continue
+      }
+    }
+    
+    output.push(line)
+  }
+  
+  return output.join('\n')
+}
+
+export function isPESubLabelLine(line: string): boolean {
+  const stripped = line.trim()
+  if (!stripped) return false
+  
+  // Allow bullet prefixes
+  let check = stripped
+  if (check.startsWith('- ') || check.startsWith('* ') || check.startsWith('• ')) {
+    check = check.slice(2).trim()
+  }
+  
+  for (const label of PE_SUB_LABELS) {
+    if (check.toLowerCase().startsWith(label.toLowerCase() + ':')) {
+      return true
+    }
+  }
+  return false
+}
+
+export function isLabResultLine(line: string): boolean {
+  const stripped = line.trim()
+  if (!stripped) return false
+  
+  // Check for lab patterns: "Name: value" or "Name value unit"
+  for (const lab of LAB_VALUE_PATTERNS) {
+    if (stripped.toLowerCase().includes(lab.toLowerCase())) {
+      return true
+    }
+  }
+  
+  // Check for common lab patterns
+  return /\d+\.?\d*\s*(mg\/dL|mmol\/L|mEq\/L|g\/dL|%|K\/uL|M\/uL)/i.test(stripped)
+}
+
+export function isMedSectionHeader(line: string): boolean {
+  const stripped = line.trim().toLowerCase().replace(/:$/, '')
+  const medHeaders = ['medications', 'medication', 'current medications', 'home medications',
+                      'discharge medications', 'active medications', 'outpatient medications']
+  return medHeaders.includes(stripped)
+}
+
+function formatDenseLabBlocks(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let inLabs = false
+  
+  for (const line of lines) {
+    const stripped = line.trim().toLowerCase().replace(/:$/, '')
+    
+    if (stripped.includes('lab') && (stripped.endsWith(':') || SECTION_HEADERS_LOWER.has(stripped))) {
+      inLabs = true
+    } else if (isHeaderCandidate(line) && !stripped.includes('lab')) {
+      inLabs = false
+    }
+    
+    // Split dense lab lines
+    if (inLabs && line.length > 100 && isLabResultLine(line)) {
+      const parts = line.split(/\s{2,}/).filter(Boolean)
+      if (parts.length > 2) {
+        output.push(...parts)
+        continue
+      }
+    }
+    
+    output.push(line)
+  }
+  
+  return output.join('\n')
+}
+
+function formatEDVitalsLine(text: string): string {
+  // Format ED-specific vitals patterns
+  return text.replace(
+    /\b(ED\s+Vitals?:?)(\s*)(\d)/gi,
+    '$1\n$3'
+  )
+}
+
+function formatExamFindings(text: string): string {
+  // Ensure exam findings are properly separated
+  let result = text
+  
+  // Split "Normal heart sounds" type patterns when stuck together
+  result = result.replace(
+    /\bNormal\s*\n+\s*heart sounds/gi,
+    'Normal heart sounds'
+  )
+  result = result.replace(
+    /\bNormal\s*\n+\s*breath sounds/gi,
+    'Normal breath sounds'
+  )
+  result = result.replace(
+    /\bNormal\s*\n+\s*rate and/gi,
+    'Normal rate and'
+  )
+  
+  return result
+}
+
+function fixGeneralAppearance(text: string): string {
+  // Fix "General:" followed by "Appearance:" patterns
+  return text.replace(
+    /\b(General):\s*\n+\s*(Appearance):/gi,
+    '$1/Appearance:'
+  )
+}
+
+function fixStatusOrphans(text: string): string {
+  // Merge orphaned "Status:" lines with their content
+  const lines = text.split('\n')
+  const output: string[] = []
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const stripped = line.trim()
+    
+    if (/^Status:?\s*$/i.test(stripped) && i + 1 < lines.length) {
+      const nextLine = lines[i + 1].trim()
+      if (nextLine && !isHeaderCandidate(lines[i + 1])) {
+        output.push('Status: ' + nextLine)
+        i++
+        continue
+      }
+    }
+    
+    output.push(line)
+  }
+  
+  return output.join('\n')
+}
+
+function dropVitalsColumnHeaders(text: string): string {
+  // Remove vitals column header rows
+  return text.replace(
+    /^\s*(?:Temp|Pulse|Resp|BP|SpO2|O2\s*Sat)(?:\s+(?:Temp|Pulse|Resp|BP|SpO2|O2\s*Sat))+\s*$/gmi,
+    ''
+  )
+}
+
+function consolidateVitalsLine(text: string): string {
+  // Consolidate split vitals onto single line
+  const lines = text.split('\n')
+  const output: string[] = []
+  let i = 0
+  
+  while (i < lines.length) {
+    const line = lines[i]
+    const stripped = line.trim()
+    
+    // Check if this looks like a partial vitals line
+    if (/^(?:BP|HR|RR|Temp|SpO2):\s*[\d./]+$/i.test(stripped) && i + 1 < lines.length) {
+      let combined = stripped
+      let j = i + 1
+      
+      while (j < lines.length) {
+        const nxt = lines[j].trim()
+        if (/^(?:BP|HR|RR|Temp|SpO2):\s*[\d./]+$/i.test(nxt)) {
+          combined += '  ' + nxt
+          j++
+        } else {
+          break
+        }
+      }
+      
+      if (j > i + 1) {
+        output.push(combined)
+        i = j
+        continue
+      }
+    }
+    
+    output.push(line)
+    i++
+  }
+  
+  return output.join('\n')
+}
+
+function forceBreakBeforeLabels(text: string): string {
+  // Force line breaks before ROS/PE labels that are stuck to content
+  let result = text
+  
+  for (const label of [...ROS_LABELS, ...EXAM_LABELS]) {
+    result = result.replace(
+      new RegExp(`([a-z.!?])\\s+(${escapeRegex(label)})\\s*:`, 'gi'),
+      '$1\n$2:'
+    )
+  }
+  
+  return result
+}
+
+function breakInlineLabels(text: string): string {
+  // Put short inline labels onto their own lines
+  return text.replace(/(?:^|\n)\s*(?=[A-Z][A-Za-z]{2,15}:)/g, '\n')
+}
+
+function cleanMedicationLines(text: string): string {
+  // Clean up medication line formatting
+  let result = text
+  
+  // Remove trailing commas before newlines in med lists
+  result = result.replace(/,\s*\n(?=\s*-)/g, '\n')
+  
+  // Fix "1 tablet" stuck to drug name
+  result = result.replace(/(\w)(\d+\s*tablet)/gi, '$1 $2')
+  
+  return result
+}
+
+// =============================================================================
 // MAIN FORMATTING PIPELINE
 // =============================================================================
 
@@ -1697,55 +2627,92 @@ const FORMATTING_PIPELINE: FormattingStep[] = [
   normalizeNbsp,
   normalizeLineEndings,
   convertTildeBullets,
+  normalizeBullets,
   stripBrTags,
   unescapeLiteralNewlines,
   collapseMultipleSpaces,
   splitLongLines,
   fixUnhyphenatedWordSplits,
+  fixBrokenWords,
   
   // Early compound header fixes
   fixSplitCompoundHeaders,
+  fixFragmentedLabels,
+  fixSlashSplitLabels,
+  fixExamConductedSplit,
+  fixHistoryOfInLists,
   
   // Radiology (early)
   formatRadiologyNote,
+  formatRadiologyComparisonDates,
+  formatRadiologySignatureBlock,
   
   // Sentence handling
   splitSentences,
   breakOnSentenceGaps,
   breakOnSemicolonCap,
+  insertMissingSpaces,
+  insertUppercaseHeaderBreaks,
   
   // Section header handling
   breakOnLargeGaps,
   insertSectionBreaks,
   forceHeaderOnNewline,
+  forceBreakBeforeLabels,
+  breakInlineLabels,
   splitHeaderLine,
+  headerNumberNewline,
   splitBMILines,
+  breakNumberedLists,
+  cleanSectionColons,
   
   // Medication formatting
+  fixStuckMedicationHeader,
   formatMedicationList,
+  addMedicationBullets,
   splitMergedMedications,
   cleanEmptyDispRefill,
   splitAtRefillsQuantity,
+  splitAlsoKnownAsMeds,
+  joinSplitMedicationLines,
+  enforceOneMedPerLine,
+  cleanMedicationLines,
   
   // ROS and PE formatting
   formatROSSection,
   splitROSInline,
   splitStackedROSLabels,
+  joinROSPEContinuations,
+  normalizeROSLayout,
   dedupeSequentialHeaders,
   formatPESection,
   splitPEInlineLabels,
   splitDensePESection,
+  splitPEAtSemicolons,
   fixDensePEColonSpacing,
+  formatPESubLabels,
+  formatExamFindings,
+  fixGeneralAppearance,
+  breakAfterColonKeywords,
+  breakKnownInlinePhrases,
+  
+  // Social History
+  joinSocialHistoryValues,
   
   // Lab formatting
   formatLabResults,
   splitMultiValueLabLines,
+  formatDenseLabBlocks,
   condenseLabBlankLines,
   
   // Vitals formatting
   formatVitalsLine,
+  formatEDVitalsLine,
   splitVitalsTable,
   fixVitalsSplit,
+  cleanVitalsHeaders,
+  dropVitalsColumnHeaders,
+  consolidateVitalsLine,
   
   // Drug name preservation
   preserveDrugNames,
@@ -1757,10 +2724,18 @@ const FORMATTING_PIPELINE: FormattingStep[] = [
   removePageMarkers,
   removeReviewedLines,
   
+  // Bullet/list handling
+  fixBrokenBulletLines,
+  
   // Soft break handling
   mergeSoftBreaks,
   mergeLowercaseContinuations,
   consolidateParagraphs,
+  fixPrepositionLineBreaks,
+  
+  // Status/Plan section
+  fixStatusOrphans,
+  mergePlanBlankLines,
   
   // Orphan fixes
   mergeOrphanSentenceEndings,
