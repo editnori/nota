@@ -47,7 +47,15 @@ export default function App() {
   }, [setImporting])
 
   // Use window-level drag events for reliable capture
+  // Only active when NOT in format mode (FormatView has its own handler)
   useEffect(() => {
+    // Skip window-level drag handling in format mode
+    if (mode === 'format') {
+      setIsDragging(false)
+      dragCountRef.current = 0
+      return
+    }
+    
     function onDragEnter(e: DragEvent) {
       e.preventDefault()
       e.stopPropagation()
@@ -99,7 +107,7 @@ export default function App() {
       window.removeEventListener('dragleave', onDragLeave)
       window.removeEventListener('drop', onDrop)
     }
-  }, [handleDropImport])
+  }, [handleDropImport, mode])
   
   const handleTagSelection = useCallback((questionId: string) => {
     const sel = window.getSelection()

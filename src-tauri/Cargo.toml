@@ -1,6 +1,6 @@
 [package]
 name = "nota"
-version = "0.5.48"
+version = "0.5.49"
 description = "Clinical note annotation tool"
 authors = ["Dr. Layth M Qassem PharmD MSACI"]
 edition = "2021"
