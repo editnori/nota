@@ -1,85 +1,17 @@
 import type { Note } from './types'
 import { useStore, setBulkOperation } from '../hooks/useStore'
+import { formatNoteText } from './formatter'
 
-// Pre-compiled patterns for formatNoteText - created once, reused for all notes
-// This eliminates creating 40+ RegExp objects per note
-const FORMAT_PATTERNS = (() => {
-  const headers = [
-    'CHIEF COMPLAINT', 'CC:', 'HPI:', 'HISTORY OF PRESENT ILLNESS',
-    'PAST MEDICAL HISTORY', 'PMH:', 'PAST SURGICAL HISTORY', 'PSH:',
-    'MEDICATIONS', 'CURRENT MEDICATIONS', 'ALLERGIES', 'ADVERSE REACTIONS',
-    'SOCIAL HISTORY', 'SH:', 'FAMILY HISTORY', 'FH:',
-    'REVIEW OF SYSTEMS', 'ROS:', 'SYSTEMS REVIEW',
-    'PHYSICAL EXAM', 'PHYSICAL EXAMINATION', 'PE:',
-    'VITALS:', 'VITAL SIGNS',
-    'LABS:', 'LABORATORY', 'LAB VALUES',
-    'IMAGING:', 'RADIOLOGY',
-    'ASSESSMENT', 'IMPRESSION',
-    'PLAN:', 'PLAN OF CARE', 'TREATMENT PLAN',
-    'ASSESSMENT AND PLAN', 'A/P:',
-    'RECOMMENDATIONS:',
-    'FINDINGS:', 'TECHNIQUE:', 'INDICATION:', 'COMPARISON:',
-    'OPERATIVE NOTE', 'OPERATIVE REPORT',
-    'PREOPERATIVE DIAGNOSIS', 'POSTOPERATIVE DIAGNOSIS',
-    'PROCEDURE:', 'OPERATION:',
-    'ANESTHESIA:', 'SURGEON:',
-    'EBL:', 'ESTIMATED BLOOD LOSS',
-    'COMPLICATIONS:', 'SPECIMENS:',
-    'DISPOSITION:', 'DISCHARGE INSTRUCTIONS',
-    'FOLLOW UP:', 'FOLLOWUP:'
-  ]
-  
-  // Build a single combined regex for all headers (much faster than 40 separate replaces)
-  const escapedHeaders = headers.map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const combinedHeaderRegex = new RegExp(
-    `(?<!\n\n)(?<!\n)(${escapedHeaders.join('|')})`,
-    'gi'
-  )
-  
-  return {
-    lineEndings: /\r\n|\r/g,
-    multipleBlankLines: /\n{3,}/g,
-    multipleSpaces: /[ \t]{2,}/g,
-    headers: combinedHeaderRegex,
-    runTogether: /([a-z])([A-Z]{2,}:)/g,
-    colonHeaderSpacing: /([A-Z]{2,}:)\s*\n\s*\n/g
-  }
-})()
-
-// Auto-format note text during import - exported for use in FormatView
-// Optimized: uses pre-compiled patterns instead of creating regexes per call
-export function formatNoteText(raw: string): string {
-  // Normalize line endings (single pass with combined pattern)
-  let text = raw.replace(FORMAT_PATTERNS.lineEndings, '\n')
-
-  // Collapse multiple blank lines
-  text = text.replace(FORMAT_PATTERNS.multipleBlankLines, '\n\n')
-
-  // Collapse multiple spaces
-  text = text.replace(FORMAT_PATTERNS.multipleSpaces, ' ')
-
-  // Add line breaks before all headers (single combined regex instead of 40 separate ones)
-  text = text.replace(FORMAT_PATTERNS.headers, '\n\n$1')
-
-  // Fix common run-together patterns
-  text = text.replace(FORMAT_PATTERNS.runTogether, '$1\n\n$2')
-  
-  // Ensure colon headers have content on same line or next
-  text = text.replace(FORMAT_PATTERNS.colonHeaderSpacing, '$1\n')
-
-  // Trim each line - optimized to avoid creating intermediate array
-  const lines = text.split('\n')
-  for (let i = 0; i < lines.length; i++) {
-    lines[i] = lines[i].trim()
-  }
-  text = lines.join('\n')
-
-  // Collapse multiple blank lines again
-  text = text.replace(FORMAT_PATTERNS.multipleBlankLines, '\n\n')
-
-  // Remove leading/trailing whitespace
-  return text.trim()
-}
+// Re-export formatNoteText from the comprehensive formatter
+// This provides the full clinical note formatting pipeline with:
+// - 140+ section headers
+// - Physical Exam formatting
+// - Review of Systems formatting  
+// - Medication list formatting
+// - Lab value formatting
+// - Drug name preservation
+// - And much more...
+export { formatNoteText }
 
 export async function importJSON(file: File): Promise<Note[]> {
   const text = await file.text()
