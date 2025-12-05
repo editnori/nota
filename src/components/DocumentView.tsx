@@ -795,10 +795,12 @@ function buildSegments(
   const points = Array.from(pointsSet).sort((a, b) => a - b)
   const segments: Segment[] = []
 
-  // Pre-sort annotations by start for faster covering check
-  const sortedAnns = noteAnnotations.length > 10 
-    ? [...noteAnnotations].sort((a, b) => a.start - b.start)
-    : noteAnnotations
+  // Always sort annotations by start for correct coverage logic
+  // (the break optimization below assumes sorted order)
+  const sortedAnns = [...noteAnnotations].sort((a, b) => {
+    if (a.start === b.start) return a.end - b.end
+    return a.start - b.start
+  })
 
   for (let i = 0; i < points.length - 1; i++) {
     const start = points[i]
