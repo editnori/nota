@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Upload, Download, FileText, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Upload, Download, FileText, Loader2, ChevronLeft, ChevronRight, ArrowDownToLine } from 'lucide-react'
 import { useStore } from '../hooks/useStore'
 import { downloadFile } from '../lib/exporters'
 import { formatNoteText } from '../lib/importers'
@@ -11,12 +11,13 @@ interface ProcessedNote {
 }
 
 export function FormatView() {
-  const { addNotes } = useStore()
+  const { addNotes, notes } = useStore()
   const [inputFiles, setInputFiles] = useState<File[]>([])
   const [processed, setProcessed] = useState<ProcessedNote[]>([])
   const [processing, setProcessing] = useState(false)
   const [previewIndex, setPreviewIndex] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
+  const [fromAnnotator, setFromAnnotator] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const dragCountRef = useRef(0)
@@ -109,6 +110,7 @@ export function FormatView() {
     setProcessed(results)
     setPreviewIndex(0)
     setProcessing(false)
+    setFromAnnotator(false)
   }
 
   async function downloadAll() {
@@ -139,9 +141,27 @@ export function FormatView() {
     setInputFiles([])
     setProcessed([])
     setPreviewIndex(0)
+    setFromAnnotator(false)
+  }
+
+  // Load notes from Annotator to view their formatted versions
+  function loadFromAnnotator() {
+    if (notes.length === 0) return
+    
+    const annotatorNotes: ProcessedNote[] = notes.map(note => ({
+      name: note.id + '.txt',
+      raw: note.text, // The text in annotator (already formatted on import)
+      formatted: formatNoteText(note.text) // Re-format to show any improvements
+    }))
+    
+    setProcessed(annotatorNotes)
+    setInputFiles([])
+    setPreviewIndex(0)
+    setFromAnnotator(true)
   }
 
   const currentPreview = processed[previewIndex]
+  const hasAnnotatorNotes = notes.length > 0
 
   return (
     <div className="flex-1 flex flex-col">
@@ -189,6 +209,17 @@ export function FormatView() {
             <FileText size={14} />
             Add Folder
           </button>
+
+          {hasAnnotatorNotes && !processed.length && (
+            <button
+              onClick={loadFromAnnotator}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-600 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/30"
+              title="Load notes from Annotator to preview formatting"
+            >
+              <ArrowDownToLine size={14} />
+              Load from Annotator ({notes.length})
+            </button>
+          )}
 
           {inputFiles.length > 0 && !processed.length && (
             <button
@@ -305,7 +336,9 @@ export function FormatView() {
             <div className="flex-1 flex min-h-0">
               <div className="flex-1 flex flex-col border-r border-maple-200 dark:border-maple-700">
                 <div className="px-4 py-2 bg-maple-100 dark:bg-maple-700 border-b border-maple-200 dark:border-maple-600">
-                  <span className="text-[10px] uppercase tracking-wide text-maple-500 dark:text-maple-400 font-medium">Before (Raw)</span>
+                  <span className="text-[10px] uppercase tracking-wide text-maple-500 dark:text-maple-400 font-medium">
+                    {fromAnnotator ? 'Current (In Annotator)' : 'Before (Raw)'}
+                  </span>
                 </div>
                 <div className="flex-1 overflow-auto p-4 bg-white dark:bg-maple-800">
                   <pre className="text-[11px] text-maple-600 dark:text-maple-300 font-mono whitespace-pre-wrap leading-relaxed">
@@ -316,7 +349,9 @@ export function FormatView() {
               
               <div className="flex-1 flex flex-col">
                 <div className="px-4 py-2 bg-green-50 dark:bg-green-900/30 border-b border-green-200 dark:border-green-800">
-                  <span className="text-[10px] uppercase tracking-wide text-green-700 dark:text-green-400 font-medium">After (Formatted)</span>
+                  <span className="text-[10px] uppercase tracking-wide text-green-700 dark:text-green-400 font-medium">
+                    {fromAnnotator ? 'Re-formatted (Latest Rules)' : 'After (Formatted)'}
+                  </span>
                 </div>
                 <div className="flex-1 overflow-auto p-4 bg-green-50/30 dark:bg-green-900/10">
                   <pre className="text-[11px] text-maple-700 dark:text-maple-200 font-mono whitespace-pre-wrap leading-relaxed">
