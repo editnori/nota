@@ -1,4 +1,4 @@
-import { useStore, buildAnnotationIndexes } from '../hooks/useStore'
+import { useStore, buildAnnotationIndexes, setBulkOperation } from '../hooks/useStore'
 import { exportJSON, exportCSV, downloadFile, exportSession, importSession } from '../lib/exporters'
 import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown, Moon, Sun } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
@@ -136,10 +136,11 @@ export function Header() {
       }
       
       const paths = Array.isArray(selected) ? selected : [selected]
-      const notes: Note[] = []
+      const importedNotes: Note[] = []
       
       // Process files
       setImporting(true, 'Processing...')
+      setBulkOperation(true) // Prevent rapid saves during import
       
       // Helper to get filename from path (handles both / and \)
       const getFileName = (p: string) => {
@@ -152,75 +153,82 @@ export function Header() {
         name.toLowerCase().endsWith(ext.toLowerCase())
       
       for (const filePath of paths) {
-        if (isFolder) {
-          // Read directory contents
-          try {
+        try {
+          if (isFolder) {
+            // Read directory contents
             const entries = await readDir(filePath)
-            for (const entry of entries) {
+            const txtFiles = entries.filter(e => e.name && hasExt(e.name, '.txt'))
+            
+            for (let i = 0; i < txtFiles.length; i++) {
+              const entry = txtFiles[i]
               const entryName = entry.name || ''
-              if (hasExt(entryName, '.txt')) {
-                const sep = filePath.includes('\\') ? '\\' : '/'
-                const fullPath = `${filePath}${sep}${entryName}`
-                const content = await readTextFile(fullPath)
-                notes.push({
-                  id: entryName.replace(/\.txt$/i, ''),
-                  text: formatNoteText(content),
-                  meta: { source: entryName, rawText: content }
-                })
+              setImporting(true, `Processing ${i + 1}/${txtFiles.length}`)
+              const sep = filePath.includes('\\') ? '\\' : '/'
+              const fullPath = `${filePath}${sep}${entryName}`
+              const content = await readTextFile(fullPath)
+              importedNotes.push({
+                id: entryName.replace(/\.txt$/i, ''),
+                text: formatNoteText(content),
+                meta: { source: entryName, rawText: content }
+              })
+            }
+          } else {
+            // Read single file
+            const fileName = getFileName(filePath)
+            setImporting(true, `Reading ${fileName}`)
+            
+            if (hasExt(fileName, '.txt')) {
+              const content = await readTextFile(filePath)
+              importedNotes.push({
+                id: fileName.replace(/\.txt$/i, ''),
+                text: formatNoteText(content),
+                meta: { source: fileName, rawText: content }
+              })
+            } else if (hasExt(fileName, '.json') || hasExt(fileName, '.jsonl')) {
+              const content = await readTextFile(filePath)
+              try {
+                const parsed = hasExt(fileName, '.jsonl')
+                  ? content.trim().split('\n').map(line => JSON.parse(line))
+                  : JSON.parse(content)
+                const items = Array.isArray(parsed) ? parsed : (parsed.notes || [parsed])
+                for (const item of items) {
+                  const rawItemText = String(item.text || '')
+                  importedNotes.push({
+                    id: String(item.id || item.note_id || `note_${Date.now()}_${Math.random().toString(36).slice(2,6)}`),
+                    text: formatNoteText(rawItemText),
+                    meta: { source: fileName, type: item.note_type, rawText: rawItemText }
+                  })
+                }
+              } catch (err) {
+                console.error('Failed to parse JSON:', err)
               }
             }
-          } catch (err) {
-            console.error('Failed to read directory:', err)
           }
-        } else {
-          // Read single file
-          const fileName = getFileName(filePath)
-          if (hasExt(fileName, '.txt')) {
-            const content = await readTextFile(filePath)
-            notes.push({
-              id: fileName.replace(/\.txt$/i, ''),
-              text: formatNoteText(content),
-              meta: { source: fileName, rawText: content }
-            })
-          } else if (hasExt(fileName, '.json') || hasExt(fileName, '.jsonl')) {
-            const content = await readTextFile(filePath)
-            try {
-              const parsed = hasExt(fileName, '.jsonl')
-                ? content.trim().split('\n').map(line => JSON.parse(line))
-                : JSON.parse(content)
-              const items = Array.isArray(parsed) ? parsed : (parsed.notes || [parsed])
-              for (const item of items) {
-                const rawItemText = String(item.text || '')
-                notes.push({
-                  id: String(item.id || item.note_id || `note_${Date.now()}`),
-                  text: formatNoteText(rawItemText),
-                  meta: { source: fileName, type: item.note_type, rawText: rawItemText }
-                })
-              }
-            } catch (err) {
-              console.error('Failed to parse JSON:', err)
-            }
-          }
+        } catch (err) {
+          console.error('Failed to read:', filePath, err)
         }
       }
       
-      if (notes.length > 0) {
+      if (importedNotes.length > 0) {
         const { notes: currentNotes, addNotes, setNotes } = useStore.getState()
         if (currentNotes.length > 0) {
-          addNotes(notes)
+          addNotes(importedNotes)
         } else {
-          setNotes(notes)
+          setNotes(importedNotes)
         }
-        setImporting(true, `${notes.length} notes imported`)
-        setTimeout(() => setImporting(false), 500)
+        setBulkOperation(false) // Re-enable saves, triggers debounced save
+        setImporting(true, `${importedNotes.length} notes imported`)
+        setTimeout(() => setImporting(false), 600)
       } else {
+        setBulkOperation(false)
         setImporting(true, 'No valid files found')
-        setTimeout(() => setImporting(false), 800)
+        setTimeout(() => setImporting(false), 1000)
       }
       
       return true // Handled by Tauri
     } catch (err) {
       console.error('Tauri import error:', err)
+      setBulkOperation(false)
       setImporting(false)
       return false // Fall back to HTML input
     }
@@ -259,6 +267,7 @@ export function Header() {
     if (!file) return
 
     setImporting(true, 'Loading session...')
+    setBulkOperation(true) // Prevent saves during import
 
     try {
       const text = await file.text()
@@ -268,27 +277,33 @@ export function Header() {
         // Build annotation indexes using shared function
         const indexes = buildAnnotationIndexes(result.annotations)
         
+        // Update state in a single batch to avoid partial renders
         useStore.setState({
           notes: result.notes,
           annotations: result.annotations,
           annotationsByNote: indexes.byNote,
           annotationsById: indexes.byId,
           currentNoteIndex: 0,
-          filteredNoteIds: null
+          filteredNoteIds: null,
+          highlightedAnnotation: null
         })
         
         if (result.questions) {
           localStorage.setItem('annotator_questions', JSON.stringify(result.questions))
         }
         
+        setBulkOperation(false) // Re-enable saves
         setImporting(true, `Loaded: ${result.notes.length} notes, ${result.annotations.length} annotations`)
-        setTimeout(() => setImporting(false), 1500)
+        // Slightly longer delay to ensure UI settles
+        setTimeout(() => setImporting(false), 800)
       } else {
+        setBulkOperation(false)
         setImporting(true, 'No data in session file')
         setTimeout(() => setImporting(false), 1500)
       }
     } catch (err) {
       console.error('Session import error:', err)
+      setBulkOperation(false)
       setImporting(true, 'Failed to load session')
       setTimeout(() => setImporting(false), 1500)
     }

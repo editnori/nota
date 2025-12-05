@@ -9,6 +9,7 @@ import { FormatView } from './components/FormatView'
 import { QuestionPicker } from './components/QuestionPicker'
 import { AnnotationList } from './components/AnnotationList'
 import { importFromDrop, handleImportWithProgress, formatNoteText } from './lib/importers'
+import { setBulkOperation } from './hooks/useStore'
 import { Loader2, Upload } from 'lucide-react'
 import type { Note } from './lib/types'
 
@@ -24,6 +25,7 @@ export default function App() {
     addNotes, setNotes
   } = useStore()
   const [isDragging, setIsDragging] = useState(false)
+  const [dropError, setDropError] = useState<string | null>(null)
   const dragCountRef = useRef(0)
 
   const currentNote = notes[currentNoteIndex]
@@ -53,11 +55,18 @@ export default function App() {
     )
   }, [setImporting])
 
+  // Show error toast with auto-dismiss
+  const showDropError = useCallback((msg: string) => {
+    setDropError(msg)
+    setTimeout(() => setDropError(null), 3000)
+  }, [])
+
   // Handle Tauri file drop - processes file paths directly
   const handleTauriDrop = useCallback(async (paths: string[]) => {
     if (paths.length === 0) return
     
-    setImporting(true, 'Processing...')
+    setImporting(true, 'Reading files...')
+    setBulkOperation(true) // Prevent rapid saves during import
     
     // Helper to get filename from path (handles both / and \)
     const getFileName = (p: string) => {
@@ -69,6 +78,10 @@ export default function App() {
     const hasExt = (name: string, ext: string) => 
       name.toLowerCase().endsWith(ext.toLowerCase())
     
+    let errorMsg = ''
+    let filesProcessed = 0
+    let unsupportedFiles: string[] = []
+    
     try {
       const { readTextFile, stat, readDir } = await import('@tauri-apps/plugin-fs')
       const importedNotes: Note[] = []
@@ -79,32 +92,44 @@ export default function App() {
           
           if (info.isDirectory) {
             // Read directory contents
+            setImporting(true, `Scanning folder...`)
             const entries = await readDir(filePath)
-            for (const entry of entries) {
+            const txtFiles = entries.filter(e => e.name && hasExt(e.name, '.txt'))
+            
+            for (let i = 0; i < txtFiles.length; i++) {
+              const entry = txtFiles[i]
               const entryName = entry.name || ''
-              if (hasExt(entryName, '.txt')) {
-                // Use proper path separator based on original path format
-                const sep = filePath.includes('\\') ? '\\' : '/'
-                const fullPath = `${filePath}${sep}${entryName}`
-                const content = await readTextFile(fullPath)
-                importedNotes.push({
-                  id: entryName.replace(/\.txt$/i, ''),
-                  text: formatNoteText(content),
-                  meta: { source: entryName, rawText: content }
-                })
-              }
+              setImporting(true, `Processing ${i + 1}/${txtFiles.length}`)
+              
+              // Use proper path separator based on original path format
+              const sep = filePath.includes('\\') ? '\\' : '/'
+              const fullPath = `${filePath}${sep}${entryName}`
+              const content = await readTextFile(fullPath)
+              importedNotes.push({
+                id: entryName.replace(/\.txt$/i, ''),
+                text: formatNoteText(content),
+                meta: { source: entryName, rawText: content }
+              })
+              filesProcessed++
+            }
+            
+            if (txtFiles.length === 0) {
+              unsupportedFiles.push(`${getFileName(filePath)}/ (no .txt files)`)
             }
           } else {
             // Single file
             const fileName = getFileName(filePath)
             if (hasExt(fileName, '.txt')) {
+              setImporting(true, `Reading ${fileName}`)
               const content = await readTextFile(filePath)
               importedNotes.push({
                 id: fileName.replace(/\.txt$/i, ''),
                 text: formatNoteText(content),
                 meta: { source: fileName, rawText: content }
               })
+              filesProcessed++
             } else if (hasExt(fileName, '.json') || hasExt(fileName, '.jsonl')) {
+              setImporting(true, `Reading ${fileName}`)
               const content = await readTextFile(filePath)
               try {
                 const parsed = hasExt(fileName, '.jsonl')
@@ -119,34 +144,64 @@ export default function App() {
                     meta: { source: fileName, type: item.note_type, rawText: rawItemText }
                   })
                 }
-              } catch (err) {
-                console.error('Failed to parse JSON:', err)
+                filesProcessed++
+              } catch (parseErr) {
+                console.error('Failed to parse JSON:', parseErr)
+                errorMsg = `Invalid JSON in ${fileName}`
               }
+            } else {
+              unsupportedFiles.push(fileName)
             }
           }
-        } catch (err) {
+        } catch (err: any) {
+          const fileName = getFileName(filePath)
           console.error('Failed to process path:', filePath, err)
+          // Provide specific error messages
+          if (err?.message?.includes('permission') || err?.message?.includes('Permission')) {
+            errorMsg = `Permission denied: ${fileName}`
+          } else if (err?.message?.includes('not found') || err?.message?.includes('No such file')) {
+            errorMsg = `File not found: ${fileName}`
+          } else {
+            errorMsg = `Failed to read: ${fileName}`
+          }
         }
       }
       
       if (importedNotes.length > 0) {
-        const currentNotes = useStore.getState().notes
+        // Get fresh state to avoid stale closure issues
+        const { notes: currentNotes, addNotes: doAddNotes, setNotes: doSetNotes } = useStore.getState()
         if (currentNotes.length > 0) {
-          addNotes(importedNotes)
+          doAddNotes(importedNotes)
         } else {
-          setNotes(importedNotes)
+          doSetNotes(importedNotes)
         }
+        setBulkOperation(false) // Re-enable saves, triggers debounced save
         setImporting(true, `${importedNotes.length} notes imported`)
-        setTimeout(() => setImporting(false), 500)
+        // Allow state to settle before hiding the indicator
+        setTimeout(() => setImporting(false), 600)
       } else {
-        setImporting(true, 'No valid files found')
-        setTimeout(() => setImporting(false), 800)
+        setBulkOperation(false)
+        setImporting(false)
+        if (errorMsg) {
+          showDropError(errorMsg)
+        } else if (unsupportedFiles.length > 0) {
+          const fileTypes = unsupportedFiles.slice(0, 2).join(', ')
+          showDropError(`Unsupported: ${fileTypes}${unsupportedFiles.length > 2 ? '...' : ''}`)
+        } else {
+          showDropError('No valid files found (use .txt, .json, or .jsonl)')
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Tauri drop error:', err)
+      setBulkOperation(false)
       setImporting(false)
+      // Show meaningful error instead of silently failing
+      const msg = err?.message?.includes('permission') 
+        ? 'Permission denied - try Import button instead'
+        : 'Drop failed - try Import button instead'
+      showDropError(msg)
     }
-  }, [setImporting, addNotes, setNotes])
+  }, [setImporting, showDropError])
 
   // Tauri-specific drag-drop event handling
   useEffect(() => {
@@ -361,6 +416,13 @@ export default function App() {
             <Loader2 className="w-8 h-8 animate-spin text-maple-600 dark:text-maple-300 mx-auto mb-3" />
             <p className="text-sm text-maple-600 dark:text-maple-300">{importProgress}</p>
           </div>
+        </div>
+      )}
+
+      {/* Drop error toast */}
+      {dropError && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[70] bg-red-100 dark:bg-red-900/90 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-2 rounded-lg shadow-lg text-sm animate-toast-enter">
+          {dropError}
         </div>
       )}
     </div>

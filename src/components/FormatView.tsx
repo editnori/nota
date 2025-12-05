@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Upload, Download, FileText, Loader2, ChevronLeft, ChevronRight, ArrowDownToLine } from 'lucide-react'
-import { useStore } from '../hooks/useStore'
+import { useStore, setBulkOperation } from '../hooks/useStore'
 import { downloadFile } from '../lib/exporters'
 import { formatNoteText } from '../lib/importers'
 
@@ -36,8 +36,12 @@ export function FormatView() {
   }
 
   // Handle Tauri file drop in FormatView
+  const [dropError, setDropError] = useState<string | null>(null)
+  
   const handleTauriFormatDrop = useCallback(async (paths: string[]) => {
     if (paths.length === 0) return
+    
+    setDropError(null)
     
     // Helper to get filename from path (handles both / and \)
     const getFileName = (p: string) => {
@@ -52,6 +56,7 @@ export function FormatView() {
     try {
       const { readTextFile, stat, readDir } = await import('@tauri-apps/plugin-fs')
       const droppedFiles: File[] = []
+      let unsupportedCount = 0
       
       for (const filePath of paths) {
         try {
@@ -77,10 +82,15 @@ export function FormatView() {
               const content = await readTextFile(filePath)
               const file = new File([content], fileName, { type: 'text/plain' })
               droppedFiles.push(file)
+            } else {
+              unsupportedCount++
             }
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error('Failed to read:', filePath, err)
+          if (err?.message?.includes('permission') || err?.message?.includes('Permission')) {
+            setDropError('Permission denied - try Add Files button')
+          }
         }
       }
       
@@ -89,9 +99,18 @@ export function FormatView() {
         setProcessed([])
         setPreviewIndex(0)
         setFromAnnotator(false)
+        setDropError(null)
+      } else if (unsupportedCount > 0) {
+        setDropError('Only .txt files are supported in Format view')
+        setTimeout(() => setDropError(null), 3000)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Tauri format drop error:', err)
+      const msg = err?.message?.includes('permission') 
+        ? 'Permission denied - try Add Files button'
+        : 'Drop failed - try Add Files button'
+      setDropError(msg)
+      setTimeout(() => setDropError(null), 3000)
     }
   }, [])
 
@@ -235,12 +254,14 @@ export function FormatView() {
   }
 
   function loadToAnnotator() {
-    const notes = processed.map(({ name, formatted }) => ({
+    setBulkOperation(true)
+    const newNotes = processed.map(({ name, formatted }) => ({
       id: name.replace(/\.txt$/, ''),
       text: formatted,
       meta: { source: name }
     }))
-    addNotes(notes)
+    addNotes(newNotes)
+    setBulkOperation(false)
     setInputFiles([])
     setProcessed([])
   }
@@ -372,6 +393,13 @@ export function FormatView() {
       </div>
 
       <div className="flex-1 overflow-hidden bg-maple-50 dark:bg-maple-900 relative">
+        {/* Drop error toast */}
+        {dropError && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-100 dark:bg-red-900/80 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-2 rounded-lg shadow-lg text-sm animate-toast-enter">
+            {dropError}
+          </div>
+        )}
+        
         {/* Drag overlay for FormatView */}
         {isDragging && (
           <div className="absolute inset-0 bg-maple-600/30 dark:bg-maple-400/30 backdrop-blur-sm flex items-center justify-center z-50 pointer-events-none">
