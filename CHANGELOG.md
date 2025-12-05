@@ -2,6 +2,19 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.5.59] - 2025-12-05
+
+### UX Improvement: Consistent Drag-Drop Behavior
+- **Drag-drop now works the same everywhere** - Always auto-formats and imports
+  - No more confusion about different behaviors in different tabs
+  - Drop files anywhere → auto-format → import with loading spinner
+- **Format tab simplified** - Now purely a comparison tool
+  - Renamed to "Format Comparison"
+  - Primary purpose: "Compare Notes" to see original vs formatted side-by-side
+  - Secondary: "Format & Preview Files" for batch download workflow
+  - Removed redundant drag-drop handling (global handler covers all)
+- **Fixed: Format tab preserves rawText** - Notes loaded via "Load to Annotator" now keep original text for comparison
+
 ## [0.5.58] - 2025-12-05
 
 ### Bug Fixes (Clear & Import State Issues)

@@ -207,10 +207,10 @@ export default function App() {
     }
   }, [setImporting, showDropError])
 
-  // Tauri-specific drag-drop event handling
+  // Tauri-specific drag-drop event handling - global for all modes
   useEffect(() => {
     if (!isTauri()) return
-    if (mode === 'format') return // FormatView handles its own
+    // Handle drag-drop globally - always auto-import with formatting
     
     let unlistenDrop: (() => void) | null = null
     let unlistenEnter: (() => void) | null = null
@@ -251,18 +251,12 @@ export default function App() {
     }
   }, [mode, handleTauriDrop])
 
-  // Web-based drag events (fallback for browser)
-  // Only active when NOT in format mode and NOT in Tauri
+  // Web-based drag events (fallback for browser) - global for all modes
   useEffect(() => {
-    // Skip in format mode (FormatView has its own handler)
-    if (mode === 'format') {
-      setIsDragging(false)
-      dragCountRef.current = 0
-      return
-    }
-    
     // Skip web events in Tauri (use native events instead)
     if (isTauri()) return
+    
+    // Handle drag-drop globally - always auto-import with formatting
     
     function onDragEnter(e: DragEvent) {
       e.preventDefault()
