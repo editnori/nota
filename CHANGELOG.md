@@ -2,6 +2,25 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.5.58] - 2025-12-05
+
+### Bug Fixes (Clear & Import State Issues)
+- **Fixed: Empty state after "Clear Everything"** - UI now shows loading state during async clear operation
+  - `clearSession` sets `isLoaded: false` before clearing, then `true` after
+  - Added small delay (50ms) to ensure storage is fully cleared before state reset
+  - React now properly detects state change and re-renders
+- **Fixed: Empty state after file import in Tauri** - Improved state synchronization
+  - Added `requestAnimationFrame` before timeout to ensure React has re-rendered
+  - Increased timeout from 600ms to 800ms for state to fully settle
+  - Fixed in both drag-drop import (`App.tsx`) and button import (`Header.tsx`)
+- **Fixed: `setNotes` not clearing filters** - Now resets `filteredNoteIds` and `highlightedAnnotation`
+- **Fixed: NotesList stale state** - Effect now watches full `notes` array, not just length
+
+### Technical Details
+- `clearSession`: Now properly sequences `isLoaded` → storage clear → state reset → `isLoaded`
+- Import handlers: Use `requestAnimationFrame(() => setTimeout(...))` pattern for reliable UI sync
+- All session import paths fixed with consistent timing
+
 ## [0.5.43] - 2025-12-04
 
 ### Performance (Instant Annotations)

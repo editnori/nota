@@ -218,7 +218,12 @@ export function Header() {
         }
         setBulkOperation(false) // Re-enable saves, triggers debounced save
         setImporting(true, `${importedNotes.length} notes imported`)
-        setTimeout(() => setImporting(false), 600)
+        
+        // Allow state to fully settle before hiding the indicator
+        // Use requestAnimationFrame + setTimeout to ensure React has re-rendered
+        requestAnimationFrame(() => {
+          setTimeout(() => setImporting(false), 800)
+        })
       } else {
         setBulkOperation(false)
         setImporting(true, 'No valid files found')
@@ -294,8 +299,11 @@ export function Header() {
         
         setBulkOperation(false) // Re-enable saves
         setImporting(true, `Loaded: ${result.notes.length} notes, ${result.annotations.length} annotations`)
-        // Slightly longer delay to ensure UI settles
-        setTimeout(() => setImporting(false), 800)
+        
+        // Allow state to fully settle before hiding the indicator
+        requestAnimationFrame(() => {
+          setTimeout(() => setImporting(false), 800)
+        })
       } else {
         setBulkOperation(false)
         setImporting(true, 'No data in session file')

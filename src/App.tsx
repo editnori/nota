@@ -177,8 +177,12 @@ export default function App() {
         }
         setBulkOperation(false) // Re-enable saves, triggers debounced save
         setImporting(true, `${importedNotes.length} notes imported`)
-        // Allow state to settle before hiding the indicator
-        setTimeout(() => setImporting(false), 600)
+        
+        // Allow state to fully settle before hiding the indicator
+        // Use requestAnimationFrame + setTimeout to ensure React has re-rendered
+        requestAnimationFrame(() => {
+          setTimeout(() => setImporting(false), 800)
+        })
       } else {
         setBulkOperation(false)
         setImporting(false)

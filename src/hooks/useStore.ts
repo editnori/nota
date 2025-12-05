@@ -340,7 +340,14 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setNotes: (notes) => {
-    set({ notes, currentNoteIndex: 0, lastSaved: debouncedSave() })
+    // Reset related state when setting new notes to ensure clean UI state
+    set({ 
+      notes, 
+      currentNoteIndex: 0, 
+      filteredNoteIds: null,  // Clear any active filters
+      highlightedAnnotation: null,
+      lastSaved: debouncedSave() 
+    })
   },
 
   addNotes: (newNotes) => {
@@ -493,10 +500,16 @@ export const useStore = create<State>((set, get) => ({
       batchTimeout = null
     }
     
+    // Show loading state to prevent UI issues during async clear
+    set({ isLoaded: false })
+    
     // Clear persistent storage
     await clearStorage()
     
-    // Reset all state in a single batch
+    // Small delay to ensure storage is fully cleared and React can detect state change
+    await new Promise(resolve => setTimeout(resolve, 50))
+    
+    // Reset all state in a single batch with fresh Map instances
     set({
       notes: [],
       annotations: [],
@@ -510,7 +523,8 @@ export const useStore = create<State>((set, get) => ({
       filteredNoteIds: null,
       highlightedAnnotation: null,
       isImporting: false,
-      importProgress: ''
+      importProgress: '',
+      isLoaded: true  // Re-enable UI after state is fully reset
     })
   },
 

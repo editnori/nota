@@ -220,9 +220,10 @@ export function NotesList() {
     return filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   }, [filtered, page])
   
-  // Reset state when notes are cleared
+  // Reset state when notes are cleared - use notes reference to detect full reset
   useEffect(() => {
     if (notes.length === 0) {
+      // Reset all local state immediately
       setPage(0)
       setSearch('')
       setFilter('all')
@@ -230,11 +231,11 @@ export function NotesList() {
       setShowTypeFilter(false)
       setShowSmartFilter(false)
       // Also clear the global filter if notes are empty
-      if (filteredNoteIds) {
+      if (filteredNoteIds !== null) {
         setFilteredNoteIds(null)
       }
     }
-  }, [notes.length, filteredNoteIds, setFilteredNoteIds])
+  }, [notes, filteredNoteIds, setFilteredNoteIds])  // Use full notes array, not just length
   
   // Keep page in bounds when filter changes
   useEffect(() => {
