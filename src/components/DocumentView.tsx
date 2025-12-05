@@ -43,13 +43,15 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   // Get annotations for current note only - memoized for performance
   // Note: We rely on annotation batching (16ms) for performance instead of useDeferredValue
   // which was causing highlights to not appear during rapid annotation
+  // Defensive: handle case where annotationsByNote might not be a Map
   const noteAnnotations = useMemo(() => {
-    if (!note) return []
+    if (!note || !annotationsByNote?.get) return []
     return annotationsByNote.get(note.id) || []
   }, [note?.id, annotationsByNote])
   
   // For hasUnannotated check - just need size comparison
-  const annotationsByNoteSize = annotationsByNote.size
+  // Defensive: handle case where annotationsByNote might not have size property
+  const annotationsByNoteSize = annotationsByNote?.size ?? 0
   const notesLength = notes.length
   
   const docRef = useRef<HTMLDivElement>(null)
@@ -81,11 +83,13 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const hasUnannotated = annotationsByNoteSize < notesLength
   
   // Find next unannotated note from current position
+  // Defensive: handle case where annotationsByNote might not have .has method
   const nextUnannotatedIndex = useMemo(() => {
-    if (!hasUnannotated) return -1
+    if (!hasUnannotated || !annotationsByNote?.has) return -1
     
     for (let i = currentNoteIndex + 1; i < notes.length; i++) {
-      if (!annotationsByNote.has(notes[i].id)) {
+      const note = notes[i]
+      if (note && !annotationsByNote.has(note.id)) {
         return i
       }
     }

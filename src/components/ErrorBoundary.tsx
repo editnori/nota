@@ -10,6 +10,7 @@ interface Props {
 
 interface State {
   error: Error | null
+  errorInfo: string | null
 }
 
 /**
@@ -18,14 +19,26 @@ interface State {
  * Provides a reset that clears the session so users can recover without a full reload.
  */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null }
+  state: State = { error: null, errorInfo: null }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { error }
   }
 
   componentDidCatch(error: Error, info: any) {
-    console.error('App crashed', error, info)
+    // Log full error details for debugging
+    const errorDetails = {
+      message: error.message,
+      stack: error.stack,
+      componentStack: info?.componentStack,
+      timestamp: new Date().toISOString()
+    }
+    console.error('App crashed:', errorDetails)
+    
+    // Store simplified info for display
+    this.setState({ 
+      errorInfo: info?.componentStack?.split('\n').slice(0, 3).join('\n') || null 
+    })
   }
 
   private resetState = () => {
@@ -35,11 +48,11 @@ export class ErrorBoundary extends Component<Props, State> {
     } catch (err) {
       console.error('Failed to reset store after error', err)
     }
-    this.setState({ error: null })
+    this.setState({ error: null, errorInfo: null })
   }
 
   render() {
-    const { error } = this.state
+    const { error, errorInfo } = this.state
     if (error) {
       if (this.props.fallback) {
         return this.props.fallback(error, this.resetState)
@@ -50,6 +63,18 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="text-sm mb-4 text-center max-w-md">
             The app hit an unexpected error. You can reset the session to recover without reloading.
           </p>
+          
+          {/* Show error details in dev/debug */}
+          <details className="mb-4 text-xs text-maple-500 dark:text-maple-400 max-w-md">
+            <summary className="cursor-pointer hover:text-maple-700 dark:hover:text-maple-200">
+              Error details
+            </summary>
+            <pre className="mt-2 p-2 bg-maple-100 dark:bg-maple-800 rounded text-[10px] overflow-auto max-h-32">
+              {error.message}
+              {errorInfo && `\n\nComponent:\n${errorInfo}`}
+            </pre>
+          </details>
+          
           <div className="flex gap-3">
             <button
               onClick={this.resetState}

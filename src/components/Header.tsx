@@ -44,17 +44,21 @@ export function Header() {
   const currentNote = notes[currentNoteIndex]
   
   // Get annotations count for current note - memoized
+  // Defensive: handle case where annotationsByNote might not be a Map
   const currentNoteAnnotationCount = useMemo(() => {
-    if (!currentNote) return 0
+    if (!currentNote || !annotationsByNote?.get) return 0
     return annotationsByNote.get(currentNote.id)?.length || 0
   }, [currentNote?.id, annotationsByNote])
   
   // Suggested count - derived from indexed map for better performance
+  // Defensive: handle case where annotationsByNote might not be iterable
   const suggestedCount = useMemo(() => {
     let count = 0
+    if (!annotationsByNote || typeof annotationsByNote.values !== 'function') return count
     for (const anns of annotationsByNote.values()) {
+      if (!anns) continue
       for (const a of anns) {
-        if (a.source === 'suggested') count++
+        if (a?.source === 'suggested') count++
       }
     }
     return count

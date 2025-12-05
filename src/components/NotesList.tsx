@@ -84,19 +84,23 @@ export function NotesList() {
   const isSearching = search !== debouncedSearch
 
   // Derive annotation counts from indexed Map - O(notes) instead of O(annotations)
+  // Defensive: handle case where annotationsByNote might not be iterable
   const annotationCounts = useMemo(() => {
     const counts = new Map<string, number>()
+    if (!annotationsByNote || typeof annotationsByNote.entries !== 'function') return counts
     for (const [noteId, anns] of annotationsByNote) {
-      counts.set(noteId, anns.length)
+      counts.set(noteId, anns?.length || 0)
     }
     return counts
   }, [annotationsByNote])
 
   // Derive suggested notes from indexed Map - O(notes) instead of O(annotations)
+  // Defensive: handle case where annotationsByNote might not be iterable
   const suggestedNotes = useMemo(() => {
     const result = new Set<string>()
+    if (!annotationsByNote || typeof annotationsByNote.entries !== 'function') return result
     for (const [noteId, anns] of annotationsByNote) {
-      if (anns.some(a => a.source === 'suggested')) {
+      if (anns?.some(a => a.source === 'suggested')) {
         result.add(noteId)
       }
     }
@@ -202,12 +206,14 @@ export function NotesList() {
 
   // Apply status filter separately - only recalculates when filter or annotations change
   // This prevents recalculating text search when only annotations change
+  // Defensive: handle case where annotationsByNote might not have .has method
   const filtered = useMemo(() => {
     if (filter === 'all') return baseFiltered
     
     // Use annotationsByNote.has() for O(1) check instead of count lookup
     return baseFiltered.filter(note => {
-      const hasAnnotations = annotationsByNote.has(note.id)
+      if (!note) return false
+      const hasAnnotations = annotationsByNote?.has?.(note.id) ?? false
       if (filter === 'done') return hasAnnotations
       if (filter === 'todo') return !hasAnnotations
       return true
