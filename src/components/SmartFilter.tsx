@@ -20,6 +20,34 @@ const DEFAULT_PATTERNS: Record<string, { terms: string[]; regex: string[]; negat
 
 const NEGATION = ['no ', 'not ', 'denies ', 'negative for ', 'without ', 'absent ']
 
+// Pre-compiled pattern cache for performance
+interface CompiledPattern {
+  terms: string[]  // Already lowercased
+  regexes: RegExp[]  // Pre-compiled
+  negation: boolean
+}
+type CompiledPatterns = Map<string, CompiledPattern>
+
+function compilePatterns(
+  patterns: Record<string, { terms: string[]; regex: string[]; negation: boolean }>,
+  selectedIds: Set<string>
+): CompiledPatterns {
+  const compiled = new Map<string, CompiledPattern>()
+  for (const qid of selectedIds) {
+    const config = patterns[qid]
+    if (!config) continue
+    compiled.set(qid, {
+      terms: config.terms.map(t => t.toLowerCase()),
+      regexes: config.regex.map(rx => {
+        try { return new RegExp(rx, 'gi') }
+        catch { return null }
+      }).filter((r): r is RegExp => r !== null),
+      negation: config.negation
+    })
+  }
+  return compiled
+}
+
 // Match now includes the question that found it
 export interface Match { 
   noteId: string
@@ -40,7 +68,8 @@ const PATTERNS_KEY = 'nota_filter_patterns'
 const STATE_KEY = 'nota_filter_state'
 
 export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Props) {
-  const questions = loadQuestions()
+  // Memoize questions load (already cached in questions.ts)
+  const questions = useMemo(() => loadQuestions(), [])
   
   const [patterns, setPatterns] = useState<Record<string, { terms: string[]; regex: string[]; negation: boolean }>>(() => {
     try {
@@ -49,7 +78,7 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
     } catch { return DEFAULT_PATTERNS }
   })
   
-  // Load persisted state
+  // Load persisted state - single localStorage read for all state values
   const [selected, setSelected] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem(STATE_KEY)
@@ -61,21 +90,16 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
     return new Set()
   })
   
-  const [excludes, setExcludes] = useState(() => {
+  // Parse STATE_KEY once and reuse
+  const savedState = useMemo(() => {
     try {
       const saved = localStorage.getItem(STATE_KEY)
-      if (saved) return JSON.parse(saved).excludes || ''
-    } catch {}
-    return ''
-  })
+      return saved ? JSON.parse(saved) : null
+    } catch { return null }
+  }, [])
   
-  const [minLen, setMinLen] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STATE_KEY)
-      if (saved) return JSON.parse(saved).minLen || ''
-    } catch {}
-    return ''
-  })
+  const [excludes, setExcludes] = useState(() => savedState?.excludes || '')
+  const [minLen, setMinLen] = useState(() => savedState?.minLen || '')
   
   const [expanded, setExpanded] = useState<string | null>(null)
   const [autoTag, setAutoTag] = useState(false)
@@ -96,73 +120,111 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
     localStorage.setItem(PATTERNS_KEY, JSON.stringify(updated))
   }
 
-  // Calculate matches - now tracks which question found each match
+  // Pre-compile patterns when selection or patterns change (not per-note)
+  const compiledPatterns = useMemo(() => 
+    compilePatterns(patterns, selected), 
+    [patterns, selected]
+  )
+
+  // Calculate matches - optimized with pre-compiled patterns
   const { matchingNotes, matches, excludedCount } = useMemo(() => {
     const matching = new Set<string>()
     const allMatches: Match[] = []
     let excluded = 0
 
+    // Pre-process excludes once (not per-note)
     const excludeTerms = excludes.split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean)
     const minLength = parseInt(minLen) || 0
+    const collectMatches = autoTag // Only collect detailed matches if needed
 
     for (const note of notes) {
+      // Early exit checks first (cheapest operations)
+      if (minLength && note.text.length < minLength) { excluded++; continue }
+      
       const lower = note.text.toLowerCase()
       
-      if (minLength && note.text.length < minLength) { excluded++; continue }
-      if (excludeTerms.some((ex: string) => lower.includes(ex))) { excluded++; continue }
+      // Exclude check - early exit
+      if (excludeTerms.length > 0 && excludeTerms.some((ex: string) => lower.includes(ex))) { 
+        excluded++
+        continue 
+      }
 
-      if (selected.size === 0) { matching.add(note.id); continue }
+      // No filters selected = all notes match
+      if (selected.size === 0) { 
+        matching.add(note.id)
+        continue 
+      }
 
       let found = false
-      for (const qid of selected) {
-        const config = patterns[qid]
-        if (!config) continue
-
-        // Check terms
-        for (const term of config.terms) {
-          let idx = lower.indexOf(term.toLowerCase())
+      
+      // Use pre-compiled patterns
+      for (const [qid, compiled] of compiledPatterns) {
+        // Check pre-lowercased terms
+        for (const term of compiled.terms) {
+          let idx = lower.indexOf(term)
           while (idx !== -1) {
             let negated = false
-            if (config.negation) {
-              const before = lower.slice(Math.max(0, idx - 15), idx)
-              negated = NEGATION.some(n => before.endsWith(n))
+            if (compiled.negation) {
+              // Optimized negation check - avoid slice when possible
+              const checkStart = Math.max(0, idx - 15)
+              if (checkStart < idx) {
+                const before = lower.slice(checkStart, idx)
+                negated = NEGATION.some(n => before.endsWith(n))
+              }
             }
             if (!negated) {
               found = true
-              allMatches.push({ 
-                noteId: note.id, 
-                term: note.text.slice(idx, idx + term.length), 
-                start: idx, 
-                end: idx + term.length,
-                questionId: qid  // Track which question found this
-              })
+              if (collectMatches) {
+                allMatches.push({ 
+                  noteId: note.id, 
+                  term: note.text.slice(idx, idx + term.length), 
+                  start: idx, 
+                  end: idx + term.length,
+                  questionId: qid
+                })
+              } else if (found) {
+                // Early exit if we just need to know if note matches
+                break
+              }
             }
-            idx = lower.indexOf(term.toLowerCase(), idx + 1)
+            idx = lower.indexOf(term, idx + 1)
           }
+          // Early exit from term loop if found and not collecting
+          if (found && !collectMatches) break
         }
 
-        // Check regex
-        for (const rx of config.regex) {
-          try {
-            const re = new RegExp(rx, 'gi')
+        // Check pre-compiled regexes (skip if already found and not collecting)
+        if (!found || collectMatches) {
+          for (const re of compiled.regexes) {
+            // Reset regex lastIndex for reuse
+            re.lastIndex = 0
             let m
             while ((m = re.exec(note.text)) !== null) {
               found = true
-              allMatches.push({ 
-                noteId: note.id, 
-                term: m[0], 
-                start: m.index, 
-                end: m.index + m[0].length,
-                questionId: qid  // Track which question found this
-              })
+              if (collectMatches) {
+                allMatches.push({ 
+                  noteId: note.id, 
+                  term: m[0], 
+                  start: m.index, 
+                  end: m.index + m[0].length,
+                  questionId: qid
+                })
+              } else {
+                break // Early exit
+              }
             }
-          } catch {}
+            if (found && !collectMatches) break
+          }
         }
+        
+        // Early exit from question loop if found and not collecting
+        if (found && !collectMatches) break
       }
+      
       if (found) matching.add(note.id)
     }
     return { matchingNotes: matching, matches: allMatches, excludedCount: excluded }
-  }, [notes, selected, patterns, excludes, minLen])
+  }, [notes, selected, compiledPatterns, excludes, minLen, autoTag])
 
   function toggle(qid: string) {
     const next = new Set(selected)
