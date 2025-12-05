@@ -1,8 +1,13 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Upload, Download, FileText, Loader2, ChevronLeft, ChevronRight, ArrowDownToLine } from 'lucide-react'
 import { useStore } from '../hooks/useStore'
 import { downloadFile } from '../lib/exporters'
 import { formatNoteText } from '../lib/importers'
+
+// Check if running in Tauri desktop app
+function isTauri(): boolean {
+  return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+}
 
 interface ProcessedNote {
   name: string
@@ -30,8 +35,99 @@ export function FormatView() {
     setPreviewIndex(0)
   }
 
-  // Window-level drag handlers for FormatView
+  // Handle Tauri file drop in FormatView
+  const handleTauriFormatDrop = useCallback(async (paths: string[]) => {
+    if (paths.length === 0) return
+    
+    try {
+      const { readTextFile, stat, readDir } = await import('@tauri-apps/plugin-fs')
+      const droppedFiles: File[] = []
+      
+      for (const path of paths) {
+        try {
+          const info = await stat(path)
+          
+          if (info.isDirectory) {
+            // Read directory for txt files
+            const entries = await readDir(path)
+            for (const entry of entries) {
+              if (entry.name?.endsWith('.txt')) {
+                const fullPath = `${path}/${entry.name}`
+                const content = await readTextFile(fullPath)
+                // Create a File-like object
+                const file = new File([content], entry.name, { type: 'text/plain' })
+                droppedFiles.push(file)
+              }
+            }
+          } else {
+            const fileName = path.split('/').pop() || path.split('\\').pop() || 'note.txt'
+            if (fileName.endsWith('.txt')) {
+              const content = await readTextFile(path)
+              const file = new File([content], fileName, { type: 'text/plain' })
+              droppedFiles.push(file)
+            }
+          }
+        } catch (err) {
+          console.error('Failed to read:', path, err)
+        }
+      }
+      
+      if (droppedFiles.length > 0) {
+        setInputFiles(prev => [...prev, ...droppedFiles])
+        setProcessed([])
+        setPreviewIndex(0)
+        setFromAnnotator(false)
+      }
+    } catch (err) {
+      console.error('Tauri format drop error:', err)
+    }
+  }, [])
+
+  // Tauri-specific drag-drop for FormatView
   useEffect(() => {
+    if (!isTauri()) return
+    
+    let unlistenDrop: (() => void) | null = null
+    let unlistenEnter: (() => void) | null = null
+    let unlistenLeave: (() => void) | null = null
+    
+    async function setupTauriDragDrop() {
+      try {
+        const { listen } = await import('@tauri-apps/api/event')
+        
+        unlistenEnter = await listen('tauri://drag-enter', () => {
+          setIsDragging(true)
+        })
+        
+        unlistenLeave = await listen('tauri://drag-leave', () => {
+          setIsDragging(false)
+        })
+        
+        unlistenDrop = await listen<{ paths: string[] }>('tauri://drag-drop', (event) => {
+          setIsDragging(false)
+          if (event.payload?.paths) {
+            handleTauriFormatDrop(event.payload.paths)
+          }
+        })
+      } catch (err) {
+        console.error('Failed to setup Tauri drag-drop:', err)
+      }
+    }
+    
+    setupTauriDragDrop()
+    
+    return () => {
+      unlistenDrop?.()
+      unlistenEnter?.()
+      unlistenLeave?.()
+    }
+  }, [handleTauriFormatDrop])
+
+  // Web-based drag handlers for FormatView (browser fallback)
+  useEffect(() => {
+    // Skip web events in Tauri
+    if (isTauri()) return
+    
     function onDragEnter(e: DragEvent) {
       e.preventDefault()
       e.stopPropagation()

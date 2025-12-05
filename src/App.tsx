@@ -8,13 +8,20 @@ import { ReviewView } from './components/ReviewView'
 import { FormatView } from './components/FormatView'
 import { QuestionPicker } from './components/QuestionPicker'
 import { AnnotationList } from './components/AnnotationList'
-import { importFromDrop, handleImportWithProgress } from './lib/importers'
+import { importFromDrop, handleImportWithProgress, formatNoteText } from './lib/importers'
 import { Loader2, Upload } from 'lucide-react'
+import type { Note } from './lib/types'
+
+// Check if running in Tauri desktop app
+function isTauri(): boolean {
+  return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+}
 
 export default function App() {
   const { 
     notes, mode, currentNoteIndex, selectedQuestion, addAnnotation, 
-    isLoaded, darkMode, isImporting, importProgress, setImporting 
+    isLoaded, darkMode, isImporting, importProgress, setImporting,
+    addNotes, setNotes
   } = useStore()
   const [isDragging, setIsDragging] = useState(false)
   const dragCountRef = useRef(0)
@@ -29,7 +36,7 @@ export default function App() {
     }
   }, [darkMode])
 
-  // Handle drag-drop import - uses shared import handler
+  // Handle drag-drop import - uses shared import handler (for web)
   const handleDropImport = useCallback(async (dataTransfer: DataTransfer) => {
     if (!dataTransfer.items || dataTransfer.items.length === 0) return
     
@@ -46,15 +53,143 @@ export default function App() {
     )
   }, [setImporting])
 
-  // Use window-level drag events for reliable capture
-  // Only active when NOT in format mode (FormatView has its own handler)
+  // Handle Tauri file drop - processes file paths directly
+  const handleTauriDrop = useCallback(async (paths: string[]) => {
+    if (paths.length === 0) return
+    
+    setImporting(true, 'Processing...')
+    
+    try {
+      const { readTextFile, stat, readDir } = await import('@tauri-apps/plugin-fs')
+      const importedNotes: Note[] = []
+      
+      for (const path of paths) {
+        try {
+          const info = await stat(path)
+          
+          if (info.isDirectory) {
+            // Read directory contents
+            const entries = await readDir(path)
+            for (const entry of entries) {
+              if (entry.name?.endsWith('.txt')) {
+                const fullPath = `${path}/${entry.name}`
+                const content = await readTextFile(fullPath)
+                importedNotes.push({
+                  id: entry.name.replace(/\.txt$/, ''),
+                  text: formatNoteText(content),
+                  meta: { source: entry.name }
+                })
+              }
+            }
+          } else {
+            // Single file
+            const fileName = path.split('/').pop() || path.split('\\').pop() || 'note'
+            if (fileName.endsWith('.txt')) {
+              const content = await readTextFile(path)
+              importedNotes.push({
+                id: fileName.replace(/\.txt$/, ''),
+                text: formatNoteText(content),
+                meta: { source: fileName }
+              })
+            } else if (fileName.endsWith('.json') || fileName.endsWith('.jsonl')) {
+              const content = await readTextFile(path)
+              try {
+                const parsed = fileName.endsWith('.jsonl')
+                  ? content.trim().split('\n').map(line => JSON.parse(line))
+                  : JSON.parse(content)
+                const items = Array.isArray(parsed) ? parsed : (parsed.notes || [parsed])
+                for (const item of items) {
+                  importedNotes.push({
+                    id: String(item.id || item.note_id || `note_${Date.now()}_${Math.random().toString(36).slice(2,6)}`),
+                    text: formatNoteText(String(item.text || '')),
+                    meta: { source: fileName, type: item.note_type }
+                  })
+                }
+              } catch (err) {
+                console.error('Failed to parse JSON:', err)
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Failed to process path:', path, err)
+        }
+      }
+      
+      if (importedNotes.length > 0) {
+        const currentNotes = useStore.getState().notes
+        if (currentNotes.length > 0) {
+          addNotes(importedNotes)
+        } else {
+          setNotes(importedNotes)
+        }
+        setImporting(true, `${importedNotes.length} notes imported`)
+        setTimeout(() => setImporting(false), 500)
+      } else {
+        setImporting(true, 'No valid files found')
+        setTimeout(() => setImporting(false), 800)
+      }
+    } catch (err) {
+      console.error('Tauri drop error:', err)
+      setImporting(false)
+    }
+  }, [setImporting, addNotes, setNotes])
+
+  // Tauri-specific drag-drop event handling
   useEffect(() => {
-    // Skip window-level drag handling in format mode
+    if (!isTauri()) return
+    if (mode === 'format') return // FormatView handles its own
+    
+    let unlistenDrop: (() => void) | null = null
+    let unlistenEnter: (() => void) | null = null
+    let unlistenLeave: (() => void) | null = null
+    
+    async function setupTauriDragDrop() {
+      try {
+        const { listen } = await import('@tauri-apps/api/event')
+        
+        // Listen for drag enter
+        unlistenEnter = await listen('tauri://drag-enter', () => {
+          setIsDragging(true)
+        })
+        
+        // Listen for drag leave
+        unlistenLeave = await listen('tauri://drag-leave', () => {
+          setIsDragging(false)
+        })
+        
+        // Listen for file drop
+        unlistenDrop = await listen<{ paths: string[] }>('tauri://drag-drop', (event) => {
+          setIsDragging(false)
+          if (event.payload?.paths) {
+            handleTauriDrop(event.payload.paths)
+          }
+        })
+      } catch (err) {
+        console.error('Failed to setup Tauri drag-drop:', err)
+      }
+    }
+    
+    setupTauriDragDrop()
+    
+    return () => {
+      unlistenDrop?.()
+      unlistenEnter?.()
+      unlistenLeave?.()
+    }
+  }, [mode, handleTauriDrop])
+
+  // Web-based drag events (fallback for browser)
+  // Only active when NOT in format mode and NOT in Tauri
+  useEffect(() => {
+    // Skip in format mode (FormatView has its own handler)
     if (mode === 'format') {
       setIsDragging(false)
       dragCountRef.current = 0
       return
     }
+    
+    // Skip web events in Tauri (use native events instead)
+    if (isTauri()) return
     
     function onDragEnter(e: DragEvent) {
       e.preventDefault()
