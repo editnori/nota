@@ -39,36 +39,48 @@ export function FormatView() {
   const handleTauriFormatDrop = useCallback(async (paths: string[]) => {
     if (paths.length === 0) return
     
+    // Helper to get filename from path (handles both / and \)
+    const getFileName = (p: string) => {
+      const parts = p.replace(/\\/g, '/').split('/')
+      return parts[parts.length - 1] || 'note.txt'
+    }
+    
+    // Helper to check extension (case-insensitive)
+    const hasExt = (name: string, ext: string) => 
+      name.toLowerCase().endsWith(ext.toLowerCase())
+    
     try {
       const { readTextFile, stat, readDir } = await import('@tauri-apps/plugin-fs')
       const droppedFiles: File[] = []
       
-      for (const path of paths) {
+      for (const filePath of paths) {
         try {
-          const info = await stat(path)
+          const info = await stat(filePath)
           
           if (info.isDirectory) {
             // Read directory for txt files
-            const entries = await readDir(path)
+            const entries = await readDir(filePath)
             for (const entry of entries) {
-              if (entry.name?.endsWith('.txt')) {
-                const fullPath = `${path}/${entry.name}`
+              const entryName = entry.name || ''
+              if (hasExt(entryName, '.txt')) {
+                const sep = filePath.includes('\\') ? '\\' : '/'
+                const fullPath = `${filePath}${sep}${entryName}`
                 const content = await readTextFile(fullPath)
                 // Create a File-like object
-                const file = new File([content], entry.name, { type: 'text/plain' })
+                const file = new File([content], entryName, { type: 'text/plain' })
                 droppedFiles.push(file)
               }
             }
           } else {
-            const fileName = path.split('/').pop() || path.split('\\').pop() || 'note.txt'
-            if (fileName.endsWith('.txt')) {
-              const content = await readTextFile(path)
+            const fileName = getFileName(filePath)
+            if (hasExt(fileName, '.txt')) {
+              const content = await readTextFile(filePath)
               const file = new File([content], fileName, { type: 'text/plain' })
               droppedFiles.push(file)
             }
           }
         } catch (err) {
-          console.error('Failed to read:', path, err)
+          console.error('Failed to read:', filePath, err)
         }
       }
       

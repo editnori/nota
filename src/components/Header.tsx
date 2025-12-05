@@ -141,19 +141,31 @@ export function Header() {
       // Process files
       setImporting(true, 'Processing...')
       
-      for (const path of paths) {
+      // Helper to get filename from path (handles both / and \)
+      const getFileName = (p: string) => {
+        const parts = p.replace(/\\/g, '/').split('/')
+        return parts[parts.length - 1] || 'note'
+      }
+      
+      // Helper to check extension (case-insensitive)
+      const hasExt = (name: string, ext: string) => 
+        name.toLowerCase().endsWith(ext.toLowerCase())
+      
+      for (const filePath of paths) {
         if (isFolder) {
           // Read directory contents
           try {
-            const entries = await readDir(path)
+            const entries = await readDir(filePath)
             for (const entry of entries) {
-              if (entry.name?.endsWith('.txt')) {
-                const fullPath = `${path}/${entry.name}`
+              const entryName = entry.name || ''
+              if (hasExt(entryName, '.txt')) {
+                const sep = filePath.includes('\\') ? '\\' : '/'
+                const fullPath = `${filePath}${sep}${entryName}`
                 const content = await readTextFile(fullPath)
                 notes.push({
-                  id: entry.name.replace(/\.txt$/, ''),
+                  id: entryName.replace(/\.txt$/i, ''),
                   text: formatNoteText(content),
-                  meta: { source: entry.name, rawText: content }
+                  meta: { source: entryName, rawText: content }
                 })
               }
             }
@@ -162,18 +174,18 @@ export function Header() {
           }
         } else {
           // Read single file
-          const fileName = path.split('/').pop() || path.split('\\').pop() || 'note'
-          if (fileName.endsWith('.txt')) {
-            const content = await readTextFile(path)
+          const fileName = getFileName(filePath)
+          if (hasExt(fileName, '.txt')) {
+            const content = await readTextFile(filePath)
             notes.push({
-              id: fileName.replace(/\.txt$/, ''),
+              id: fileName.replace(/\.txt$/i, ''),
               text: formatNoteText(content),
               meta: { source: fileName, rawText: content }
             })
-          } else if (fileName.endsWith('.json') || fileName.endsWith('.jsonl')) {
-            const content = await readTextFile(path)
+          } else if (hasExt(fileName, '.json') || hasExt(fileName, '.jsonl')) {
+            const content = await readTextFile(filePath)
             try {
-              const parsed = fileName.endsWith('.jsonl') 
+              const parsed = hasExt(fileName, '.jsonl')
                 ? content.trim().split('\n').map(line => JSON.parse(line))
                 : JSON.parse(content)
               const items = Array.isArray(parsed) ? parsed : (parsed.notes || [parsed])
