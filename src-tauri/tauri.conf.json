@@ -46,7 +46,6 @@
         "installerIcon": "icons/icon.ico",
         "headerImage": "icons/nsis-header.png",
         "sidebarImage": "icons/nsis-sidebar.png",
-        "license": null,
         "installMode": "currentUser",
         "displayLanguageSelector": false
       }
