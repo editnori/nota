@@ -86,12 +86,24 @@ export function FormatView() {
     if (inputFiles.length === 0) return
     
     setProcessing(true)
+    
+    // Process files in parallel batches for faster formatting
+    const BATCH_SIZE = 20
     const results: ProcessedNote[] = []
-
-    for (const file of inputFiles) {
-      const raw = await file.text()
-      const formatted = formatNoteText(raw)
-      results.push({ name: file.name, raw, formatted })
+    
+    for (let i = 0; i < inputFiles.length; i += BATCH_SIZE) {
+      const batch = inputFiles.slice(i, i + BATCH_SIZE)
+      
+      // Process batch in parallel
+      const batchResults = await Promise.all(
+        batch.map(async (file) => {
+          const raw = await file.text()
+          const formatted = formatNoteText(raw)
+          return { name: file.name, raw, formatted }
+        })
+      )
+      
+      results.push(...batchResults)
     }
 
     setProcessed(results)
@@ -100,8 +112,15 @@ export function FormatView() {
   }
 
   async function downloadAll() {
-    for (const { name, formatted } of processed) {
-      await downloadFile(formatted, `formatted_${name}`, 'text/plain')
+    // Download files in parallel batches (browsers limit concurrent downloads)
+    const DOWNLOAD_BATCH = 5
+    for (let i = 0; i < processed.length; i += DOWNLOAD_BATCH) {
+      const batch = processed.slice(i, i + DOWNLOAD_BATCH)
+      await Promise.all(
+        batch.map(({ name, formatted }) => 
+          downloadFile(formatted, `formatted_${name}`, 'text/plain')
+        )
+      )
     }
   }
 

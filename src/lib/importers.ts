@@ -1,20 +1,9 @@
 import type { Note } from './types'
 import { useStore, setBulkOperation } from '../hooks/useStore'
 
-// Auto-format note text during import - exported for use in FormatView
-export function formatNoteText(raw: string): string {
-  let text = raw
-
-  // normalize line endings
-  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-
-  // collapse multiple blank lines
-  text = text.replace(/\n{3,}/g, '\n\n')
-
-  // collapse multiple spaces
-  text = text.replace(/[ \t]{2,}/g, ' ')
-
-  // common section headers that should have line breaks before them
+// Pre-compiled patterns for formatNoteText - created once, reused for all notes
+// This eliminates creating 40+ RegExp objects per note
+const FORMAT_PATTERNS = (() => {
   const headers = [
     'CHIEF COMPLAINT', 'CC:', 'HPI:', 'HISTORY OF PRESENT ILLNESS',
     'PAST MEDICAL HISTORY', 'PMH:', 'PAST SURGICAL HISTORY', 'PSH:',
@@ -39,29 +28,57 @@ export function formatNoteText(raw: string): string {
     'DISPOSITION:', 'DISCHARGE INSTRUCTIONS',
     'FOLLOW UP:', 'FOLLOWUP:'
   ]
-
-  // add line breaks before headers
-  headers.forEach(header => {
-    const regex = new RegExp(`(?<!\n\n)(?<!\n)(${header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
-    text = text.replace(regex, '\n\n$1')
-  })
-
-  // fix common run-together patterns
-  text = text.replace(/([a-z])([A-Z]{2,}:)/g, '$1\n\n$2')
   
-  // ensure colon headers have content on same line or next
-  text = text.replace(/([A-Z]{2,}:)\s*\n\s*\n/g, '$1\n')
+  // Build a single combined regex for all headers (much faster than 40 separate replaces)
+  const escapedHeaders = headers.map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const combinedHeaderRegex = new RegExp(
+    `(?<!\n\n)(?<!\n)(${escapedHeaders.join('|')})`,
+    'gi'
+  )
+  
+  return {
+    lineEndings: /\r\n|\r/g,
+    multipleBlankLines: /\n{3,}/g,
+    multipleSpaces: /[ \t]{2,}/g,
+    headers: combinedHeaderRegex,
+    runTogether: /([a-z])([A-Z]{2,}:)/g,
+    colonHeaderSpacing: /([A-Z]{2,}:)\s*\n\s*\n/g
+  }
+})()
 
-  // trim each line
-  text = text.split('\n').map(line => line.trim()).join('\n')
+// Auto-format note text during import - exported for use in FormatView
+// Optimized: uses pre-compiled patterns instead of creating regexes per call
+export function formatNoteText(raw: string): string {
+  // Normalize line endings (single pass with combined pattern)
+  let text = raw.replace(FORMAT_PATTERNS.lineEndings, '\n')
 
-  // collapse multiple blank lines again
-  text = text.replace(/\n{3,}/g, '\n\n')
+  // Collapse multiple blank lines
+  text = text.replace(FORMAT_PATTERNS.multipleBlankLines, '\n\n')
 
-  // remove leading/trailing whitespace
-  text = text.trim()
+  // Collapse multiple spaces
+  text = text.replace(FORMAT_PATTERNS.multipleSpaces, ' ')
 
-  return text
+  // Add line breaks before all headers (single combined regex instead of 40 separate ones)
+  text = text.replace(FORMAT_PATTERNS.headers, '\n\n$1')
+
+  // Fix common run-together patterns
+  text = text.replace(FORMAT_PATTERNS.runTogether, '$1\n\n$2')
+  
+  // Ensure colon headers have content on same line or next
+  text = text.replace(FORMAT_PATTERNS.colonHeaderSpacing, '$1\n')
+
+  // Trim each line - optimized to avoid creating intermediate array
+  const lines = text.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    lines[i] = lines[i].trim()
+  }
+  text = lines.join('\n')
+
+  // Collapse multiple blank lines again
+  text = text.replace(FORMAT_PATTERNS.multipleBlankLines, '\n\n')
+
+  // Remove leading/trailing whitespace
+  return text.trim()
 }
 
 export async function importJSON(file: File): Promise<Note[]> {
@@ -115,17 +132,22 @@ export interface ImportProgress {
 
 type ProgressCallback = (progress: ImportProgress) => void
 
+// Batch size for parallel file processing
+// Higher = faster but more memory; lower = slower but less memory pressure
+const PARALLEL_BATCH_SIZE = 20
+
 // Shared file processing - used by both importFiles and importFromDrop
+// Returns processed notes instead of mutating array (better for parallelization)
 async function processFileWithFolder(
   file: File, 
-  folder: string,
-  notes: Note[]
-): Promise<void> {
+  folder: string
+): Promise<Note[]> {
+  const results: Note[] = []
   try {
     if (file.name.endsWith('.txt')) {
       const rawText = await file.text()
       const text = formatNoteText(rawText)
-      notes.push({
+      results.push({
         id: file.name.replace(/\.txt$/, ''),
         text,
         meta: { source: file.name, type: folder || undefined }
@@ -134,21 +156,53 @@ async function processFileWithFolder(
       const imported = await importJSON(file)
       imported.forEach(n => {
         if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
-        notes.push(n)
+        results.push(n)
       })
     } else if (file.name.endsWith('.jsonl')) {
       const imported = await importJSONL(file)
       imported.forEach(n => {
         if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
-        notes.push(n)
+        results.push(n)
       })
     }
   } catch (err) {
     console.error(`Failed to import ${file.name}:`, err)
   }
+  return results
+}
+
+// Process files in parallel batches for better performance
+async function processFilesInBatches(
+  files: { file: File; folder: string }[],
+  onProgress?: (processed: number, total: number, currentFile?: string) => void
+): Promise<Note[]> {
+  const allNotes: Note[] = []
+  const total = files.length
+  let processed = 0
+  
+  // Process in parallel batches
+  for (let i = 0; i < files.length; i += PARALLEL_BATCH_SIZE) {
+    const batch = files.slice(i, i + PARALLEL_BATCH_SIZE)
+    
+    // Process batch in parallel
+    const batchResults = await Promise.all(
+      batch.map(({ file, folder }) => processFileWithFolder(file, folder))
+    )
+    
+    // Flatten and collect results
+    for (const notes of batchResults) {
+      allNotes.push(...notes)
+    }
+    
+    processed += batch.length
+    onProgress?.(processed, total, batch[batch.length - 1]?.file.name)
+  }
+  
+  return allNotes
 }
 
 // Unified import function for file input
+// Optimized with parallel batch processing for faster imports
 export async function importFiles(
   files: FileList | File[],
   onProgress?: ProgressCallback
@@ -158,41 +212,32 @@ export async function importFiles(
   
   onProgress?.({ phase: 'scanning', current: 0, total })
   
-  // Group by folder (from webkitRelativePath)
-  const byFolder = new Map<string, File[]>()
+  // Collect all files with their folder info
+  const allFiles: { file: File; folder: string }[] = []
   
   for (const file of fileArray) {
     const path = (file as any).webkitRelativePath || ''
     const parts = path.split('/')
     const folder = parts.length > 1 ? parts[parts.length - 2] : ''
-    
-    if (!byFolder.has(folder)) byFolder.set(folder, [])
-    byFolder.get(folder)!.push(file)
+    allFiles.push({ file, folder })
   }
   
-  const notes: Note[] = []
-  let processed = 0
-  
-  for (const [folder, folderFiles] of byFolder) {
-    for (const file of folderFiles) {
-      processed++
-      onProgress?.({ 
-        phase: 'processing', 
-        current: processed, 
-        total, 
-        currentFile: file.name,
-        currentFolder: folder || undefined
-      })
-      
-      await processFileWithFolder(file, folder, notes)
-    }
-  }
+  // Process files in parallel batches
+  const notes = await processFilesInBatches(allFiles, (processed, total, currentFile) => {
+    onProgress?.({ 
+      phase: 'processing', 
+      current: processed, 
+      total, 
+      currentFile
+    })
+  })
   
   onProgress?.({ phase: 'done', current: notes.length, total: notes.length })
   return notes
 }
 
 // Import from drag-drop DataTransfer
+// Optimized with parallel batch processing for faster imports
 export async function importFromDrop(
   dataTransfer: DataTransfer,
   onProgress?: ProgressCallback
@@ -238,22 +283,15 @@ export async function importFromDrop(
     await collectFiles(entry, '')
   }
   
-  const notes: Note[] = []
-  const total = allFiles.length
-  let processed = 0
-  
-  for (const { file, folder } of allFiles) {
-    processed++
+  // Process files in parallel batches (much faster than sequential)
+  const notes = await processFilesInBatches(allFiles, (processed, total, currentFile) => {
     onProgress?.({ 
       phase: 'processing', 
       current: processed, 
       total, 
-      currentFile: file.name,
-      currentFolder: folder || undefined
+      currentFile
     })
-    
-    await processFileWithFolder(file, folder, notes)
-  }
+  })
   
   onProgress?.({ phase: 'done', current: notes.length, total: notes.length })
   return notes
