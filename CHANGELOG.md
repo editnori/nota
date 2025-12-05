@@ -2,6 +2,24 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.5.60] - 2025-12-05
+
+### Polish: Windows Installer Icons
+- **Fixed NSIS installer images** - Proper dimensions for header and sidebar
+  - `nsis-header.png`: 150×57 pixels (was using wrong 128x128)
+  - `nsis-sidebar.png`: 164×314 pixels (was using wrong 128x128)
+  - This fixes the horizontal scroll issue in the Windows installer wizard
+- **Generated all missing PNG icons** - Full icon set from SVG source
+  - 16×16, 32×32, 48×48, 64×64, 128×128, 256×256, 512×512
+  - 128×128@2x (Retina)
+  - All icons now consistent from single SVG source
+- **Added icon generation script** - `scripts/generate-icons.mjs`
+  - Regenerate icons anytime with `node scripts/generate-icons.mjs`
+  - Uses sharp for high-quality SVG→PNG conversion
+- **NSIS config improvements**:
+  - `installMode: "currentUser"` - No admin required
+  - `displayLanguageSelector: false` - Cleaner install experience
+
 ## [0.5.59] - 2025-12-05
 
 ### UX Improvement: Consistent Drag-Drop Behavior
