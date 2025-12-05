@@ -240,14 +240,16 @@ export function FormatView() {
     setFromAnnotator(false)
   }
 
-  // Load notes from Annotator to view their formatted versions
+  // Load notes from Annotator to view original vs formatted
   function loadFromAnnotator() {
     if (notes.length === 0) return
     
     const annotatorNotes: ProcessedNote[] = notes.map(note => ({
       name: note.id + '.txt',
-      raw: note.text, // The text in annotator (already formatted on import)
-      formatted: formatNoteText(note.text) // Re-format to show any improvements
+      // Use original raw text if available, otherwise show current text
+      raw: note.meta?.rawText || note.text,
+      // The formatted version is what's currently in the annotator
+      formatted: note.text
     }))
     
     setProcessed(annotatorNotes)
@@ -433,7 +435,7 @@ export function FormatView() {
               <div className="flex-1 flex flex-col border-r border-maple-200 dark:border-maple-700">
                 <div className="px-4 py-2 bg-maple-100 dark:bg-maple-700 border-b border-maple-200 dark:border-maple-600">
                   <span className="text-[10px] uppercase tracking-wide text-maple-500 dark:text-maple-400 font-medium">
-                    {fromAnnotator ? 'Current (In Annotator)' : 'Before (Raw)'}
+                    {fromAnnotator ? 'Original (Raw Input)' : 'Before (Raw)'}
                   </span>
                 </div>
                 <div className="flex-1 overflow-auto p-4 bg-white dark:bg-maple-800">
@@ -446,7 +448,7 @@ export function FormatView() {
               <div className="flex-1 flex flex-col">
                 <div className="px-4 py-2 bg-green-50 dark:bg-green-900/30 border-b border-green-200 dark:border-green-800">
                   <span className="text-[10px] uppercase tracking-wide text-green-700 dark:text-green-400 font-medium">
-                    {fromAnnotator ? 'Re-formatted (Latest Rules)' : 'After (Formatted)'}
+                    {fromAnnotator ? 'Formatted (In Annotator)' : 'After (Formatted)'}
                   </span>
                 </div>
                 <div className="flex-1 overflow-auto p-4 bg-green-50/30 dark:bg-green-900/10">

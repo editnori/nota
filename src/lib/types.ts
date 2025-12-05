@@ -5,6 +5,7 @@ export interface Note {
     type?: string
     date?: string
     source?: string
+    rawText?: string  // Original text before formatting (for comparison)
   }
 }
 

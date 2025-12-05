@@ -46,7 +46,8 @@ export async function importTXT(files: File[], noteType?: string): Promise<Note[
       text,
       meta: { 
         source: file.name,
-        type: noteType
+        type: noteType,
+        rawText: rawText  // Store original for comparison
       }
     })
   }
@@ -82,7 +83,7 @@ async function processFileWithFolder(
       results.push({
         id: file.name.replace(/\.txt$/, ''),
         text,
-        meta: { source: file.name, type: folder || undefined }
+        meta: { source: file.name, type: folder || undefined, rawText: rawText }
       })
     } else if (file.name.endsWith('.json')) {
       const imported = await importJSON(file)
@@ -283,14 +284,15 @@ export async function handleImportWithProgress(
 }
 
 function normalizeNote(raw: Record<string, unknown>): Note {
-  const rawText = String(raw.text || '')
+  const originalText = String(raw.text || '')
   return {
     id: String(raw.id || raw.note_id || `note_${Date.now()}_${Math.random().toString(36).slice(2,6)}`),
-    text: formatNoteText(rawText),  // Auto-format
+    text: formatNoteText(originalText),  // Auto-format
     meta: {
       type: raw.note_type as string | undefined,
       date: raw.date as string | undefined,
       source: raw.source as string | undefined,
+      rawText: originalText,  // Store original for comparison
       ...(typeof raw.meta === 'object' ? raw.meta as Record<string, string> : {})
     }
   }

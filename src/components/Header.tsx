@@ -153,7 +153,7 @@ export function Header() {
                 notes.push({
                   id: entry.name.replace(/\.txt$/, ''),
                   text: formatNoteText(content),
-                  meta: { source: entry.name }
+                  meta: { source: entry.name, rawText: content }
                 })
               }
             }
@@ -168,7 +168,7 @@ export function Header() {
             notes.push({
               id: fileName.replace(/\.txt$/, ''),
               text: formatNoteText(content),
-              meta: { source: fileName }
+              meta: { source: fileName, rawText: content }
             })
           } else if (fileName.endsWith('.json') || fileName.endsWith('.jsonl')) {
             const content = await readTextFile(path)
@@ -178,10 +178,11 @@ export function Header() {
                 : JSON.parse(content)
               const items = Array.isArray(parsed) ? parsed : (parsed.notes || [parsed])
               for (const item of items) {
+                const rawItemText = String(item.text || '')
                 notes.push({
                   id: String(item.id || item.note_id || `note_${Date.now()}`),
-                  text: formatNoteText(String(item.text || '')),
-                  meta: { source: fileName, type: item.note_type }
+                  text: formatNoteText(rawItemText),
+                  meta: { source: fileName, type: item.note_type, rawText: rawItemText }
                 })
               }
             } catch (err) {
