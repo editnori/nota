@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useMemo, useEffect } from 'react'
+import { useCallback, useRef, useState, useMemo, useEffect, useDeferredValue } from 'react'
 import { useStore } from '../hooks/useStore'
 import { getQuestion, loadQuestions } from '../lib/questions'
 import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus, Check, Trash2 } from 'lucide-react'
@@ -41,10 +41,13 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const note = notes[currentNoteIndex]
   
   // Get annotations for current note only - memoized for performance
-  const noteAnnotations = useMemo(() => {
+  const noteAnnotationsRaw = useMemo(() => {
     if (!note) return []
     return annotationsByNote.get(note.id) || []
   }, [note?.id, annotationsByNote])
+  
+  // Defer annotation updates to keep UI responsive during rapid highlighting
+  const noteAnnotations = useDeferredValue(noteAnnotationsRaw)
   
   // For hasUnannotated check - just need size comparison
   const annotationsByNoteSize = annotationsByNote.size
@@ -746,17 +749,20 @@ function buildSegments(
     return [{ type: 'plain', text, questions: [], annotationIds: [], isSuggested: false }]
   }
 
-  // Build points array directly (faster than Set for small arrays)
-  const points: number[] = [0, text.length]
+  // Use Set for O(1) deduplication instead of O(n) includes()
+  const pointsSet = new Set<number>([0, text.length])
   for (const a of noteAnnotations) {
-    const start = Math.max(0, a.start)
-    const end = Math.min(text.length, a.end)
-    if (!points.includes(start)) points.push(start)
-    if (!points.includes(end)) points.push(end)
+    pointsSet.add(Math.max(0, a.start))
+    pointsSet.add(Math.min(text.length, a.end))
   }
 
-  points.sort((a, b) => a - b)
+  const points = Array.from(pointsSet).sort((a, b) => a - b)
   const segments: Segment[] = []
+
+  // Pre-sort annotations by start for faster covering check
+  const sortedAnns = noteAnnotations.length > 10 
+    ? [...noteAnnotations].sort((a, b) => a.start - b.start)
+    : noteAnnotations
 
   for (let i = 0; i < points.length - 1; i++) {
     const start = points[i]
@@ -765,7 +771,9 @@ function buildSegments(
 
     // Find covering annotations
     const covering: typeof noteAnnotations = []
-    for (const a of noteAnnotations) {
+    for (const a of sortedAnns) {
+      // Early exit if annotation starts after segment (since sorted)
+      if (a.start > start) break
       if (a.start <= start && a.end >= end) {
         covering.push(a)
       }

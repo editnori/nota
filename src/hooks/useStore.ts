@@ -156,6 +156,49 @@ let isSaving = false
 let lastSavedHash = ''
 let lastAnnotationTime = 0
 
+// Annotation batching for rapid highlight spam
+let pendingAnnotations: Annotation[] = []
+let batchTimeout: ReturnType<typeof setTimeout> | null = null
+const BATCH_DELAY_MS = 16 // ~1 frame at 60fps
+
+function flushAnnotationBatch() {
+  if (pendingAnnotations.length === 0) return
+  
+  const toAdd = pendingAnnotations
+  pendingAnnotations = []
+  batchTimeout = null
+  
+  const state = useStore.getState()
+  
+  // Batch all annotations into single state update
+  const newAnnotations = [...state.annotations, ...toAdd]
+  
+  // Rebuild indexes once for all new annotations (not once per annotation)
+  const newByNote = new Map(state.annotationsByNote)
+  const newById = new Map(state.annotationsById)
+  
+  for (const ann of toAdd) {
+    // Add to byNote
+    const existing = newByNote.get(ann.noteId)
+    if (existing) {
+      newByNote.set(ann.noteId, [...existing, ann])
+    } else {
+      newByNote.set(ann.noteId, [ann])
+    }
+    // Add to byId
+    newById.set(ann.id, ann)
+  }
+  
+  // Single state update for entire batch
+  useStore.setState({
+    annotations: newAnnotations,
+    annotationsByNote: newByNote,
+    annotationsById: newById,
+    undoStack: [...state.undoStack.slice(-(20 - toAdd.length)), ...toAdd.map(a => ({ type: 'add' as const, annotation: a }))],
+    lastSaved: debouncedSave()
+  })
+}
+
 // Simple hash to detect if data actually changed
 function quickHash(notes: Note[], annotations: Annotation[]): string {
   return `${notes.length}-${annotations.length}-${annotations[annotations.length - 1]?.id || ''}`
@@ -301,17 +344,14 @@ export const useStore = create<State>((set, get) => ({
       createdAt: Date.now(),
       source: ann.source || 'manual'
     }
-    set(s => {
-      // Incremental index update - O(1) instead of O(n)
-      const indexes = addToIndexes(annotation, s.annotationsByNote, s.annotationsById)
-      return { 
-        annotations: [...s.annotations, annotation],
-        annotationsByNote: indexes.byNote,
-        annotationsById: indexes.byId,
-        undoStack: [...s.undoStack.slice(-19), { type: 'add', annotation }],
-        lastSaved: debouncedSave()
-      }
-    })
+    
+    // Queue annotation for batched processing
+    pendingAnnotations.push(annotation)
+    
+    // Schedule batch flush (coalesces rapid annotations into single update)
+    if (!batchTimeout) {
+      batchTimeout = setTimeout(flushAnnotationBatch, BATCH_DELAY_MS)
+    }
   },
 
   addBulkAnnotations: (anns) => {
