@@ -437,10 +437,20 @@ export function ReviewView() {
 
         {/* Annotations list */}
         {pagedAnnotations.length === 0 ? (
-          <div className="flex items-center justify-center h-64">
-            <p className="text-[11px] text-maple-400 dark:text-maple-500">
-              {searchText || selectedQ || sourceFilter !== 'all' || commentFilter !== 'all' ? 'No matches' : 'No annotations yet'}
-            </p>
+          <div className="flex items-center justify-center h-64 bg-maple-50 dark:bg-maple-900">
+            <div className="text-center p-6">
+              <div className="w-12 h-12 bg-maple-200 dark:bg-maple-700 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-xl">🏷️</span>
+              </div>
+              <p className="text-sm text-maple-600 dark:text-maple-300 font-medium">
+                {searchText || selectedQ || sourceFilter !== 'all' || commentFilter !== 'all' ? 'No matches found' : 'No annotations yet'}
+              </p>
+              <p className="text-xs text-maple-500 dark:text-maple-400 mt-1">
+                {searchText || selectedQ || sourceFilter !== 'all' || commentFilter !== 'all' 
+                  ? 'Try adjusting your filters' 
+                  : 'Highlight text in Annotate mode to create annotations'}
+              </p>
+            </div>
           </div>
         ) : (
           <div className="max-w-2xl mx-auto space-y-2">

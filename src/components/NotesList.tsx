@@ -445,8 +445,18 @@ export function NotesList() {
         })}
         
         {paged.length === 0 && (
-          <div className="p-4 text-center text-[10px] text-maple-400 dark:text-maple-500">
-            {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) ? 'No matches' : 'No notes'}
+          <div className="p-6 text-center">
+            <div className="w-10 h-10 bg-maple-100 dark:bg-maple-700 rounded-full flex items-center justify-center mx-auto mb-2">
+              <span className="text-base">{search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) ? '🔍' : '📄'}</span>
+            </div>
+            <p className="text-xs text-maple-600 dark:text-maple-300 font-medium">
+              {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) ? 'No matches' : 'No notes'}
+            </p>
+            <p className="text-[10px] text-maple-500 dark:text-maple-400 mt-1">
+              {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) 
+                ? 'Try different search terms' 
+                : 'Import notes to begin'}
+            </p>
           </div>
         )}
       </div>
