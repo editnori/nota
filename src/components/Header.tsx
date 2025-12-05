@@ -1,11 +1,17 @@
 import { useStore, buildAnnotationIndexes } from '../hooks/useStore'
 import { exportJSON, exportCSV, downloadFile, exportSession, importSession } from '../lib/exporters'
 import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown, Moon, Sun } from 'lucide-react'
-import { useState, useRef, useEffect, useMemo } from 'react'
-import { importFiles, handleImportWithProgress } from '../lib/importers'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { importFiles, handleImportWithProgress, formatNoteText } from '../lib/importers'
 import { SettingsModal } from './SettingsModal'
 import { ConfirmModal } from './ConfirmModal'
 import { loadQuestions } from '../lib/questions'
+import type { Note } from '../lib/types'
+
+// Check if running in Tauri desktop app
+function isTauri(): boolean {
+  return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+}
 
 interface ConfirmState {
   isOpen: boolean
@@ -104,6 +110,108 @@ export function Header() {
       }
     }, 300)
   }
+
+  // Native Tauri file open dialog
+  const handleTauriImport = useCallback(async (isFolder: boolean) => {
+    if (!isTauri()) return false
+    
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      const { readTextFile, readDir } = await import('@tauri-apps/plugin-fs')
+      
+      setImporting(true, 'Select files...')
+      
+      const selected = await open({
+        multiple: !isFolder,
+        directory: isFolder,
+        filters: isFolder ? undefined : [
+          { name: 'Supported Files', extensions: ['txt', 'json', 'jsonl'] }
+        ],
+        title: isFolder ? 'Select Folder' : 'Select Files'
+      })
+      
+      if (!selected) {
+        setImporting(false)
+        return true // Handled by Tauri (user cancelled)
+      }
+      
+      const paths = Array.isArray(selected) ? selected : [selected]
+      const notes: Note[] = []
+      
+      // Process files
+      setImporting(true, 'Processing...')
+      
+      for (const path of paths) {
+        if (isFolder) {
+          // Read directory contents
+          try {
+            const entries = await readDir(path)
+            for (const entry of entries) {
+              if (entry.name?.endsWith('.txt')) {
+                const fullPath = `${path}/${entry.name}`
+                const content = await readTextFile(fullPath)
+                notes.push({
+                  id: entry.name.replace(/\.txt$/, ''),
+                  text: formatNoteText(content),
+                  meta: { source: entry.name }
+                })
+              }
+            }
+          } catch (err) {
+            console.error('Failed to read directory:', err)
+          }
+        } else {
+          // Read single file
+          const fileName = path.split('/').pop() || path.split('\\').pop() || 'note'
+          if (fileName.endsWith('.txt')) {
+            const content = await readTextFile(path)
+            notes.push({
+              id: fileName.replace(/\.txt$/, ''),
+              text: formatNoteText(content),
+              meta: { source: fileName }
+            })
+          } else if (fileName.endsWith('.json') || fileName.endsWith('.jsonl')) {
+            const content = await readTextFile(path)
+            try {
+              const parsed = fileName.endsWith('.jsonl') 
+                ? content.trim().split('\n').map(line => JSON.parse(line))
+                : JSON.parse(content)
+              const items = Array.isArray(parsed) ? parsed : (parsed.notes || [parsed])
+              for (const item of items) {
+                notes.push({
+                  id: String(item.id || item.note_id || `note_${Date.now()}`),
+                  text: formatNoteText(String(item.text || '')),
+                  meta: { source: fileName, type: item.note_type }
+                })
+              }
+            } catch (err) {
+              console.error('Failed to parse JSON:', err)
+            }
+          }
+        }
+      }
+      
+      if (notes.length > 0) {
+        const { notes: currentNotes, addNotes, setNotes } = useStore.getState()
+        if (currentNotes.length > 0) {
+          addNotes(notes)
+        } else {
+          setNotes(notes)
+        }
+        setImporting(true, `${notes.length} notes imported`)
+        setTimeout(() => setImporting(false), 500)
+      } else {
+        setImporting(true, 'No valid files found')
+        setTimeout(() => setImporting(false), 800)
+      }
+      
+      return true // Handled by Tauri
+    } catch (err) {
+      console.error('Tauri import error:', err)
+      setImporting(false)
+      return false // Fall back to HTML input
+    }
+  }, [setImporting])
 
   // Unified import handler for both files and folders - uses shared handler
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -333,20 +441,26 @@ export function Header() {
         {showImportMenu && (
           <div className="absolute right-0 top-full mt-1 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg shadow-lg z-50 overflow-hidden min-w-[160px]" onClick={e => e.stopPropagation()}>
             <button
-              onClick={() => { 
+              onClick={async () => { 
                 setShowImportMenu(false)
-                // Small delay to close menu before opening dialog
-                setTimeout(() => fileInputRef.current?.click(), 50)
+                // Try native Tauri dialog first, fall back to HTML input
+                const handled = await handleTauriImport(false)
+                if (!handled) {
+                  setTimeout(() => fileInputRef.current?.click(), 50)
+                }
               }}
               className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 dark:text-maple-200"
             >
               Import Files
             </button>
             <button
-              onClick={() => { 
+              onClick={async () => { 
                 setShowImportMenu(false)
-                // Small delay to close menu before opening dialog
-                setTimeout(() => folderInputRef.current?.click(), 50)
+                // Try native Tauri dialog first, fall back to HTML input
+                const handled = await handleTauriImport(true)
+                if (!handled) {
+                  setTimeout(() => folderInputRef.current?.click(), 50)
+                }
               }}
               className="block w-full px-4 py-2 text-xs text-left hover:bg-maple-50 dark:hover:bg-maple-700 dark:text-maple-200"
             >
