@@ -217,22 +217,26 @@ export function Header() {
           setNotes(importedNotes)
         }
         
-        // Wait for React to process the state update before triggering save
+        // Re-enable saves synchronously
+        setBulkOperation(false)
+        
+        // Show success message and wait for React to process notes update
+        setImporting(true, `${importedNotes.length} notes imported`)
+        
+        // Wait a frame to ensure React has rendered the new notes
         await new Promise<void>(resolve => {
           requestAnimationFrame(() => {
-            setBulkOperation(false) // Re-enable saves, triggers debounced save
-            setImporting(true, `${importedNotes.length} notes imported`)
-            // Allow UI to fully render before hiding indicator
             setTimeout(() => {
               setImporting(false)
               resolve()
-            }, 800)
+            }, 500)
           })
         })
       } else {
         setBulkOperation(false)
         setImporting(true, 'No valid files found')
-        setTimeout(() => setImporting(false), 1000)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        setImporting(false)
       }
       
       return true // Handled by Tauri
@@ -302,28 +306,33 @@ export function Header() {
           localStorage.setItem('annotator_questions', JSON.stringify(result.questions))
         }
         
-        // Wait for React to process the state update before triggering save
+        // Re-enable saves synchronously
+        setBulkOperation(false)
+        
+        // Show success message and wait for React to process state update
+        setImporting(true, `Loaded: ${result.notes.length} notes, ${result.annotations.length} annotations`)
+        
+        // Wait a frame to ensure React has rendered the new data
         await new Promise<void>(resolve => {
           requestAnimationFrame(() => {
-            setBulkOperation(false) // Re-enable saves
-            setImporting(true, `Loaded: ${result.notes.length} notes, ${result.annotations.length} annotations`)
-            // Allow UI to fully render before hiding indicator
             setTimeout(() => {
               setImporting(false)
               resolve()
-            }, 800)
+            }, 500)
           })
         })
       } else {
         setBulkOperation(false)
         setImporting(true, 'No data in session file')
-        setTimeout(() => setImporting(false), 1500)
+        await new Promise(resolve => setTimeout(resolve, 1500))
+        setImporting(false)
       }
     } catch (err) {
       console.error('Session import error:', err)
       setBulkOperation(false)
       setImporting(true, 'Failed to load session')
-      setTimeout(() => setImporting(false), 1500)
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      setImporting(false)
     }
 
     if (sessionInputRef.current) {

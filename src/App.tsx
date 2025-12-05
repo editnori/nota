@@ -12,17 +12,17 @@ import { importFromDrop, handleImportWithProgress, formatNoteText } from './lib/
 import { setBulkOperation } from './hooks/useStore'
 import { Loader2, Upload } from 'lucide-react'
 import type { Note } from './lib/types'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 // Check if running in Tauri desktop app
 function isTauri(): boolean {
   return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
 }
 
-export default function App() {
+function AppContent() {
   const { 
     notes, mode, currentNoteIndex, selectedQuestion, addAnnotation, 
-    isLoaded, darkMode, isImporting, importProgress, setImporting,
-    addNotes, setNotes
+    isLoaded, darkMode, isImporting, importProgress, setImporting
   } = useStore()
   const [isDragging, setIsDragging] = useState(false)
   const [dropError, setDropError] = useState<string | null>(null)
@@ -176,16 +176,19 @@ export default function App() {
           doSetNotes(importedNotes)
         }
         
-        // Wait for React to process the state update before triggering save
+        // Re-enable saves synchronously
+        setBulkOperation(false)
+        
+        // Show success message and wait for React to process notes update
+        setImporting(true, `${importedNotes.length} notes imported`)
+        
+        // Wait a frame to ensure React has rendered the new notes
         await new Promise<void>(resolve => {
           requestAnimationFrame(() => {
-            setBulkOperation(false) // Re-enable saves, triggers debounced save
-            setImporting(true, `${importedNotes.length} notes imported`)
-            // Allow UI to fully render before hiding indicator
             setTimeout(() => {
               setImporting(false)
               resolve()
-            }, 800)
+            }, 500)
           })
         })
       } else {
@@ -429,5 +432,13 @@ export default function App() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
   )
 }

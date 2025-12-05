@@ -162,6 +162,7 @@ function resetSaveState() {
     clearTimeout(saveTimeout)
     saveTimeout = null
   }
+  isBulkOperation = false  // Reset bulk operation flag to ensure clean state
   isSaving = false
   lastSavedHash = ''
   lastAnnotationTime = 0
@@ -505,13 +506,11 @@ export const useStore = create<State>((set, get) => ({
       batchTimeout = null
     }
     
-    // Show loading state to prevent UI issues during async clear
-    set({ isLoaded: false })
-    
-    // Clear persistent storage
+    // Clear persistent storage first (async)
     await clearStorage()
     
-    // Reset all state EXCEPT isLoaded first
+    // Reset ALL state in a single atomic update to prevent race conditions
+    // This ensures the UI sees a consistent state immediately
     set({
       notes: [],
       annotations: [],
@@ -525,18 +524,8 @@ export const useStore = create<State>((set, get) => ({
       filteredNoteIds: null,
       highlightedAnnotation: null,
       isImporting: false,
-      importProgress: ''
-    })
-    
-    // Use requestAnimationFrame to ensure React has processed the state reset
-    // before we re-enable the UI - this prevents the empty state flash
-    await new Promise<void>(resolve => {
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          set({ isLoaded: true })
-          resolve()
-        }, 50)
-      })
+      importProgress: '',
+      isLoaded: true  // Keep loaded so empty state shows immediately
     })
   },
 

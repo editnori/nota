@@ -265,21 +265,37 @@ export async function handleImportWithProgress(
       } else {
         setNotes(imported)
       }
+      
+      // Re-enable saves and show success - use synchronous update
       setBulkOperation(false)
+      
+      // Brief success message then clear - wrapped in Promise for proper timing
       setImporting(true, `${imported.length} notes imported`)
       options.onSuccess?.(imported)
-      setTimeout(() => setImporting(false), 300)
+      
+      // Wait a frame to ensure React has processed the notes state update
+      // before hiding the import overlay
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            setImporting(false)
+            resolve()
+          }, 300)
+        })
+      })
     } else {
       setBulkOperation(false)
       setImporting(true, 'No valid files found')
-      setTimeout(() => setImporting(false), 800)
+      await new Promise(resolve => setTimeout(resolve, 800))
+      setImporting(false)
     }
   } catch (err) {
     console.error('Import error:', err)
     setBulkOperation(false)
     setImporting(true, 'Import failed')
     options.onError?.(err as Error)
-    setTimeout(() => setImporting(false), 1000)
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    setImporting(false)
   }
 }
 
