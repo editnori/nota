@@ -172,6 +172,11 @@ let pendingAnnotations: Annotation[] = []
 let batchTimeout: ReturnType<typeof setTimeout> | null = null
 const BATCH_DELAY_MS = 16 // ~1 frame at 60fps
 
+// Export for overlap detection during rapid highlighting
+export function getPendingAnnotationsForNote(noteId: string): Annotation[] {
+  return pendingAnnotations.filter(a => a.noteId === noteId)
+}
+
 function flushAnnotationBatch() {
   if (pendingAnnotations.length === 0) return
   

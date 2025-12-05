@@ -2,6 +2,16 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.5.62] - 2025-12-05
+
+### Fix: Rapid Highlighting and Overlap Detection
+- **Fixed annotations not showing when highlighting fast** - Overlap detection now includes pending (batched) annotations
+  - Previously, rapid highlights could bypass overlap detection because annotations were queued but not yet in state
+  - Now checks both flushed AND pending annotations for overlap/adjacent detection
+- **Fixed accidental annotation creation when dismissing popup** - Added protection against click-outside creating annotations
+  - When overlap popup is dismissed by clicking outside, any accidental text selection is ignored
+  - Prevents "ghost annotations" that exist in state but don't show visually
+
 ## [0.5.61] - 2025-12-05
 
 ### Fix: State Synchronization Issues

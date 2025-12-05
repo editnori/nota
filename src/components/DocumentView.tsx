@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useMemo, useEffect } from 'react'
-import { useStore } from '../hooks/useStore'
+import { useStore, getPendingAnnotationsForNote } from '../hooks/useStore'
 import { getQuestion, loadQuestions } from '../lib/questions'
 import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus, Check, Trash2 } from 'lucide-react'
 
@@ -64,6 +64,9 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   
   // Flag to prevent closing popup immediately after opening
   const justOpenedPopupRef = useRef(false)
+  
+  // Flag to prevent accidental annotation creation when dismissing popup
+  const justDismissedPopupRef = useRef(false)
   
   // Build annotation ID -> annotation map for O(1) lookups in handlers
   const annotationMap = useMemo(() => {
@@ -142,6 +145,13 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   }, [])
 
   const handleTextSelect = useCallback((e: React.MouseEvent) => {
+    // Skip if we just dismissed a popup to prevent accidental annotation creation
+    if (justDismissedPopupRef.current) {
+      justDismissedPopupRef.current = false
+      window.getSelection()?.removeAllRanges()
+      return
+    }
+    
     const coords = getSelectionCoords()
     if (!coords) return
 
@@ -155,13 +165,18 @@ export function DocumentView({ onCreateAnnotation }: Props) {
       return
     }
 
-    // Check for overlaps with existing annotations
-    const overlapping = noteAnnotations.filter(a => 
+    // Check for overlaps with existing annotations AND pending annotations
+    // Pending annotations are batched and not yet in state, but we need to detect
+    // overlaps during rapid highlighting to prevent duplicate annotations
+    const pendingAnns = note ? getPendingAnnotationsForNote(note.id) : []
+    const allAnnotations = [...noteAnnotations, ...pendingAnns]
+    
+    const overlapping = allAnnotations.filter(a => 
       (start < a.end && end > a.start) // Any overlap
     )
 
     // Also check for adjacent spans (touching but not overlapping)
-    const adjacent = noteAnnotations.filter(a =>
+    const adjacent = allAnnotations.filter(a =>
       (start === a.end || end === a.start) // Touching
     )
 
@@ -256,7 +271,10 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   }
 
   function handleOverlapCancel() {
+    justDismissedPopupRef.current = true
     setOverlapPrompt(null)
+    // Reset flag after a tick to allow normal operation
+    setTimeout(() => { justDismissedPopupRef.current = false }, 100)
   }
 
   function handleSpanClick(e: React.MouseEvent, annotationIds: string[]) {
@@ -440,7 +458,10 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                 // Dismiss overlap prompt when starting new selection
                 // This prevents stale prompts from blocking new highlights
                 if (overlapPrompt && !justOpenedPopupRef.current) {
+                  justDismissedPopupRef.current = true
                   setOverlapPrompt(null)
+                  // Reset flag after a tick - but handleTextSelect will clear it on mouseUp
+                  setTimeout(() => { justDismissedPopupRef.current = false }, 100)
                 }
               }}
               onMouseUp={handleTextSelect}
