@@ -19,6 +19,7 @@ interface State {
   selectedQuestion: string | null
   lastSaved: number | null
   isLoaded: boolean
+  isTransitioning: boolean  // True during clear/load to prevent rendering issues
   undoStack: UndoAction[]
   fontSize: number
   darkMode: boolean
@@ -309,6 +310,7 @@ export const useStore = create<State>((set, get) => ({
   selectedQuestion: null,
   lastSaved: null,
   isLoaded: false,
+  isTransitioning: false,
   undoStack: [],
   fontSize: prefs.fontSize,
   darkMode: prefs.darkMode,
@@ -346,18 +348,37 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setNotes: (notes) => {
-    // Reset related state when setting new notes to ensure clean UI state
-    set({ 
-      notes, 
-      currentNoteIndex: 0, 
-      filteredNoteIds: null,  // Clear any active filters
-      highlightedAnnotation: null,
-      lastSaved: debouncedSave() 
+    // Set transitioning to prevent render issues during state change
+    set({ isTransitioning: true })
+    
+    // Use requestAnimationFrame to ensure clean render cycle
+    requestAnimationFrame(() => {
+      set({ 
+        notes, 
+        currentNoteIndex: 0, 
+        filteredNoteIds: null,  // Clear any active filters
+        highlightedAnnotation: null,
+        isTransitioning: false,
+        lastSaved: debouncedSave() 
+      })
     })
   },
 
   addNotes: (newNotes) => {
-    set(s => ({ notes: [...s.notes, ...newNotes], lastSaved: debouncedSave() }))
+    if (newNotes.length > 100) {
+      // Large import - use transition guard
+      set({ isTransitioning: true })
+      requestAnimationFrame(() => {
+        set(s => ({ 
+          notes: [...s.notes, ...newNotes], 
+          isTransitioning: false,
+          lastSaved: debouncedSave() 
+        }))
+      })
+    } else {
+      // Small import - do directly
+      set(s => ({ notes: [...s.notes, ...newNotes], lastSaved: debouncedSave() }))
+    }
   },
 
   addAnnotation: (ann) => {
@@ -496,7 +517,10 @@ export const useStore = create<State>((set, get) => ({
   },
 
   clearSession: async () => {
-    // Cancel any pending saves FIRST to prevent race conditions
+    // Set transitioning flag FIRST to prevent components from rendering during transition
+    set({ isTransitioning: true })
+    
+    // Cancel any pending saves to prevent race conditions
     resetSaveState()
     
     // Clear any pending annotation batch
@@ -506,26 +530,32 @@ export const useStore = create<State>((set, get) => ({
       batchTimeout = null
     }
     
-    // Clear persistent storage first (async)
+    // Clear persistent storage (async)
     await clearStorage()
     
-    // Reset ALL state in a single atomic update to prevent race conditions
-    // This ensures the UI sees a consistent state immediately
-    set({
-      notes: [],
-      annotations: [],
-      annotationsByNote: new Map(),
-      annotationsById: new Map(),
-      currentNoteIndex: 0,
-      mode: 'annotate',
-      selectedQuestion: null,
-      lastSaved: null,
-      undoStack: [],
-      filteredNoteIds: null,
-      highlightedAnnotation: null,
-      isImporting: false,
-      importProgress: '',
-      isLoaded: true  // Keep loaded so empty state shows immediately
+    // Use requestAnimationFrame to ensure React has finished any pending renders
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => {
+        // Reset ALL state in a single atomic update
+        set({
+          notes: [],
+          annotations: [],
+          annotationsByNote: new Map(),
+          annotationsById: new Map(),
+          currentNoteIndex: 0,
+          mode: 'annotate',
+          selectedQuestion: null,
+          lastSaved: null,
+          undoStack: [],
+          filteredNoteIds: null,
+          highlightedAnnotation: null,
+          isImporting: false,
+          importProgress: '',
+          isLoaded: true,
+          isTransitioning: false  // Clear transition flag
+        })
+        resolve()
+      })
     })
   },
 
