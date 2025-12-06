@@ -295,15 +295,25 @@ export function Header() {
         // Build annotation indexes using shared function
         const indexes = buildAnnotationIndexes(result.annotations)
         
-        // Update state in a single batch to avoid partial renders
-        useStore.setState({
-          notes: result.notes,
-          annotations: result.annotations,
-          annotationsByNote: indexes.byNote,
-          annotationsById: indexes.byId,
-          currentNoteIndex: 0,
-          filteredNoteIds: null,
-          highlightedAnnotation: null
+        // Set transitioning to prevent render issues during state change
+        useStore.setState({ isTransitioning: true })
+        
+        // Use requestAnimationFrame for clean render cycle
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() => {
+            // Update state in a single batch
+            useStore.setState({
+              notes: result.notes,
+              annotations: result.annotations,
+              annotationsByNote: indexes.byNote,
+              annotationsById: indexes.byId,
+              currentNoteIndex: 0,
+              filteredNoteIds: null,
+              highlightedAnnotation: null,
+              isTransitioning: false
+            })
+            resolve()
+          })
         })
         
         if (result.questions) {
@@ -313,7 +323,7 @@ export function Header() {
         // Re-enable saves synchronously
         setBulkOperation(false)
         
-        // Show success message and wait for React to process state update
+        // Show success message
         setImporting(true, `Loaded: ${result.notes.length} notes, ${result.annotations.length} annotations`)
         
         // Wait a frame to ensure React has rendered the new data
@@ -334,6 +344,7 @@ export function Header() {
     } catch (err) {
       console.error('Session import error:', err)
       setBulkOperation(false)
+      useStore.setState({ isTransitioning: false })  // Clear transition on error
       setImporting(true, 'Failed to load session')
       await new Promise(resolve => setTimeout(resolve, 1500))
       setImporting(false)

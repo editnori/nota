@@ -324,15 +324,21 @@ export const useStore = create<State>((set, get) => ({
     if (data) {
       const annotations = data.annotations || []
       const indexes = buildAnnotationIndexes(annotations)
-      set({
-        notes: data.notes || [],
-        annotations,
-        annotationsByNote: indexes.byNote,
-        annotationsById: indexes.byId,
-        currentNoteIndex: data.currentNoteIndex || 0,
-        mode: data.mode || 'annotate',
-        selectedQuestion: data.selectedQuestion || null,
-        isLoaded: true
+      // Use requestAnimationFrame to ensure clean render cycle
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          set({
+            notes: data.notes || [],
+            annotations,
+            annotationsByNote: indexes.byNote,
+            annotationsById: indexes.byId,
+            currentNoteIndex: data.currentNoteIndex || 0,
+            mode: data.mode || 'annotate',
+            selectedQuestion: data.selectedQuestion || null,
+            isLoaded: true
+          })
+          resolve()
+        })
       })
     } else {
       set({ isLoaded: true })
@@ -406,32 +412,60 @@ export const useStore = create<State>((set, get) => ({
       createdAt: Date.now(),
       source: 'suggested' as const
     }))
-    set(s => {
-      const allAnnotations = [...s.annotations, ...newAnnotations]
-      
-      // Incremental index update - O(new) instead of O(all)
-      const newByNote = new Map(s.annotationsByNote)
-      const newById = new Map(s.annotationsById)
-      
-      for (const ann of newAnnotations) {
-        // Add to byNote
-        const existing = newByNote.get(ann.noteId)
-        if (existing) {
-          newByNote.set(ann.noteId, [...existing, ann])
-        } else {
-          newByNote.set(ann.noteId, [ann])
+    
+    // Use transition guard for bulk operations to prevent render issues
+    if (newAnnotations.length > 50) {
+      set({ isTransitioning: true })
+      requestAnimationFrame(() => {
+        set(s => {
+          const allAnnotations = [...s.annotations, ...newAnnotations]
+          const newByNote = new Map(s.annotationsByNote)
+          const newById = new Map(s.annotationsById)
+          
+          for (const ann of newAnnotations) {
+            const existing = newByNote.get(ann.noteId)
+            if (existing) {
+              newByNote.set(ann.noteId, [...existing, ann])
+            } else {
+              newByNote.set(ann.noteId, [ann])
+            }
+            newById.set(ann.id, ann)
+          }
+          
+          return { 
+            annotations: allAnnotations,
+            annotationsByNote: newByNote,
+            annotationsById: newById,
+            isTransitioning: false,
+            lastSaved: debouncedSave()
+          }
+        })
+      })
+    } else {
+      // Small batch - do directly
+      set(s => {
+        const allAnnotations = [...s.annotations, ...newAnnotations]
+        const newByNote = new Map(s.annotationsByNote)
+        const newById = new Map(s.annotationsById)
+        
+        for (const ann of newAnnotations) {
+          const existing = newByNote.get(ann.noteId)
+          if (existing) {
+            newByNote.set(ann.noteId, [...existing, ann])
+          } else {
+            newByNote.set(ann.noteId, [ann])
+          }
+          newById.set(ann.id, ann)
         }
-        // Add to byId
-        newById.set(ann.id, ann)
-      }
-      
-      return { 
-        annotations: allAnnotations,
-        annotationsByNote: newByNote,
-        annotationsById: newById,
-        lastSaved: debouncedSave()
-      }
-    })
+        
+        return { 
+          annotations: allAnnotations,
+          annotationsByNote: newByNote,
+          annotationsById: newById,
+          lastSaved: debouncedSave()
+        }
+      })
+    }
   },
 
   removeAnnotation: (id) => {
@@ -482,37 +516,52 @@ export const useStore = create<State>((set, get) => ({
   },
 
   clearNoteAnnotations: (noteId) => {
-    set(s => {
-      const newAnnotations = s.annotations.filter(a => a.noteId !== noteId)
-      const indexes = buildAnnotationIndexes(newAnnotations)
-      return { 
-        annotations: newAnnotations,
-        annotationsByNote: indexes.byNote,
-        annotationsById: indexes.byId,
-        lastSaved: debouncedSave()
-      }
+    // Use transition guard to prevent render issues
+    set({ isTransitioning: true })
+    requestAnimationFrame(() => {
+      set(s => {
+        const newAnnotations = s.annotations.filter(a => a.noteId !== noteId)
+        const indexes = buildAnnotationIndexes(newAnnotations)
+        return { 
+          annotations: newAnnotations,
+          annotationsByNote: indexes.byNote,
+          annotationsById: indexes.byId,
+          isTransitioning: false,
+          lastSaved: debouncedSave()
+        }
+      })
     })
   },
 
   clearAllAnnotations: () => {
-    set({ 
-      annotations: [], 
-      annotationsByNote: new Map(), 
-      annotationsById: new Map(),
-      lastSaved: debouncedSave()
+    // Use transition guard for bulk clear
+    set({ isTransitioning: true })
+    requestAnimationFrame(() => {
+      set({ 
+        annotations: [], 
+        annotationsByNote: new Map(), 
+        annotationsById: new Map(),
+        isTransitioning: false,
+        lastSaved: debouncedSave()
+      })
     })
   },
 
   clearSuggestedAnnotations: () => {
-    set(s => {
-      const newAnnotations = s.annotations.filter(a => a.source !== 'suggested')
-      const indexes = buildAnnotationIndexes(newAnnotations)
-      return { 
-        annotations: newAnnotations,
-        annotationsByNote: indexes.byNote,
-        annotationsById: indexes.byId,
-        lastSaved: debouncedSave()
-      }
+    // Use transition guard for bulk clear
+    set({ isTransitioning: true })
+    requestAnimationFrame(() => {
+      set(s => {
+        const newAnnotations = s.annotations.filter(a => a.source !== 'suggested')
+        const indexes = buildAnnotationIndexes(newAnnotations)
+        return { 
+          annotations: newAnnotations,
+          annotationsByNote: indexes.byNote,
+          annotationsById: indexes.byId,
+          isTransitioning: false,
+          lastSaved: debouncedSave()
+        }
+      })
     })
   },
 
