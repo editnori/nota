@@ -320,28 +320,38 @@ export const useStore = create<State>((set, get) => ({
   filteredNoteIds: null,
 
   initSession: async () => {
-    const data = await loadSession()
-    if (data) {
-      const annotations = data.annotations || []
-      const indexes = buildAnnotationIndexes(annotations)
-      // Use requestAnimationFrame to ensure clean render cycle
-      await new Promise<void>(resolve => {
-        requestAnimationFrame(() => {
-          set({
-            notes: data.notes || [],
-            annotations,
-            annotationsByNote: indexes.byNote,
-            annotationsById: indexes.byId,
-            currentNoteIndex: data.currentNoteIndex || 0,
-            mode: data.mode || 'annotate',
-            selectedQuestion: data.selectedQuestion || null,
-            isLoaded: true
+    try {
+      const data = await loadSession()
+      if (data) {
+        const annotations = data.annotations || []
+        const indexes = buildAnnotationIndexes(annotations)
+        // Use requestAnimationFrame to ensure clean render cycle
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() => {
+            try {
+              set({
+                notes: data.notes || [],
+                annotations,
+                annotationsByNote: indexes.byNote,
+                annotationsById: indexes.byId,
+                currentNoteIndex: data.currentNoteIndex || 0,
+                mode: data.mode || 'annotate',
+                selectedQuestion: data.selectedQuestion || null,
+                isLoaded: true
+              })
+            } catch (err) {
+              console.error('initSession set error:', err)
+              set({ isLoaded: true })  // Ensure app doesn't get stuck
+            }
+            resolve()
           })
-          resolve()
         })
-      })
-    } else {
-      set({ isLoaded: true })
+      } else {
+        set({ isLoaded: true })
+      }
+    } catch (err) {
+      console.error('initSession error:', err)
+      set({ isLoaded: true })  // Ensure app doesn't get stuck on load error
     }
   },
   
@@ -359,14 +369,19 @@ export const useStore = create<State>((set, get) => ({
     
     // Use requestAnimationFrame to ensure clean render cycle
     requestAnimationFrame(() => {
-      set({ 
-        notes, 
-        currentNoteIndex: 0, 
-        filteredNoteIds: null,  // Clear any active filters
-        highlightedAnnotation: null,
-        isTransitioning: false,
-        lastSaved: debouncedSave() 
-      })
+      try {
+        set({ 
+          notes, 
+          currentNoteIndex: 0, 
+          filteredNoteIds: null,  // Clear any active filters
+          highlightedAnnotation: null,
+          isTransitioning: false,
+          lastSaved: debouncedSave() 
+        })
+      } catch (err) {
+        console.error('setNotes error:', err)
+        set({ isTransitioning: false })
+      }
     })
   },
 
@@ -375,11 +390,16 @@ export const useStore = create<State>((set, get) => ({
       // Large import - use transition guard
       set({ isTransitioning: true })
       requestAnimationFrame(() => {
-        set(s => ({ 
-          notes: [...s.notes, ...newNotes], 
-          isTransitioning: false,
-          lastSaved: debouncedSave() 
-        }))
+        try {
+          set(s => ({ 
+            notes: [...s.notes, ...newNotes], 
+            isTransitioning: false,
+            lastSaved: debouncedSave() 
+          }))
+        } catch (err) {
+          console.error('addNotes error:', err)
+          set({ isTransitioning: false })
+        }
       })
     } else {
       // Small import - do directly
@@ -417,29 +437,34 @@ export const useStore = create<State>((set, get) => ({
     if (newAnnotations.length > 50) {
       set({ isTransitioning: true })
       requestAnimationFrame(() => {
-        set(s => {
-          const allAnnotations = [...s.annotations, ...newAnnotations]
-          const newByNote = new Map(s.annotationsByNote)
-          const newById = new Map(s.annotationsById)
-          
-          for (const ann of newAnnotations) {
-            const existing = newByNote.get(ann.noteId)
-            if (existing) {
-              newByNote.set(ann.noteId, [...existing, ann])
-            } else {
-              newByNote.set(ann.noteId, [ann])
+        try {
+          set(s => {
+            const allAnnotations = [...s.annotations, ...newAnnotations]
+            const newByNote = new Map(s.annotationsByNote)
+            const newById = new Map(s.annotationsById)
+            
+            for (const ann of newAnnotations) {
+              const existing = newByNote.get(ann.noteId)
+              if (existing) {
+                newByNote.set(ann.noteId, [...existing, ann])
+              } else {
+                newByNote.set(ann.noteId, [ann])
+              }
+              newById.set(ann.id, ann)
             }
-            newById.set(ann.id, ann)
-          }
-          
-          return { 
-            annotations: allAnnotations,
-            annotationsByNote: newByNote,
-            annotationsById: newById,
-            isTransitioning: false,
-            lastSaved: debouncedSave()
-          }
-        })
+            
+            return { 
+              annotations: allAnnotations,
+              annotationsByNote: newByNote,
+              annotationsById: newById,
+              isTransitioning: false,
+              lastSaved: debouncedSave()
+            }
+          })
+        } catch (err) {
+          console.error('addBulkAnnotations error:', err)
+          set({ isTransitioning: false })
+        }
       })
     } else {
       // Small batch - do directly
@@ -519,17 +544,22 @@ export const useStore = create<State>((set, get) => ({
     // Use transition guard to prevent render issues
     set({ isTransitioning: true })
     requestAnimationFrame(() => {
-      set(s => {
-        const newAnnotations = s.annotations.filter(a => a.noteId !== noteId)
-        const indexes = buildAnnotationIndexes(newAnnotations)
-        return { 
-          annotations: newAnnotations,
-          annotationsByNote: indexes.byNote,
-          annotationsById: indexes.byId,
-          isTransitioning: false,
-          lastSaved: debouncedSave()
-        }
-      })
+      try {
+        set(s => {
+          const newAnnotations = s.annotations.filter(a => a.noteId !== noteId)
+          const indexes = buildAnnotationIndexes(newAnnotations)
+          return { 
+            annotations: newAnnotations,
+            annotationsByNote: indexes.byNote,
+            annotationsById: indexes.byId,
+            isTransitioning: false,
+            lastSaved: debouncedSave()
+          }
+        })
+      } catch (err) {
+        console.error('clearNoteAnnotations error:', err)
+        set({ isTransitioning: false })
+      }
     })
   },
 
@@ -537,13 +567,18 @@ export const useStore = create<State>((set, get) => ({
     // Use transition guard for bulk clear
     set({ isTransitioning: true })
     requestAnimationFrame(() => {
-      set({ 
-        annotations: [], 
-        annotationsByNote: new Map(), 
-        annotationsById: new Map(),
-        isTransitioning: false,
-        lastSaved: debouncedSave()
-      })
+      try {
+        set({ 
+          annotations: [], 
+          annotationsByNote: new Map(), 
+          annotationsById: new Map(),
+          isTransitioning: false,
+          lastSaved: debouncedSave()
+        })
+      } catch (err) {
+        console.error('clearAllAnnotations error:', err)
+        set({ isTransitioning: false })
+      }
     })
   },
 
@@ -551,17 +586,22 @@ export const useStore = create<State>((set, get) => ({
     // Use transition guard for bulk clear
     set({ isTransitioning: true })
     requestAnimationFrame(() => {
-      set(s => {
-        const newAnnotations = s.annotations.filter(a => a.source !== 'suggested')
-        const indexes = buildAnnotationIndexes(newAnnotations)
-        return { 
-          annotations: newAnnotations,
-          annotationsByNote: indexes.byNote,
-          annotationsById: indexes.byId,
-          isTransitioning: false,
-          lastSaved: debouncedSave()
-        }
-      })
+      try {
+        set(s => {
+          const newAnnotations = s.annotations.filter(a => a.source !== 'suggested')
+          const indexes = buildAnnotationIndexes(newAnnotations)
+          return { 
+            annotations: newAnnotations,
+            annotationsByNote: indexes.byNote,
+            annotationsById: indexes.byId,
+            isTransitioning: false,
+            lastSaved: debouncedSave()
+          }
+        })
+      } catch (err) {
+        console.error('clearSuggestedAnnotations error:', err)
+        set({ isTransitioning: false })
+      }
     })
   },
 
@@ -569,43 +609,53 @@ export const useStore = create<State>((set, get) => ({
     // Set transitioning flag FIRST to prevent components from rendering during transition
     set({ isTransitioning: true })
     
-    // Cancel any pending saves to prevent race conditions
-    resetSaveState()
-    
-    // Clear any pending annotation batch
-    pendingAnnotations = []
-    if (batchTimeout) {
-      clearTimeout(batchTimeout)
-      batchTimeout = null
-    }
-    
-    // Clear persistent storage (async)
-    await clearStorage()
-    
-    // Use requestAnimationFrame to ensure React has finished any pending renders
-    await new Promise<void>(resolve => {
-      requestAnimationFrame(() => {
-        // Reset ALL state in a single atomic update
-        set({
-          notes: [],
-          annotations: [],
-          annotationsByNote: new Map(),
-          annotationsById: new Map(),
-          currentNoteIndex: 0,
-          mode: 'annotate',
-          selectedQuestion: null,
-          lastSaved: null,
-          undoStack: [],
-          filteredNoteIds: null,
-          highlightedAnnotation: null,
-          isImporting: false,
-          importProgress: '',
-          isLoaded: true,
-          isTransitioning: false  // Clear transition flag
+    try {
+      // Cancel any pending saves to prevent race conditions
+      resetSaveState()
+      
+      // Clear any pending annotation batch
+      pendingAnnotations = []
+      if (batchTimeout) {
+        clearTimeout(batchTimeout)
+        batchTimeout = null
+      }
+      
+      // Clear persistent storage (async)
+      await clearStorage()
+      
+      // Use requestAnimationFrame to ensure React has finished any pending renders
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          try {
+            // Reset ALL state in a single atomic update
+            set({
+              notes: [],
+              annotations: [],
+              annotationsByNote: new Map(),
+              annotationsById: new Map(),
+              currentNoteIndex: 0,
+              mode: 'annotate',
+              selectedQuestion: null,
+              lastSaved: null,
+              undoStack: [],
+              filteredNoteIds: null,
+              highlightedAnnotation: null,
+              isImporting: false,
+              importProgress: '',
+              isLoaded: true,
+              isTransitioning: false  // Clear transition flag
+            })
+          } catch (err) {
+            console.error('clearSession set error:', err)
+            set({ isTransitioning: false, isLoaded: true })
+          }
+          resolve()
         })
-        resolve()
       })
-    })
+    } catch (err) {
+      console.error('clearSession error:', err)
+      set({ isTransitioning: false, isLoaded: true })
+    }
   },
 
   undo: () => {

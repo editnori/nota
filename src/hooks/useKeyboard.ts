@@ -3,10 +3,15 @@ import { useStore } from './useStore'
 import { getQuestionByHotkey } from '../lib/questions'
 
 export function useKeyboard(onTagSelection: (questionId: string) => void) {
-  const { notes, currentNoteIndex, setCurrentNoteIndex, mode, setMode, setSelectedQuestion, undo } = useStore()
+  const { notes, currentNoteIndex, setCurrentNoteIndex, mode, setMode, setSelectedQuestion, undo, isTransitioning } = useStore()
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Block ALL keyboard shortcuts during state transitions to prevent race conditions
+      if (isTransitioning) {
+        return
+      }
+      
       // Ctrl+Z for undo (works everywhere)
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault()
@@ -68,5 +73,5 @@ export function useKeyboard(onTagSelection: (questionId: string) => void) {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [notes, currentNoteIndex, mode, setCurrentNoteIndex, setMode, setSelectedQuestion, onTagSelection, undo])
+  }, [notes, currentNoteIndex, mode, setCurrentNoteIndex, setMode, setSelectedQuestion, onTagSelection, undo, isTransitioning])
 }
