@@ -1,16 +1,21 @@
 import { useState } from 'react'
-import { Download, RefreshCw, CheckCircle, AlertCircle, Loader2, ExternalLink } from 'lucide-react'
+import { Download, RefreshCw, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 
-type UpdateStatus = 'idle' | 'checking' | 'available' | 'up-to-date' | 'error'
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'up-to-date' | 'error'
 
-// Current app version - should match tauri.conf.json
-const APP_VERSION = '0.5.71'
+const APP_VERSION = '0.5.74'
 const GITHUB_REPO = 'editnori/nota'
+
+interface ReleaseAsset {
+  name: string
+  browser_download_url: string
+  size: number
+}
 
 interface ReleaseInfo {
   version: string
   body: string
-  url: string
+  assets: ReleaseAsset[]
   publishedAt: string
 }
 
@@ -21,16 +26,51 @@ function compareVersions(current: string, latest: string): number {
   for (let i = 0; i < Math.max(c.length, l.length); i++) {
     const cv = c[i] || 0
     const lv = l[i] || 0
-    if (lv > cv) return 1  // latest is newer
-    if (lv < cv) return -1 // current is newer
+    if (lv > cv) return 1
+    if (lv < cv) return -1
   }
-  return 0 // same version
+  return 0
+}
+
+function getPlatform(): 'windows' | 'macos' | 'linux' | 'unknown' {
+  const ua = navigator.userAgent.toLowerCase()
+  if (ua.includes('win')) return 'windows'
+  if (ua.includes('mac')) return 'macos'
+  if (ua.includes('linux')) return 'linux'
+  return 'unknown'
+}
+
+function findAssetForPlatform(assets: ReleaseAsset[]): ReleaseAsset | null {
+  const platform = getPlatform()
+  
+  // Priority order for each platform
+  const patterns: Record<string, RegExp[]> = {
+    windows: [/\.msi$/i, /\.exe$/i],
+    macos: [/\.dmg$/i, /\.app\.tar\.gz$/i],
+    linux: [/\.AppImage$/i, /\.deb$/i, /\.tar\.gz$/i]
+  }
+  
+  const platformPatterns = patterns[platform] || []
+  
+  for (const pattern of platformPatterns) {
+    const asset = assets.find(a => pattern.test(a.name))
+    if (asset) return asset
+  }
+  
+  return null
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
 export function UpdateChecker() {
   const [status, setStatus] = useState<UpdateStatus>('idle')
   const [release, setRelease] = useState<ReleaseInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0)
 
   async function checkForUpdates() {
     setStatus('checking')
@@ -43,10 +83,7 @@ export function UpdateChecker() {
       )
       
       if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('No releases found')
-        }
-        throw new Error(`GitHub API error: ${response.status}`)
+        throw new Error(response.status === 404 ? 'No releases found' : `GitHub API error: ${response.status}`)
       }
       
       const data = await response.json()
@@ -55,8 +92,8 @@ export function UpdateChecker() {
       if (compareVersions(APP_VERSION, latestVersion) > 0) {
         setRelease({
           version: latestVersion,
-          body: data.body || 'No release notes available.',
-          url: data.html_url,
+          body: data.body || '',
+          assets: data.assets || [],
           publishedAt: new Date(data.published_at).toLocaleDateString()
         })
         setStatus('available')
@@ -64,126 +101,205 @@ export function UpdateChecker() {
         setStatus('up-to-date')
       }
     } catch (err) {
-      console.error('Update check failed:', err)
-      setError(err instanceof Error ? err.message : 'Failed to check for updates')
+      setError(err instanceof Error ? err.message : 'Failed to check')
       setStatus('error')
     }
   }
 
-  async function openReleasePage() {
-    if (release?.url) {
-      try {
-        // Dynamic import for Tauri plugin
-        const shellModule = await import('@tauri-apps/plugin-shell')
-        await shellModule.open(release.url)
-      } catch {
-        // Fallback for browser: open in new tab
-        window.open(release.url, '_blank', 'noopener,noreferrer')
+  async function downloadAndInstall() {
+    if (!release) return
+    
+    const asset = findAssetForPlatform(release.assets)
+    if (!asset) {
+      setError('No installer available for your platform')
+      setStatus('error')
+      return
+    }
+    
+    setStatus('downloading')
+    setProgress(0)
+    
+    try {
+      // Check if we're in Tauri
+      const isTauri = '__TAURI__' in window
+      
+      if (isTauri) {
+        // Use Tauri to download and run installer
+        const [{ download }, { open }, { tempDir, join }] = await Promise.all([
+          import('@tauri-apps/plugin-http' as string).catch(() => ({ download: null })),
+          import('@tauri-apps/plugin-shell'),
+          import('@tauri-apps/api/path')
+        ])
+        
+        const tempPath = await tempDir()
+        const filePath = await join(tempPath, asset.name)
+        
+        if (download) {
+          // Download with progress
+          await download(asset.browser_download_url, filePath, (prog: { loaded: number; total?: number }) => {
+            if (prog.total) {
+              setProgress(Math.round((prog.loaded / prog.total) * 100))
+            }
+          })
+        } else {
+          // Fallback: fetch and write using plugin-fs
+          const { writeFile } = await import('@tauri-apps/plugin-fs')
+          const response = await fetch(asset.browser_download_url)
+          const blob = await response.blob()
+          const buffer = await blob.arrayBuffer()
+          await writeFile(filePath, new Uint8Array(buffer))
+        }
+        
+        setStatus('installing')
+        
+        // Run the installer
+        const platform = getPlatform()
+        if (platform === 'windows') {
+          await open(filePath)
+        } else if (platform === 'macos') {
+          await open(filePath)
+        } else {
+          // Linux - make executable and run
+          const { Command } = await import('@tauri-apps/plugin-shell')
+          await Command.create('chmod', ['+x', filePath]).execute()
+          await open(filePath)
+        }
+        
+        // Close app after starting installer (Windows MSI will handle this)
+        setTimeout(() => {
+          window.close()
+        }, 1000)
+        
+      } else {
+        // Browser fallback - just open download URL
+        window.open(asset.browser_download_url, '_blank')
+        setStatus('available')
       }
+    } catch (err) {
+      console.error('Download failed:', err)
+      setError(err instanceof Error ? err.message : 'Download failed')
+      setStatus('error')
     }
   }
 
+  const asset = release ? findAssetForPlatform(release.assets) : null
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-medium text-maple-600 dark:text-maple-300 uppercase tracking-wide">
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[11px] font-medium text-maple-500 dark:text-maple-400 uppercase tracking-wide">
           Updates
         </h3>
-        <span className="text-xs text-maple-400 dark:text-maple-500">
+        <span className="text-[10px] text-maple-400 dark:text-maple-500 font-mono">
           v{APP_VERSION}
         </span>
       </div>
 
-      <div className="p-4 bg-maple-50 dark:bg-maple-700 rounded-lg">
+      <div className="p-3 bg-maple-50 dark:bg-maple-700/50 rounded-lg">
         {status === 'idle' && (
           <div className="flex items-center justify-between">
-            <span className="text-sm text-maple-600 dark:text-maple-300">
-              Check for new versions
+            <span className="text-xs text-maple-600 dark:text-maple-300">
+              Check for updates
             </span>
             <button
               onClick={checkForUpdates}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-maple-800 dark:bg-maple-600 hover:bg-maple-700 dark:hover:bg-maple-500 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-white bg-maple-700 dark:bg-maple-600 hover:bg-maple-600 dark:hover:bg-maple-500 rounded-md transition-colors"
             >
-              <RefreshCw size={14} />
-              Check for Updates
+              <RefreshCw size={12} />
+              Check
             </button>
           </div>
         )}
 
         {status === 'checking' && (
-          <div className="flex items-center gap-3">
-            <Loader2 size={18} className="text-maple-500 animate-spin" />
-            <span className="text-sm text-maple-600 dark:text-maple-300">
-              Checking GitHub for updates...
-            </span>
+          <div className="flex items-center gap-2">
+            <Loader2 size={14} className="text-maple-500 animate-spin" />
+            <span className="text-xs text-maple-600 dark:text-maple-300">Checking...</span>
           </div>
         )}
 
         {status === 'up-to-date' && (
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <CheckCircle size={18} className="text-green-500" />
-              <span className="text-sm text-maple-600 dark:text-maple-300">
-                You're running the latest version!
-              </span>
+            <div className="flex items-center gap-2">
+              <CheckCircle size={14} className="text-green-500" />
+              <span className="text-xs text-maple-600 dark:text-maple-300">Up to date</span>
             </div>
             <button
               onClick={checkForUpdates}
-              className="text-xs text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200"
+              className="text-[10px] text-maple-400 hover:text-maple-600 dark:hover:text-maple-300"
             >
-              Check again
+              Recheck
             </button>
           </div>
         )}
 
         {status === 'available' && release && (
-          <div className="space-y-3">
-            <div className="flex items-start gap-3">
-              <Download size={18} className="text-blue-500 mt-0.5 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-maple-800 dark:text-maple-100">
-                  Version {release.version} is available!
-                </p>
-                <p className="text-xs text-maple-400 dark:text-maple-500 mt-0.5">
-                  Released {release.publishedAt}
-                </p>
-                {release.body && (
-                  <p className="text-xs text-maple-500 dark:text-maple-400 mt-2 whitespace-pre-wrap line-clamp-4">
-                    {release.body}
-                  </p>
-                )}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-medium text-maple-800 dark:text-maple-100">
+                  v{release.version}
+                </span>
+                <span className="text-[10px] text-maple-400 ml-2">
+                  {release.publishedAt}
+                </span>
               </div>
+              {asset && (
+                <span className="text-[10px] text-maple-400">
+                  {formatBytes(asset.size)}
+                </span>
+              )}
             </div>
             <button
-              onClick={openReleasePage}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              onClick={downloadAndInstall}
+              disabled={!asset}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-maple-400 rounded-md transition-colors"
             >
-              <ExternalLink size={14} />
-              Download from GitHub
+              <Download size={12} />
+              {asset ? 'Download & Install' : 'No installer available'}
             </button>
+          </div>
+        )}
+
+        {status === 'downloading' && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Loader2 size={14} className="text-blue-500 animate-spin" />
+              <span className="text-xs text-maple-600 dark:text-maple-300">
+                Downloading... {progress}%
+              </span>
+            </div>
+            <div className="h-1 bg-maple-200 dark:bg-maple-600 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-blue-500 transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {status === 'installing' && (
+          <div className="flex items-center gap-2">
+            <Loader2 size={14} className="text-green-500 animate-spin" />
+            <span className="text-xs text-maple-600 dark:text-maple-300">
+              Starting installer...
+            </span>
           </div>
         )}
 
         {status === 'error' && (
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <AlertCircle size={18} className="text-amber-500" />
-              <div>
-                <p className="text-sm text-maple-600 dark:text-maple-300">
-                  Couldn't check for updates
-                </p>
-                {error && (
-                  <p className="text-xs text-maple-400 dark:text-maple-500 mt-0.5">
-                    {error}
-                  </p>
-                )}
-              </div>
+            <div className="flex items-center gap-2">
+              <AlertCircle size={14} className="text-amber-500" />
+              <span className="text-xs text-maple-600 dark:text-maple-300">
+                {error || 'Update failed'}
+              </span>
             </div>
             <button
               onClick={checkForUpdates}
-              className="text-xs text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200"
+              className="text-[10px] text-maple-400 hover:text-maple-600 dark:hover:text-maple-300"
             >
-              Try again
+              Retry
             </button>
           </div>
         )}
