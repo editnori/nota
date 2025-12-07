@@ -1,14 +1,37 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@source "./index.html";
+@source "./src/**/*.{ts,tsx,jsx,js,html}";
+
+/* Class-based dark mode */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --color-maple-50: #faf9f7;
+  --color-maple-100: #f5f3f0;
+  --color-maple-200: #e7e5e4;
+  --color-maple-300: #d6d3d1;
+  --color-maple-400: #a8a29e;
+  --color-maple-500: #78716c;
+  --color-maple-600: #57534e;
+  --color-maple-700: #44403c;
+  --color-maple-800: #292524;
+  --color-maple-900: #1c1917;
+}
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  @apply antialiased bg-maple-50 text-maple-800;
+  font-family: var(--font-sans);
+  background-color: var(--color-maple-50);
+  color: var(--color-maple-800);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .dark body {
-  @apply bg-maple-900 text-maple-100;
+  background-color: var(--color-maple-900);
+  color: var(--color-maple-100);
 }
 
 ::-webkit-scrollbar {

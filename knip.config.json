@@ -3,8 +3,7 @@
   "entry": [
     "src/main.tsx",
     "vite.config.ts",
-    "vitest.config.ts",
-    "tailwind.config.js"
+    "vitest.config.ts"
   ],
   "project": [
     "src/**/*.{ts,tsx}",
