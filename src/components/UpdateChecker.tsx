@@ -125,50 +125,61 @@ export function UpdateChecker() {
       
       if (isTauri) {
         // Use Tauri to download and run installer
-        const [{ download }, { open }, { tempDir, join }] = await Promise.all([
-          import('@tauri-apps/plugin-http' as string).catch(() => ({ download: null })),
+        const [{ open }, { tempDir, join }, { writeFile }] = await Promise.all([
           import('@tauri-apps/plugin-shell'),
-          import('@tauri-apps/api/path')
+          import('@tauri-apps/api/path'),
+          import('@tauri-apps/plugin-fs')
         ])
         
         const tempPath = await tempDir()
         const filePath = await join(tempPath, asset.name)
         
-        if (download) {
-          // Download with progress
-          await download(asset.browser_download_url, filePath, (prog: { loaded: number; total?: number }) => {
-            if (prog.total) {
-              setProgress(Math.round((prog.loaded / prog.total) * 100))
-            }
-          })
-        } else {
-          // Fallback: fetch and write using plugin-fs
-          const { writeFile } = await import('@tauri-apps/plugin-fs')
-          const response = await fetch(asset.browser_download_url)
-          const blob = await response.blob()
-          const buffer = await blob.arrayBuffer()
-          await writeFile(filePath, new Uint8Array(buffer))
+        // Download with fetch and track progress
+        const response = await fetch(asset.browser_download_url)
+        if (!response.ok) throw new Error(`Download failed: ${response.status}`)
+        
+        const contentLength = response.headers.get('content-length')
+        const total = contentLength ? parseInt(contentLength, 10) : 0
+        
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error('No response body')
+        
+        const chunks: Uint8Array[] = []
+        let loaded = 0
+        
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(value)
+          loaded += value.length
+          if (total > 0) {
+            setProgress(Math.round((loaded / total) * 100))
+          }
         }
         
+        // Combine chunks and write file
+        const data = new Uint8Array(loaded)
+        let offset = 0
+        for (const chunk of chunks) {
+          data.set(chunk, offset)
+          offset += chunk.length
+        }
+        
+        await writeFile(filePath, data)
         setStatus('installing')
         
         // Run the installer
         const platform = getPlatform()
-        if (platform === 'windows') {
-          await open(filePath)
-        } else if (platform === 'macos') {
-          await open(filePath)
-        } else {
-          // Linux - make executable and run
+        if (platform === 'linux') {
+          // Linux - make executable first
           const { Command } = await import('@tauri-apps/plugin-shell')
           await Command.create('chmod', ['+x', filePath]).execute()
-          await open(filePath)
         }
         
-        // Close app after starting installer (Windows MSI will handle this)
-        setTimeout(() => {
-          window.close()
-        }, 1000)
+        await open(filePath)
+        
+        // Close app after starting installer
+        setTimeout(() => window.close(), 1000)
         
       } else {
         // Browser fallback - just open download URL
