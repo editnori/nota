@@ -522,7 +522,12 @@ function AppContent() {
       {/* Import mode selection modal */}
       {pendingImport && (
         <ImportModeModal
-          fileCount={pendingFileCount}
+          fileCount={
+            // Calculate file count from pendingImport data
+            pendingImport.type === 'files' ? pendingImport.data.length :
+            pendingImport.type === 'tauri' ? pendingImport.data.length :
+            pendingFileCount
+          }
           onSelect={processImportWithMode}
           onCancel={() => setPendingImport(null)}
         />

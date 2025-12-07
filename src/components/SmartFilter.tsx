@@ -49,7 +49,7 @@ function compilePatterns(
 }
 
 // Match now includes the question that found it
-export interface Match { 
+interface Match { 
   noteId: string
   term: string
   start: number

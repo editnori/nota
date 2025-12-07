@@ -60,8 +60,8 @@ export function useKeyboard(onTagSelection: (questionId: string) => void) {
         return
       }
 
-      // tab to cycle modes
-      if (e.key === 'Tab') {
+      // Backtick (`) to cycle modes - preserves Tab for accessibility
+      if (e.key === '`' && !e.ctrlKey && !e.metaKey) {
         e.preventDefault()
         const modes = ['annotate', 'review', 'format'] as const
         const currentIdx = modes.indexOf(mode as typeof modes[number])

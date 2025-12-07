@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@5.71.0/schema.json",
+  "entry": [
+    "src/main.tsx",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "tailwind.config.js"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "!src/lib/formatter.ts"
+  ],
+  "ignore": [
+    "public/**/*",
+    "scripts/**/*"
+  ],
+  "ignoreDependencies": [
+    "onnxruntime-web"
+  ],
+  "ignoreExportsUsedInFile": true
+}

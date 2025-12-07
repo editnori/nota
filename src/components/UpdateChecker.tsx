@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Download, RefreshCw, CheckCircle, AlertCircle, Loader2, ExternalLink } from 'lucide-react'
-import { open } from '@tauri-apps/plugin-shell'
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'up-to-date' | 'error'
 
@@ -73,7 +72,14 @@ export function UpdateChecker() {
 
   async function openReleasePage() {
     if (release?.url) {
-      await open(release.url)
+      try {
+        // Dynamic import for Tauri plugin
+        const shellModule = await import('@tauri-apps/plugin-shell')
+        await shellModule.open(release.url)
+      } catch {
+        // Fallback for browser: open in new tab
+        window.open(release.url, '_blank', 'noopener,noreferrer')
+      }
     }
   }
 

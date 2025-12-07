@@ -2,12 +2,9 @@ import { useStore, buildAnnotationIndexes, setBulkOperation } from '../hooks/use
 import { exportJSON, exportCSV, downloadFile, exportSession, importSession } from '../lib/exporters'
 import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown, Moon, Sun } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import { importFiles, handleImportWithProgress, formatTextWithMode } from '../lib/importers'
 import { SettingsModal } from './SettingsModal'
 import { ConfirmModal } from './ConfirmModal'
-import { ImportModeModal } from './ImportModeModal'
 import { loadQuestions } from '../lib/questions'
-import type { Note, FormatterMode } from '../lib/types'
 
 // Check if running in Tauri desktop app
 function isTauri(): boolean {
@@ -65,13 +62,14 @@ export function Header() {
     return count
   }, [annotationsByNote])
   
+  // Use store for import state to stay in sync with App.tsx
+  const setPendingImport = useStore(s => s.setPendingImport)
+  
   const [showSettings, setShowSettings] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showImportMenu, setShowImportMenu] = useState(false)
   const [showClearMenu, setShowClearMenu] = useState(false)
   const [saveIndicator, setSaveIndicator] = useState(false)
-  const [pendingImport, setPendingImport] = useState<{ type: 'files' | 'tauri', data: any } | null>(null)
-  const [pendingFileCount, setPendingFileCount] = useState(0)
   const [confirmModal, setConfirmModal] = useState<ConfirmState>({
     isOpen: false,
     title: '',
@@ -143,9 +141,8 @@ export function Header() {
       
       const paths = Array.isArray(selected) ? selected : [selected]
       
-      // Store paths and show mode selection modal
-      setPendingFileCount(paths.length)
-      setPendingImport({ type: 'tauri', data: { paths, isFolder } })
+      // Store paths and show mode selection modal (uses same format as App.tsx)
+      setPendingImport({ type: 'tauri', data: paths })
       setImporting(false)
       
       return true // Handled by Tauri
@@ -156,116 +153,6 @@ export function Header() {
     }
   }, [setImporting])
 
-  // Process Tauri import with selected mode
-  async function processTauriImportWithMode(data: { paths: string[], isFolder: boolean }, mode: FormatterMode) {
-    const { paths, isFolder } = data
-    
-    try {
-      const { readTextFile, readDir } = await import('@tauri-apps/plugin-fs')
-      
-      setImporting(true, 'Processing...')
-      setBulkOperation(true)
-      
-      const getFileName = (p: string) => {
-        const parts = p.replace(/\\/g, '/').split('/')
-        return parts[parts.length - 1] || 'note'
-      }
-      
-      const hasExt = (name: string, ext: string) => 
-        name.toLowerCase().endsWith(ext.toLowerCase())
-      
-      const importedNotes: Note[] = []
-      
-      for (const filePath of paths) {
-        try {
-          if (isFolder) {
-            const entries = await readDir(filePath)
-            const txtFiles = entries.filter(e => e.name && hasExt(e.name, '.txt'))
-            
-            for (let i = 0; i < txtFiles.length; i++) {
-              const entry = txtFiles[i]
-              const entryName = entry.name || ''
-              setImporting(true, `Processing ${i + 1}/${txtFiles.length}`)
-              const sep = filePath.includes('\\') ? '\\' : '/'
-              const fullPath = `${filePath}${sep}${entryName}`
-              const content = await readTextFile(fullPath)
-              const formattedText = await formatTextWithMode(content, mode)
-              importedNotes.push({
-                id: entryName.replace(/\.txt$/i, ''),
-                text: formattedText,
-                meta: { source: entryName, rawText: content }
-              })
-            }
-          } else {
-            const fileName = getFileName(filePath)
-            setImporting(true, `Reading ${fileName}`)
-            
-            if (hasExt(fileName, '.txt')) {
-              const content = await readTextFile(filePath)
-              const formattedText = await formatTextWithMode(content, mode)
-              importedNotes.push({
-                id: fileName.replace(/\.txt$/i, ''),
-                text: formattedText,
-                meta: { source: fileName, rawText: content }
-              })
-            } else if (hasExt(fileName, '.json') || hasExt(fileName, '.jsonl')) {
-              const content = await readTextFile(filePath)
-              try {
-                const parsed = hasExt(fileName, '.jsonl')
-                  ? content.trim().split('\n').map(line => JSON.parse(line))
-                  : JSON.parse(content)
-                const items = Array.isArray(parsed) ? parsed : (parsed.notes || [parsed])
-                for (const item of items) {
-                  const rawItemText = String(item.text || '')
-                  const formattedText = await formatTextWithMode(rawItemText, mode)
-                  importedNotes.push({
-                    id: String(item.id || item.note_id || `note_${Date.now()}_${Math.random().toString(36).slice(2,6)}`),
-                    text: formattedText,
-                    meta: { source: fileName, type: item.note_type, rawText: rawItemText }
-                  })
-                }
-              } catch (err) {
-                console.error('Failed to parse JSON:', err)
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Failed to read:', filePath, err)
-        }
-      }
-      
-      if (importedNotes.length > 0) {
-        const { notes: currentNotes, addNotes, setNotes } = useStore.getState()
-        if (currentNotes.length > 0) {
-          addNotes(importedNotes)
-        } else {
-          setNotes(importedNotes)
-        }
-        
-        setBulkOperation(false)
-        setImporting(true, `${importedNotes.length} notes imported`)
-        
-        await new Promise<void>(resolve => {
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              setImporting(false)
-              resolve()
-            }, 500)
-          })
-        })
-      } else {
-        setBulkOperation(false)
-        setImporting(true, 'No valid files found')
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        setImporting(false)
-      }
-    } catch (err) {
-      console.error('Tauri import error:', err)
-      setBulkOperation(false)
-      setImporting(false)
-    }
-  }
-
   // Unified import handler for both files and folders - shows mode modal first
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
@@ -275,37 +162,12 @@ export function Header() {
     }
 
     // Store files and show mode selection modal
-    setPendingFileCount(files.length)
     setPendingImport({ type: 'files', data: Array.from(files) })
     setImporting(false) // Hide the "Select files..." message
     
     // Reset inputs
     if (fileInputRef.current) fileInputRef.current.value = ''
     if (folderInputRef.current) folderInputRef.current.value = ''
-  }
-
-  // Process import with selected mode
-  async function processImportWithMode(mode: FormatterMode) {
-    if (!pendingImport) return
-    
-    const importData = pendingImport
-    setPendingImport(null)
-    
-    if (importData.type === 'files') {
-      await handleImportWithProgress(() => 
-        importFiles(importData.data, (progress) => {
-          if (progress.phase === 'scanning') {
-            setImporting(true, 'Scanning...')
-          } else if (progress.phase === 'processing') {
-            setImporting(true, `${progress.current} / ${progress.total}`)
-          } else if (progress.phase === 'done') {
-            setImporting(true, `${progress.current} notes`)
-          }
-        }, mode)
-      )
-    } else if (importData.type === 'tauri') {
-      await processTauriImportWithMode(importData.data, mode)
-    }
   }
 
   async function handleSessionImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -673,13 +535,7 @@ export function Header() {
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       
-      {pendingImport && (
-        <ImportModeModal
-          fileCount={pendingFileCount}
-          onSelect={processImportWithMode}
-          onCancel={() => setPendingImport(null)}
-        />
-      )}
+      {/* ImportModeModal is rendered globally in App.tsx to avoid duplicate overlays */}
       
       <ConfirmModal
         isOpen={confirmModal.isOpen}

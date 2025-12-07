@@ -8,15 +8,15 @@
  */
 
 import { formatNoteText as regexFormatNote } from './formatter'
-import { formatWithModel, isModelLoaded, initModel, preloadModel, getLoadError } from './bilstm-inference'
+import { formatWithModel, isModelLoaded, initModel } from './bilstm-inference'
 import type { FormatterMode, FormatExplanation } from './types'
 
-export interface FormatterOptions {
+interface FormatterOptions {
   mode: FormatterMode
   explain?: boolean
 }
 
-export interface FormatResult {
+interface FormatResult {
   formatted: string
   mode: FormatterMode
   explanation?: FormatExplanation
@@ -63,8 +63,6 @@ async function formatWithLocalModel(rawText: string, explain: boolean): Promise<
 }
 
 export const isModelReady = isModelLoaded
-export const getModelError = getLoadError
-export { preloadModel }
 
 export async function initializeModel(): Promise<boolean> {
   try {
@@ -74,5 +72,3 @@ export async function initializeModel(): Promise<boolean> {
     return false
   }
 }
-
-export type { FormatterMode, FormatExplanation }

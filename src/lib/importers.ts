@@ -3,9 +3,6 @@ import { useStore, setBulkOperation } from '../hooks/useStore'
 import { formatNoteText } from './formatter'
 import { formatNote } from './bilstm-formatter'
 
-// Re-export formatNoteText from the comprehensive formatter
-export { formatNoteText }
-
 // Format text based on mode - async because model mode is async
 export async function formatTextWithMode(raw: string, mode: FormatterMode): Promise<string> {
   if (mode === 'none') return raw
@@ -15,7 +12,7 @@ export async function formatTextWithMode(raw: string, mode: FormatterMode): Prom
   return result.formatted
 }
 
-export async function importJSON(file: File, mode: FormatterMode = 'regex'): Promise<Note[]> {
+async function importJSON(file: File, mode: FormatterMode = 'regex'): Promise<Note[]> {
   const text = await file.text()
   const data = JSON.parse(text)
   
@@ -30,34 +27,13 @@ export async function importJSON(file: File, mode: FormatterMode = 'regex'): Pro
   throw new Error('Invalid JSON format. Expected array of notes or { notes: [...] }')
 }
 
-export async function importJSONL(file: File, mode: FormatterMode = 'regex'): Promise<Note[]> {
+async function importJSONL(file: File, mode: FormatterMode = 'regex'): Promise<Note[]> {
   const text = await file.text()
   const lines = text.trim().split('\n').filter(Boolean)
   return Promise.all(lines.map(line => normalizeNote(JSON.parse(line), mode)))
 }
 
-export async function importTXT(files: File[], noteType?: string, mode: FormatterMode = 'regex'): Promise<Note[]> {
-  const notes: Note[] = []
-  
-  for (const file of files) {
-    const rawText = await file.text()
-    const text = await formatTextWithMode(rawText, mode)
-    const id = file.name.replace(/\.txt$/, '')
-    notes.push({
-      id,
-      text,
-      meta: { 
-        source: file.name,
-        type: noteType,
-        rawText: rawText  // Store original for comparison
-      }
-    })
-  }
-  
-  return notes
-}
-
-export interface ImportProgress {
+interface ImportProgress {
   phase: 'scanning' | 'processing' | 'formatting' | 'done'
   current: number
   total: number

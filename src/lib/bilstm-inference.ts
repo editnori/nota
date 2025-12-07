@@ -79,13 +79,6 @@ export function isModelLoaded(): boolean {
 }
 
 /**
- * Get load error if any
- */
-export function getLoadError(): string | null {
-  return loadError
-}
-
-/**
  * Encode tokens to IDs using vocabulary
  */
 function encodeTokens(tokens: string[]): number[] {
@@ -357,13 +350,4 @@ export async function formatWithModel(rawText: string): Promise<{
       }
     }
   }
-}
-
-/**
- * Preload the model (call on app startup)
- */
-export function preloadModel(): void {
-  initModel().catch(err => {
-    console.warn('[BiLSTM] Model preload failed (will retry on first use):', err)
-  })
 }

@@ -297,10 +297,10 @@ function loadPreferences() {
     return {
       fontSize: fontSize ? parseInt(fontSize) : 13,
       darkMode: darkMode === 'true',
-      formatterMode: formatterMode || 'regex'
+      formatterMode: formatterMode || 'model'  // BiLSTM is now the default
     }
   } catch {
-    return { fontSize: 13, darkMode: false, formatterMode: 'regex' as FormatterMode }
+    return { fontSize: 13, darkMode: false, formatterMode: 'model' as FormatterMode }  // BiLSTM is now the default
   }
 }
 

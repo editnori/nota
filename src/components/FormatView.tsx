@@ -3,7 +3,7 @@ import { Download, FileText, Loader2, ChevronLeft, ChevronRight, Cpu, Code, Ban,
 import { useStore } from '../hooks/useStore'
 import { downloadFile } from '../lib/exporters'
 import { formatNote, isModelReady, initializeModel } from '../lib/bilstm-formatter'
-import type { FormatterMode, FormatExplanation, TokenExplanation, SectionType, LineType } from '../lib/types'
+import type { FormatterMode, FormatExplanation, TokenExplanation, SectionType } from '../lib/types'
 
 interface ProcessedNote {
   name: string
@@ -42,14 +42,13 @@ const SECTION_STYLES: Partial<Record<SectionType, { bg: string; text: string; bo
 const DEFAULT_SECTION_STYLE = { bg: 'bg-maple-100 dark:bg-maple-700', text: 'text-maple-600 dark:text-maple-300', border: 'border-maple-300 dark:border-maple-600' }
 
 export function FormatView() {
-  const { notes, formatterMode, setFormatterMode } = useStore()
+  const { notes, formatterMode, setFormatterMode, fontSize, setFontSize } = useStore()
   const [processed, setProcessed] = useState<ProcessedNote[]>([])
   const [processing, setProcessing] = useState(false)
   const [previewIndex, setPreviewIndex] = useState(0)
   const [modelStatus, setModelStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [showModePrompt, setShowModePrompt] = useState(false)
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null)
-  const [fontSize, setFontSize] = useState(12)
   const [selectedSection, setSelectedSection] = useState<SectionType | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const formattedScrollRef = useRef<HTMLDivElement>(null)

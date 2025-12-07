@@ -47,8 +47,19 @@ body {
   color: #fef3c7;
 }
 
+/* Accessible focus styles - visible keyboard focus ring */
 *:focus {
+  outline: 2px solid rgb(194, 120, 80);
+  outline-offset: 2px;
+}
+
+*:focus:not(:focus-visible) {
   outline: none;
+}
+
+*:focus-visible {
+  outline: 2px solid rgb(194, 120, 80);
+  outline-offset: 2px;
 }
 
 /* Simple border pulse indicator - like Windows title bar attention */
