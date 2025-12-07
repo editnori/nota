@@ -1,7 +1,30 @@
-import { useCallback, useRef, useState, useMemo, useEffect } from 'react'
+import React, { useCallback, useRef, useState, useMemo, useEffect } from 'react'
 import { useStore, getPendingAnnotationsForNote } from '../hooks/useStore'
 import { getQuestion, loadQuestions } from '../lib/questions'
-import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus, Check, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus, Check, Trash2, LayoutList, Loader2 } from 'lucide-react'
+import { formatWithModel, initModel, isModelLoaded } from '../lib/bilstm-inference'
+import type { SectionType, TokenExplanation } from '../lib/types'
+
+// Section styling - matches FormatView
+const SECTION_STYLES: Partial<Record<SectionType, { bg: string; text: string; border: string; pill: string }>> = {
+  'HPI': { bg: 'bg-rose-100/50 dark:bg-rose-900/20', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-300 dark:border-rose-700', pill: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-rose-300' },
+  'PMH': { bg: 'bg-amber-100/50 dark:bg-amber-900/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-300 dark:border-amber-700', pill: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-300' },
+  'PSH': { bg: 'bg-orange-100/50 dark:bg-orange-900/20', text: 'text-orange-700 dark:text-orange-300', border: 'border-orange-300 dark:border-orange-700', pill: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-300' },
+  'MEDS': { bg: 'bg-emerald-100/50 dark:bg-emerald-900/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-300 dark:border-emerald-700', pill: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300' },
+  'ALLERGIES': { bg: 'bg-red-100/50 dark:bg-red-900/20', text: 'text-red-700 dark:text-red-300', border: 'border-red-300 dark:border-red-700', pill: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-300' },
+  'ROS': { bg: 'bg-blue-100/50 dark:bg-blue-900/20', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-300 dark:border-blue-700', pill: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300' },
+  'PE': { bg: 'bg-indigo-100/50 dark:bg-indigo-900/20', text: 'text-indigo-700 dark:text-indigo-300', border: 'border-indigo-300 dark:border-indigo-700', pill: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-300' },
+  'VITALS': { bg: 'bg-teal-100/50 dark:bg-teal-900/20', text: 'text-teal-700 dark:text-teal-300', border: 'border-teal-300 dark:border-teal-700', pill: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-300' },
+  'LABS': { bg: 'bg-cyan-100/50 dark:bg-cyan-900/20', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-300 dark:border-cyan-700', pill: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 border-cyan-300' },
+  'IMAGING': { bg: 'bg-purple-100/50 dark:bg-purple-900/20', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-300 dark:border-purple-700', pill: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-300' },
+  'ASSESSMENT': { bg: 'bg-violet-100/50 dark:bg-violet-900/20', text: 'text-violet-700 dark:text-violet-300', border: 'border-violet-300 dark:border-violet-700', pill: 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border-violet-300' },
+  'PLAN': { bg: 'bg-green-100/50 dark:bg-green-900/20', text: 'text-green-700 dark:text-green-300', border: 'border-green-300 dark:border-green-700', pill: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300' },
+  'COURSE': { bg: 'bg-pink-100/50 dark:bg-pink-900/20', text: 'text-pink-700 dark:text-pink-300', border: 'border-pink-300 dark:border-pink-700', pill: 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300 border-pink-300' },
+  'SOCIAL': { bg: 'bg-yellow-100/50 dark:bg-yellow-900/20', text: 'text-yellow-700 dark:text-yellow-300', border: 'border-yellow-300 dark:border-yellow-700', pill: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border-yellow-300' },
+  'FAMILY': { bg: 'bg-lime-100/50 dark:bg-lime-900/20', text: 'text-lime-700 dark:text-lime-300', border: 'border-lime-300 dark:border-lime-700', pill: 'bg-lime-100 dark:bg-lime-900/30 text-lime-700 dark:text-lime-300 border-lime-300' },
+}
+
+const DEFAULT_SECTION_STYLE = { bg: 'bg-maple-100/50 dark:bg-maple-700/50', text: 'text-maple-600 dark:text-maple-300', border: 'border-maple-300 dark:border-maple-600', pill: 'bg-maple-100 dark:bg-maple-700 text-maple-600 dark:text-maple-300 border-maple-300' }
 
 interface Props {
   onCreateAnnotation: (text: string, start: number, end: number) => void
@@ -60,6 +83,10 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const [glowingMarkId, setGlowingMarkId] = useState<string | null>(null)
   const [spanEditor, setSpanEditor] = useState<SpanEditor | null>(null)
   const [overlapPrompt, setOverlapPrompt] = useState<OverlapPrompt | null>(null)
+  const [showSections, setShowSections] = useState(false) // Section badges toggle
+  const [sectionTokens, setSectionTokens] = useState<TokenExplanation[] | null>(null)
+  const [sectionsLoading, setSectionsLoading] = useState(false)
+  const sectionCacheRef = useRef<Map<string, TokenExplanation[]>>(new Map())
   
   // Use ref for popup position so it doesn't shift when annotations update
   const popupPositionRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 })
@@ -95,6 +122,101 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     }
     return -1
   }, [hasUnannotated, annotationsByNote, notes, currentNoteIndex])
+
+  // Run BiLSTM section detection when sections are enabled
+  useEffect(() => {
+    if (!showSections || !note) {
+      setSectionTokens(null)
+      return
+    }
+
+    // Check cache first
+    const cached = sectionCacheRef.current.get(note.id)
+    if (cached) {
+      setSectionTokens(cached)
+      return
+    }
+
+    // Run BiLSTM model
+    setSectionsLoading(true)
+    
+    const runDetection = async () => {
+      try {
+        // Initialize model if needed
+        if (!isModelLoaded()) {
+          await initModel()
+        }
+        
+        // Run inference on the note text
+        const result = await formatWithModel(note.text)
+        if (result.explanation) {
+          const tokens = result.explanation.explanation
+          sectionCacheRef.current.set(note.id, tokens)
+          setSectionTokens(tokens)
+        }
+      } catch (err) {
+        console.error('[Sections] BiLSTM error:', err)
+        setSectionTokens(null)
+      } finally {
+        setSectionsLoading(false)
+      }
+    }
+
+    runDetection()
+  }, [showSections, note?.id, note?.text])
+
+  // Build section info from BiLSTM output
+  const { sectionsInOrder, sectionBadges } = useMemo(() => {
+    if (!sectionTokens || !note) {
+      return { sectionsInOrder: [], sectionBadges: [] }
+    }
+    
+    const text = note.text
+    let textPos = 0
+    const badges: { pos: number; section: SectionType }[] = []
+    const sectionsFound: SectionType[] = []
+    let lastSection: SectionType = 'NONE'
+    
+    for (let i = 0; i < sectionTokens.length; i++) {
+      const token = sectionTokens[i]
+      
+      // Skip whitespace to find the token
+      while (textPos < text.length && /\s/.test(text[textPos])) {
+        textPos++
+      }
+      
+      const tokenStart = textPos
+      textPos = tokenStart + token.token.length
+      
+      // Track section transitions for badges
+      if (token.section !== 'NONE' && token.section !== lastSection && token.isLineStart) {
+        badges.push({ pos: tokenStart, section: token.section })
+        if (!sectionsFound.includes(token.section)) {
+          sectionsFound.push(token.section)
+        }
+      }
+      lastSection = token.section
+    }
+    
+    return { sectionsInOrder: sectionsFound, sectionBadges: badges }
+  }, [sectionTokens, note?.text])
+
+  // Find all badges within a segment range
+  const getBadgesInRange = useCallback((start: number, end: number): { pos: number; section: SectionType }[] => {
+    if (!showSections || sectionBadges.length === 0) return []
+    return sectionBadges.filter(b => b.pos >= start && b.pos < end)
+  }, [showSections, sectionBadges])
+
+  // Scroll to a section when clicking toolbar pill
+  const scrollToSection = useCallback((section: SectionType) => {
+    if (!scrollContainerRef.current || !docRef.current) return
+    
+    // Find the badge element for this section
+    const badge = docRef.current.querySelector(`[data-section="${section}"]`)
+    if (badge) {
+      badge.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [])
 
   // Scroll to highlighted annotation when it changes - with smooth animation
   useEffect(() => {
@@ -373,6 +495,17 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const segments = useMemo(() => {
     return buildSegments(note.text, noteAnnotations)
   }, [note.text, noteAnnotations])
+
+  // Calculate cumulative positions for each segment
+  const segmentPositions = useMemo(() => {
+    const positions: number[] = []
+    let pos = 0
+    for (const seg of segments) {
+      positions.push(pos)
+      pos += seg.text.length
+    }
+    return positions
+  }, [segments])
   
   const questions = loadQuestions()
 
@@ -408,6 +541,44 @@ export function DocumentView({ onCreateAnnotation }: Props) {
         )}
         
         <div className="flex-1" />
+
+        {/* Clickable Section Pills - click to scroll to section */}
+        {showSections && sectionsInOrder.length > 0 && (
+          <div className="flex items-center gap-1 overflow-x-auto max-w-md scrollbar-none">
+            {sectionsInOrder.map((section, i) => {
+              const style = SECTION_STYLES[section] || DEFAULT_SECTION_STYLE
+              return (
+                <button
+                  key={`${section}-${i}`}
+                  onClick={() => scrollToSection(section)}
+                  className={`text-[9px] px-2 py-0.5 rounded-full border shrink-0 transition-all ${style.pill} hover:opacity-80 hover:ring-1 hover:ring-current`}
+                  title={`Jump to ${section}`}
+                >
+                  {section}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Section toggle */}
+        <button
+          onClick={() => setShowSections(!showSections)}
+          disabled={sectionsLoading}
+          className={`flex items-center gap-1 px-2 py-1 text-[9px] rounded-full transition-colors ${
+            showSections 
+              ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' 
+              : 'bg-maple-100 dark:bg-maple-700 text-maple-500 dark:text-maple-400'
+          }`}
+          title={showSections ? 'Hide sections (BiLSTM)' : 'Detect sections (BiLSTM)'}
+        >
+          {sectionsLoading ? (
+            <Loader2 size={11} className="animate-spin" />
+          ) : (
+            <LayoutList size={11} />
+          )}
+          <span className="hidden sm:inline">Sections</span>
+        </button>
 
         {/* Font size control */}
         <div className="flex items-center gap-1 bg-maple-100 dark:bg-maple-700 rounded-full px-1">
@@ -471,10 +642,60 @@ export function DocumentView({ onCreateAnnotation }: Props) {
               onMouseUp={handleTextSelect}
             >
               {segments.map((seg, i) => {
+                const segStart = segmentPositions[i]
+                const segEnd = segStart + seg.text.length
+                
+                // Find any section badges that should appear in this segment
+                const badgesInSeg = getBadgesInRange(segStart, segEnd)
+                
+                // Render section badge inline (with data-section for scroll targeting)
+                const renderBadge = (section: SectionType, key: string) => {
+                  const style = SECTION_STYLES[section] || DEFAULT_SECTION_STYLE
+                  return (
+                    <span
+                      key={key}
+                      data-section={section}
+                      className={`inline-block text-[8px] px-1 py-0.5 rounded font-medium border align-middle mr-0.5 ${style.pill}`}
+                      title={section}
+                    >
+                      {section}
+                    </span>
+                  )
+                }
+                
+                // For plain segments
                 if (seg.type === 'plain') {
+                  // If there are badges in this segment, we need to split the text
+                  if (badgesInSeg.length > 0) {
+                    const parts: React.ReactNode[] = []
+                    let lastPos = 0
+                    
+                    for (let bi = 0; bi < badgesInSeg.length; bi++) {
+                      const badge = badgesInSeg[bi]
+                      const relativePos = badge.pos - segStart
+                      
+                      // Text before badge
+                      if (relativePos > lastPos) {
+                        parts.push(<span key={`t${bi}`}>{seg.text.slice(lastPos, relativePos)}</span>)
+                      }
+                      
+                      // Badge
+                      parts.push(renderBadge(badge.section, `b${bi}`))
+                      lastPos = relativePos
+                    }
+                    
+                    // Remaining text
+                    if (lastPos < seg.text.length) {
+                      parts.push(<span key="end">{seg.text.slice(lastPos)}</span>)
+                    }
+                    
+                    return <span key={i}>{parts}</span>
+                  }
+                  
                   return <span key={i}>{seg.text}</span>
                 }
                 
+                // Annotated segments
                 const colors = seg.questions.map(qid => getQuestion(qid)?.color || '#888')
                 const primaryColor = colors[0]
                 const isSuggested = seg.isSuggested
@@ -485,8 +706,12 @@ export function DocumentView({ onCreateAnnotation }: Props) {
                   ? `linear-gradient(90deg, ${colors.join(', ')})`
                   : primaryColor
                 
+                // Check for badges at segment start
+                const badgesAtStart = badgesInSeg.filter(b => b.pos === segStart)
+                
                 return (
                   <span key={i} className="relative inline">
+                    {badgesAtStart.map((b, bi) => renderBadge(b.section, `badge${bi}`))}
                     <mark
                       data-ann-ids={seg.annotationIds.join(',')}
                       className={`rounded px-0.5 py-0.5 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-maple-400 transition-all ${

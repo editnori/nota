@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Note, Annotation, Mode } from '../lib/types'
+import type { Note, Annotation, Mode, FormatterMode } from '../lib/types'
 import { loadSession, saveSession, clearStorage } from '../lib/storage'
 
 interface UndoAction {
@@ -23,10 +23,12 @@ interface State {
   undoStack: UndoAction[]
   fontSize: number
   darkMode: boolean
+  formatterMode: FormatterMode  // none | regex | model
   isImporting: boolean
   importProgress: string
   highlightedAnnotation: string | null
   filteredNoteIds: Set<string> | null  // Smart filter results
+  pendingImport: { type: 'files' | 'drop' | 'tauri', data: any } | null  // Files waiting for mode selection
   
   setNotes: (notes: Note[]) => void
   addNotes: (notes: Note[]) => void
@@ -45,9 +47,11 @@ interface State {
   undo: () => void
   setFontSize: (size: number) => void
   setDarkMode: (dark: boolean) => void
+  setFormatterMode: (mode: FormatterMode) => void
   setImporting: (importing: boolean, progress?: string) => void
   setHighlightedAnnotation: (id: string | null) => void
   setFilteredNoteIds: (ids: Set<string> | null) => void
+  setPendingImport: (pending: { type: 'files' | 'drop' | 'tauri', data: any } | null) => void
   getAnnotationsForNote: (noteId: string) => Annotation[]
   getAnnotationById: (id: string) => Annotation | undefined
 }
@@ -289,12 +293,14 @@ function loadPreferences() {
   try {
     const fontSize = localStorage.getItem('nota_fontSize')
     const darkMode = localStorage.getItem('nota_darkMode')
+    const formatterMode = localStorage.getItem('nota_formatterMode') as FormatterMode | null
     return {
       fontSize: fontSize ? parseInt(fontSize) : 13,
-      darkMode: darkMode === 'true'
+      darkMode: darkMode === 'true',
+      formatterMode: formatterMode || 'regex'
     }
   } catch {
-    return { fontSize: 13, darkMode: false }
+    return { fontSize: 13, darkMode: false, formatterMode: 'regex' as FormatterMode }
   }
 }
 
@@ -314,10 +320,12 @@ export const useStore = create<State>((set, get) => ({
   undoStack: [],
   fontSize: prefs.fontSize,
   darkMode: prefs.darkMode,
+  formatterMode: prefs.formatterMode,
   isImporting: false,
   importProgress: '',
   highlightedAnnotation: null,
   filteredNoteIds: null,
+  pendingImport: null,
 
   initSession: async () => {
     try {
@@ -713,6 +721,11 @@ export const useStore = create<State>((set, get) => ({
     set({ darkMode: dark })
   },
 
+  setFormatterMode: (mode) => {
+    localStorage.setItem('nota_formatterMode', mode)
+    set({ formatterMode: mode })
+  },
+
   setImporting: (importing, progress = '') => {
     set({ isImporting: importing, importProgress: progress })
   },
@@ -723,6 +736,10 @@ export const useStore = create<State>((set, get) => ({
 
   setFilteredNoteIds: (ids) => {
     set({ filteredNoteIds: ids })
+  },
+
+  setPendingImport: (pending) => {
+    set({ pendingImport: pending })
   }
 }))
 

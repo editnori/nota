@@ -37,12 +37,16 @@ export const SECTION_HEADERS: readonly string[] = [
   // History sections
   'PAST MEDICAL HISTORY', 'PMH', 'PAST SURGICAL HISTORY', 'PSH',
   'MEDICAL HISTORY', 'SURGICAL HISTORY', 'HISTORY',
+  'PATIENT HISTORY', 'PREVIOUS HISTORY', 'PAST HISTORY',
+  'PAST MEDICAL HX', 'SURGICAL HX', 'SOCIAL HX', 'FAMILY HX',
   // Medications
   'MEDICATIONS', 'MEDICATION', 'CURRENT MEDICATIONS', 'DISCHARGE MEDICATIONS',
   'MEDICATIONS ON ADMISSION', 'MEDICATIONS ON DISCHARGE', 'ACTIVE MEDICATIONS',
   'HOME MEDICATIONS', 'OUTPATIENT MEDICATIONS', 'CURRENT OUTPATIENT MEDICATIONS',
   'CURRENT OUTPATIENT MEDICATIONS ON FILE PRIOR TO ENCOUNTER',
   'MEDICATIONS (PRIOR TO CURRENT ENCOUNTER)', 'ORDERS PLACED THIS ENCOUNTER',
+  'PRIOR TO ADMISSION MEDICATIONS', 'PREADMISSION MEDICATIONS',
+  'CURRENT FACILITY-ADMINISTERED MEDICATIONS',  // NEW
   // Allergies
   'ALLERGIES', 'ALLERGY', 'ALLERGEN REACTIONS', 'ADVERSE REACTIONS',
   'DRUG ALLERGIES', 'NO KNOWN ALLERGIES',
@@ -54,15 +58,23 @@ export const SECTION_HEADERS: readonly string[] = [
   'PHYSICAL EXAMINATION', 'PHYSICAL EXAM', 'PE', 'EXAM', 'EXAMINATION',
   'PHYSICAL FINDINGS', 'OBJECTIVE EXAM',
   // Vitals
-  'VITAL SIGNS', 'VITALS', 'VS',
+  'VITAL SIGNS', 'VITALS', 'VS', 'VITALS/PHYSICAL EXAM', 'VITALS/PHYSICAL EXAMINATION', 'PHYSICAL EXAM/VITALS',
   // Labs/Imaging
   'LABS', 'LAB RESULTS', 'LABORATORY', 'LABORATORY DATA', 'LABORATORY RESULTS',
-  'LABORATORY STUDIES', 'MOST RECENT PREOPERATIVE LABS',
+  'LABORATORY STUDIES', 'MOST RECENT PREOPERATIVE LABS', 'LABS AND IMAGING',
   'IMAGING', 'IMAGING STUDIES', 'RADIOLOGY', 'DIAGNOSTIC STUDIES', 'STUDIES', 'RESULTS',
+  'ED LABS & IMAGING', 'LABS REVIEWED', 'LABS AND IMAGING',
   // Procedures/Surgery
   'PROCEDURE', 'PROCEDURES', 'OPERATIVE PROCEDURE', 'OPERATION', 'OPERATION PERFORMED',
   'SURGERY', 'SURGERY ORDER', 'SURGERY TYPE', 'PREOPERATIVE INFO', 'PREOPERATIVE INFORMATION',
   'PREOPERATIVE DIAGNOSIS', 'POSTOPERATIVE DIAGNOSIS', 'POSTOPERATIVE PLAN', 'POST OP FOLLOW UP',
+  'OR PROCEDURES', 'BEDSIDE PROCEDURES',
+  // Post-op specific (NEW)
+  'PRE-OP DIAGNOSIS', 'POST-OP DIAGNOSIS', 'CASE TYPE', 'ANESTHESIA',
+  'INTAKE & OUTPUT', 'WOUND CLASSIFICATION', 'SPECIMENS REMOVED',
+  'CONDITION OF THE PATIENT', 'RESPIRATORY CONDITION', 'ROTATION',
+  'PRIMARY PROCEDURALIST', 'OPERATION/PROCEDURE DATE', 'RESIDENT/HOUSESTAFF',
+  'PHYSICIAN SIGNATURE', 'IMMEDIATE POST-OP', 'POST-PROCEDURE NOTE',
   // Other common sections
   'LINES', 'DRAINS', 'TUBES', 'LINES/DRAINS/TUBES',
   'IMPRESSION', 'HOSPITAL COURSE', 'BRIEF HOSPITAL COURSE', 'COURSE',
@@ -80,9 +92,34 @@ export const SECTION_HEADERS: readonly string[] = [
   'ED MEDICATIONS', 'ED LABS', 'ED IMAGING', 'ED PROVIDER NOTES',
   'DDX', 'DIFFERENTIAL DIAGNOSIS', 'FINAL DIAGNOSES',
   'COMPLICATING CONDITIONS', 'ED DIAG & COMPLICATING CONDITIONS',
+  'ED DIAGNOSES & MEDICAL CONDITIONS COMPLICATING PRESENTATION',
+  'ED PROVIDER VITALS', 'ED VITALS',
   // Radiology
   'FINDINGS', 'TECHNIQUE', 'INDICATION', 'COMPARISON', 'CLINICAL HISTORY',
   'CLINICAL INDICATION', 'IMPRESSION/RECOMMENDATION',
+  // Psychiatric-specific
+  'ADMITTING DIAGNOSIS', 'FINAL DIAGNOSIS', 'PREADMISSION DIAGNOSIS',
+  'MENTAL STATUS', 'MENTAL STATUS EXAM', 'MSE',
+  'AXIS I', 'AXIS II', 'AXIS III', 'AXIS IV', 'AXIS V',
+  'CONSULTATIONS', 'CONSULTATIONS OBTAINED', 'CONDITION AT DISCHARGE',
+  'DISPOSITION ON DISCHARGE', 'PENDING ITEMS',
+  // H&P specific
+  'BRIEF PRE-OPERATIVE H&P', 'HISTORY AND PHYSICAL', 'H&P',
+  'SYNOPSIS', 'CONDITION ON DISCHARGE', 'PATIENT INSTRUCTIONS',
+  'DISCHARGE MEDICATIONS', 'NEW MEDICATIONS', 'MODIFIED MEDICATIONS',
+  'MEDICATIONS TO CONTINUE', 'UNREVIEWED MEDICATIONS',
+  'DIET INSTRUCTIONS', 'ACTIVITY INSTRUCTIONS', 'SCHEDULED APPOINTMENTS',
+  'OTHER INSTRUCTIONS', 'IMMUNIZATIONS', 'IMMUNIZATIONS/INJECTIONS ADMINISTERED',
+  // Lab component headers
+  'LAB RESULTS', 'COMPONENT VALUE DATE',
+  // Intake/Output (NEW)
+  'INTAKE/OUTPUT SUMMARY', 'GROSS PER 24 HOUR',
+  // DVT prophylaxis / Diet (NEW)
+  'DVT PPX', 'DIET', 'DVT PROPHYLAXIS',
+  // Provider info
+  'ATTENDING PHYSICIAN', 'PRIMARY CARE PHYSICIAN', 'CONSULTING PHYSICIAN',
+  // Return/Follow-up (NEW)
+  'RETURN IN', 'RETURN TO CLINIC',
 ] as const
 
 // Physical Exam subsections
@@ -207,6 +244,40 @@ const WORD_SPLIT_REPLACEMENTS: Record<string, string> = {
   // Compound corrections
   'non distended': 'nondistended', 'non tender': 'nontender',
   'Psychia tric': 'Psychiatric', 'Behav ioral': 'Behavioral',
+  // Additional splits from real notes
+  'neuro pathy': 'neuropathy', 'reti nopathy': 'retinopathy',
+  'nephro pathy': 'nephropathy', 'coron ary': 'coronary',
+  'dyslipi demia': 'dyslipidemia', 'hyperlipid emia': 'hyperlipidemia',
+  'hypogly cemia': 'hypoglycemia', 'hyper glycemia': 'hyperglycemia',
+  'tachy pnea': 'tachypnea', 'brady pnea': 'bradypnea',
+  'oste onecrosis': 'osteonecrosis', 'aneu rysm': 'aneurysm',
+  'thrombo sis': 'thrombosis', 'embo lism': 'embolism',
+  'trans plant': 'transplant', 'hemo dialysis': 'hemodialysis',
+  'peri toneal': 'peritoneal', 'intra venous': 'intravenous',
+  'sub cutaneous': 'subcutaneous', 'intra muscular': 'intramuscular',
+  'normocep halic': 'normocephalic', 'atrau matic': 'atraumatic',
+  'cooper ative': 'cooperative', 'well-perfus ed': 'well-perfused',
+  'tachy cardic': 'tachycardic', 'brady cardic': 'bradycardic',
+  'auscul tation': 'auscultation', 'percus sion': 'percussion',
+  'palpa tion': 'palpation', 'inspec tion': 'inspection',
+  // NEW: Compound exam/clinical terms - prevent incorrect splitting
+  'Neuro exam': 'Neuroexam', 'neuro exam': 'neuroexam',
+  'Thought Cont ent': 'Thought Content', 'Thought cont ent': 'Thought content',
+  'Cont ent': 'Content', 'cont ent': 'content',
+  // NEW: Lab value name preservation
+  'eGFR cr': 'eGFRcr', 'eGFR CR': 'eGFRcr',
+  'Lactic Acid Level': 'Lactic Acid Level',  // Protect from splitting
+  'Troponin- I': 'Troponin-I', 'Troponin -I': 'Troponin-I',
+  // NEW: More PE/exam splits
+  'Psychomo tor': 'Psychomotor', 'Psycho motor': 'Psychomotor',
+  'Extra ocular': 'Extraocular', 'extra ocular': 'extraocular',
+  'Conjunc tiva': 'Conjunctiva', 'conjunc tiva': 'conjunctiva',
+  'Oropha rynx': 'Oropharynx', 'oropha rynx': 'oropharynx',
+  'supraclav icular': 'supraclavicular', 'Supraclav icular': 'Supraclavicular',
+  'cardio mediastinal': 'cardiomediastinal', 'Cardio mediastinal': 'Cardiomediastinal',
+  // NEW: Clinical terms
+  'hypo ventilatory': 'hypoventilatory', 'hyper ventilatory': 'hyperventilatory',
+  'thrombo lytic': 'thrombolytic', 'thrombo lytics': 'thrombolytics',
 } as const
 
 // =============================================================================
@@ -285,8 +356,15 @@ function normalizeLineEndings(text: string): string {
 }
 
 function stripBrTags(text: string): string {
-  let result = text.replace(/<br\s*\/?>/gi, '\n')
+  let result = text
+  // Remove HTML br tags
+  result = result.replace(/<br\s*\/?>/gi, '\n')
+  // Remove standalone br> at start of lines (malformed HTML)
   result = result.replace(/(?:^|\n)\s*br>\s*(?:\n|$)/gm, '\n')
+  // Remove br> at the very start of the note (common artifact)
+  result = result.replace(/^br>\s*/i, '')
+  // Remove br> that appears mid-line
+  result = result.replace(/\s*br>\s*/gi, '\n')
   return result
 }
 
@@ -295,7 +373,14 @@ function unescapeLiteralNewlines(text: string): string {
 }
 
 function convertTildeBullets(text: string): string {
-  return text.replace(/(\s)~\s+/g, '$1- ')
+  let result = text
+  // Convert ~ bullets after whitespace
+  result = result.replace(/(\s)~\s+/g, '$1\n- ')
+  // Convert ~ at the start of lines
+  result = result.replace(/^~\s+/gm, '- ')
+  // Convert ~ after punctuation that typically ends content
+  result = result.replace(/([.)\]:])\s*~\s+/g, '$1\n- ')
+  return result
 }
 
 function collapseMultipleBlankLines(text: string): string {
@@ -444,6 +529,1295 @@ function fixUnhyphenatedWordSplits(text: string): string {
 }
 
 // =============================================================================
+// DENSE LINE SPLITTING - Major improvement for compressed clinical notes
+// =============================================================================
+
+// Patterns that indicate a new section should start
+const DENSE_SECTION_MARKERS = [
+  // SOAP note sections
+  'SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN', 'A/P',
+  'Assessment and Plan', 'Assessment/Plan', 'ASSESSMENT AND PLAN',
+  // Chief Complaint / HPI
+  'Chief Complaint', 'History of Present Illness', 'HPI', 'CC',
+  'Reason for Visit', 'Reason For Consultation',
+  // History sections
+  'Past Medical History', 'Past Surgical History', 'PMH', 'PSH',
+  'Social History', 'Family History', 'SH', 'FH',
+  'Patient History', 'Previous History', 'Medical History', 'Surgical History',
+  // ROS / Physical Exam
+  'Review of Systems', 'ROS', 'Physical Exam', 'PE',
+  'Physical Examination', 'Vital Signs', 'Vitals',
+  // Labs / Imaging
+  'Labs', 'Lab Results', 'Laboratory', 'Laboratory Data',
+  'Labs and Imaging', 'Imaging', 'Radiology',
+  'Component Value Date',
+  // Medications / Allergies
+  'Medications', 'Current Medications', 'Home Medications',
+  'Active Medications', 'Current Outpatient Medications',
+  'Current Facility-Administered Medications',
+  'Discharge Medications', 'Orders Placed This Encounter',
+  'Allergies', 'Allergen Reactions', 'Drug Allergies',
+  // Active Problems
+  'Active Problems', 'Problem List', 'Chronic Problems',
+  'Patient Active Problem List',
+  // Hospital Course
+  'Hospital Course', 'Brief Hospital Course', 'Course',
+  'ED Course', 'ED Labs', 'ED Medications', 'MDM',
+  // Discharge
+  'Disposition', 'Discharge', 'Discharge Disposition',
+  'Condition on Discharge', 'Discharge Instructions',
+  'Discharge Diagnosis', 'Follow Up', 'Follow-Up',
+  // Mental Status (Psychiatric)
+  'Mental Status', 'Mental Status Exam', 'MSE',
+  'Diagnosis', 'Impression', 'Diagnoses',
+  // Post-op specific
+  'Pre-op Diagnosis', 'Post-op Diagnosis', 'Preoperative Diagnosis',
+  'Postoperative Diagnosis', 'Case Type', 'Anesthesia',
+  'INTAKE & OUTPUT', 'Findings', 'Wound Classification',
+  'Specimens Removed', 'Drains', 'Condition of the Patient',
+  'Respiratory Condition', 'Disposition', 'Rotation',
+  'Physician Signature', 'Primary Proceduralist',
+  'Operation/Procedure Date', 'Resident/Housestaff',
+  // ED / MDM
+  'Amount And/Or Complexity', 'History obtained',
+  'Patient presents with', 'Interim', 'Interim History',
+  // Access / Prophylaxis
+  'Fluids, electrolytes', 'Access:', 'Prophylaxis:',
+  'Code Status', 'DVT ppx', 'Diet',
+  // Intake/Output
+  'Intake/Output Summary', 'Gross per 24 hour',
+  // Other
+  'Consultations', 'Pending Items', 'Return in',
+] as const
+
+/**
+ * Split dense single-line notes that contain multiple sections
+ * This is critical for notes that come as a single massive line
+ */
+function splitDenseLines(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  
+  for (const line of lines) {
+    // Skip short lines (but lower threshold for very dense content)
+    if (line.length < 150) {
+      output.push(line)
+      continue
+    }
+    
+    let result = line
+    
+    // Split on major section markers - check for marker preceded by any content
+    for (const marker of DENSE_SECTION_MARKERS) {
+      // Match marker preceded by sentence-ending punctuation
+      const pattern = new RegExp(`([.!?;])\\s{1,}(${escapeRegex(marker)})(?=\\s|:|$)`, 'gi')
+      result = result.replace(pattern, '$1\n\n$2')
+      
+      // Match after 2+ spaces
+      const pattern2 = new RegExp(`\\s{2,}(${escapeRegex(marker)})(?=\\s|:|$)`, 'gi')
+      result = result.replace(pattern2, '\n\n$1')
+      
+      // Match marker at word boundary after closing paren, bracket, etc.
+      const pattern3 = new RegExp(`([)\\]>])\\s+(${escapeRegex(marker)})(?=\\s|:|$)`, 'gi')
+      result = result.replace(pattern3, '$1\n\n$2')
+    }
+    
+    // Split before section headers (Title Case followed by colon)
+    result = result.replace(/\s{2,}([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*:/g, '\n\n$1:')
+    
+    // Split before ALL CAPS headers (at least 4 chars)
+    result = result.replace(/\s{2,}([A-Z][A-Z\s/&]{3,})\s*:/g, '\n\n$1:')
+    
+    // Split on specific inline patterns common in dense notes
+    // Pattern: "*" bullet points for surgery/procedures
+    result = result.replace(/\s+(\*\s+[A-Z][a-z])/g, '\n$1')
+    
+    // Pattern: Date/Time followed by section (e.g., "02/18/2022 Primary Proceduralist")
+    result = result.replace(/(\d{2}\/\d{2}\/\d{4})\s{2,}([A-Z][a-z]+)/g, '$1\n\n$2')
+    
+    // Pattern: Post-op sections like "RBC (mL):" etc.
+    result = result.replace(/\s{2,}(RBC|FFP|Cryo|Whole Blood|Platelets|Cell Saver)\s*\(/gi, '\n$1 (')
+    
+    output.push(result)
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Split ultra-dense SOAP notes
+ * Handles notes where SUBJECTIVE/OBJECTIVE/ASSESSMENT/PLAN are all inline
+ */
+function splitSOAPSections(text: string): string {
+  let result = text
+  
+  // SOAP section markers
+  const soapMarkers = ['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN']
+  
+  for (const marker of soapMarkers) {
+    // Split before marker when preceded by content
+    result = result.replace(new RegExp(`([.!?;:\\]])\\s*(${marker})\\s*:`, 'gi'), '$1\n\n$2:')
+    result = result.replace(new RegExp(`(\\S)\\s{2,}(${marker})\\s*:`, 'gi'), '$1\n\n$2:')
+  }
+  
+  // Handle "Plan:" with sub-items
+  result = result.replace(/\s{2,}(Plan:)\s*-/gi, '\n\n$1\n-')
+  
+  return result
+}
+
+/**
+ * CRITICAL: Master line break function for clinical note sections
+ * This function handles the most important line break decisions
+ */
+function splitClinicalSections(text: string): string {
+  let result = text
+  
+  // ============================================================
+  // SECTION HEADERS - Always start on new line
+  // ============================================================
+  const majorSections = [
+    // History sections
+    'HISTORY AND PHYSICAL', 'History and Physical',
+    'HISTORY OF PRESENT ILLNESS', 'History of Present Illness', 'HPI',
+    'CHIEF COMPLAINT', 'Chief Complaint', 'CC',
+    'PAST MEDICAL HISTORY', 'Past Medical History', 'Medical Hx',
+    'PAST SURGICAL HISTORY', 'Past Surgical History', 'Surgical Hx',
+    'SOCIAL HISTORY', 'Social History', 'Social Hx',
+    'FAMILY HISTORY', 'Family History', 'Family Hx',
+    'REVIEW OF SYSTEMS', 'Review of Systems', 'ROS',
+    'PHYSICAL EXAMINATION', 'Physical Examination', 'Physical Exam', 'PHYSICAL EXAM',
+    'VITALS', 'Vitals', 'Vital Signs',
+    // Labs/Imaging
+    'LABS AND IMAGING', 'Labs and Imaging', 'Labs & Imaging',
+    'LAB RESULTS', 'Lab Results', 'LABORATORY',
+    'DIAGNOSTIC STUDIES', 'Diagnostic Studies',
+    'RADIOLOGY', 'Radiology',
+    // Medications/Allergies
+    'MEDICATIONS', 'Medications', 'Current Medications', 'Current Outpatient Medications',
+    'Current Facility-Administered Medications',
+    'ALLERGIES', 'Allergies', 'No Known Allergies',
+    // Assessment/Plan
+    'ASSESSMENT AND PLAN', 'Assessment and Plan', 'ASSESSMENT/PLAN',
+    'ASSESSMENT', 'Assessment', 'PLAN', 'Plan',
+    'Assessment & Plan', 'Assessment & Plan by Problem',
+    // Other
+    'PROBLEM LIST', 'Problem List', 'Patient Active Problem List',
+    'IMPRESSION', 'Impression', 'FINDINGS', 'Findings',
+    'SYNOPSIS', 'Synopsis',
+    // Preop/Postop
+    'PREOPERATIVE INFO', 'Preoperative Info',
+  ]
+  
+  for (const section of majorSections) {
+    // Split before section when preceded by content (not at start of line)
+    const escapedSection = escapeRegex(section)
+    // After period, exclamation, question mark, or closing bracket
+    result = result.replace(new RegExp(`([.!?)\\]])\\s+(${escapedSection})\\s*[-:]`, 'gi'), '$1\n\n$2:')
+    // After 2+ spaces (indicates section boundary in dense notes)
+    result = result.replace(new RegExp(`\\s{2,}(${escapedSection})\\s*[-:]`, 'gi'), '\n\n$1:')
+  }
+  
+  // ============================================================
+  // TABLE HEADERS - Each table section on new line
+  // ============================================================
+  const tableHeaders = [
+    'Diagnosis Date', 'Procedure Laterality Date', 'Problem Relation Age of Onset',
+    'Component Value Date', 'Medication Sig', 'Medication Sig Dispense Refill',
+    'Medication Dose Route Frequency', 'Allergen Reactions',
+    'Vital Sign', 'Lab Results',
+  ]
+  
+  for (const header of tableHeaders) {
+    result = result.replace(new RegExp(`\\s{2,}(${escapeRegex(header)})`, 'gi'), '\n\n$1')
+  }
+  
+  // ============================================================
+  // TILDE BULLETS (~) - Critical for lists - each on new line
+  // ============================================================
+  // Match ~ followed by word (start of list item)
+  result = result.replace(/\s+~\s+/g, '\n- ')
+  result = result.replace(/^~\s+/gm, '- ')
+  
+  // ============================================================
+  // SPECIFIC PATTERNS FROM REAL NOTES
+  // ============================================================
+  
+  // "Past Surgical History:" inline pattern
+  result = result.replace(/(\S)\s{2,}(Past Surgical History:)/gi, '$1\n\n$2')
+  result = result.replace(/(\S)\s{2,}(Past Medical History:)/gi, '$1\n\n$2')
+  
+  // "No past medical history pertinent negatives." on its own line
+  result = result.replace(/\s{2,}(No past medical history pertinent negatives\.)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(No results found for:)/gi, '\n$1')
+  
+  // "Procedure:" entries in surgical history
+  result = result.replace(/\s{2,}(Procedure:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Surgeon:)/gi, ' Surgeon:')  // Keep on same line
+  result = result.replace(/\s{2,}(Location:)/gi, ' Location:')  // Keep on same line
+  
+  // ROS inline patterns - each system on new line
+  const rosSystems = [
+    'Constitutional', 'HENT', 'HEENT', 'Eyes', 'ENT',
+    'Respiratory', 'Cardiovascular', 'CV',
+    'Gastrointestinal', 'GI', 'Genitourinary', 'GU',
+    'Musculoskeletal', 'MSK', 'Neurological', 'Neurologic', 'Neuro',
+    'Skin', 'Psychiatric', 'Psych', 'Psychiatric/Behavioral',
+    'Endocrine', 'Hematologic', 'Endo/Heme/Allergies',
+  ]
+  
+  for (const system of rosSystems) {
+    // Split when this ROS label appears after content
+    result = result.replace(new RegExp(`([.;,])\\s+(${escapeRegex(system)}):\\s*(Positive|Negative|Denies)`, 'gi'), '$1\n$2: $3')
+  }
+  
+  // Physical Exam labels - each on new line
+  const peLabels = [
+    'GEN', 'GENERAL', 'General', 'HEENT', 'HEAD', 'EYES', 'NECK',
+    'CHEST', 'CARDIOVASCULAR', 'CV', 'Cardiovascular',
+    'RESPIRATORY', 'PULMONARY', 'Pulmonary', 'Respiratory',
+    'ABDOMEN', 'ABDOMINAL', 'GI', 'Abdomen',
+    'EXTREMITIES', 'EXT', 'Extremities',
+    'MUSCULOSKELETAL', 'MSK', 'Musculoskeletal',
+    'NEUROLOGIC', 'NEURO', 'Neurologic', 'Neuro',
+    'SKIN', 'Skin', 'PSYCH', 'Psychiatric',
+  ]
+  
+  for (const label of peLabels) {
+    // Only split when preceded by another PE finding (ends with period or semicolon)
+    result = result.replace(new RegExp(`([.;])\\s+(${escapeRegex(label)})\\s*:`, 'gi'), '$1\n$2:')
+  }
+  
+  // ============================================================
+  // CODE STATUS / DVT PPX / DIET - Each on new line
+  // ============================================================
+  result = result.replace(/\s{2,}(Code [Ss]tatus:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(DVT [Pp]px:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(DVT prophylaxis:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Diet:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Surrogate:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Access:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Dispo:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Level of Care:)/gi, '\n$1')
+  
+  // ============================================================
+  // LAB SECTIONS - Proper formatting
+  // ============================================================
+  // "Lab Results" followed by "Lab" and date
+  result = result.replace(/\s{2,}(Lab Results)\s+(Lab)/gi, '\n\n$1\n$2')
+  // Individual lab entries (e.g., "WBC 6.9")
+  result = result.replace(/\s{2,}(WBC|RBC|HGB|HCT|PLT|NA|K|CL|BUN|CREATBLD|GLUCOSE|CALCIUM)\s+/gi, '\n$1 ')
+  
+  return result
+}
+
+/**
+ * Split post-operative note sections
+ * Handles dense post-op/immediate post-procedure notes
+ */
+function splitPostOpSections(text: string): string {
+  let result = text
+  
+  // Post-op specific patterns
+  const postOpMarkers = [
+    'Pre-op Diagnosis', 'Post-op Diagnosis', 'Preoperative Diagnosis', 'Postoperative Diagnosis',
+    'Pre-op Diagnosis \\(Required\\)', 'Post-op Diagnosis \\(Required\\)',
+    'Operation/Procedure Date', 'Primary Proceduralist', 'Resident/Housestaff',
+    'Case Type', 'Operation\\(s\\)/Procedure\\(s\\)', 'Anesthesia',
+    'INTAKE & OUTPUT', 'Findings', 'Wound Classification',
+    'Specimens Removed', 'Drains', 'Condition of the Patient',
+    'Respiratory Condition', 'Disposition', 'Rotation',
+    'Physician Signature', 'Patient Name', 'MRN', 'DOB', 'Sex',
+    'Account #',
+  ]
+  
+  for (const marker of postOpMarkers) {
+    result = result.replace(new RegExp(`\\s{2,}(${marker})`, 'gi'), '\n\n$1')
+  }
+  
+  // Split "* Item" patterns common in post-op notes
+  result = result.replace(/\s{2,}(\*\s+)/g, '\n$1')
+  
+  // Split drain entries like "[REMOVED] Urethral Catheter"
+  result = result.replace(/\s{2,}(\[REMOVED\]|\[Active\])/gi, '\n$1')
+  
+  // Split date/time patterns in drain documentation
+  result = result.replace(/\s{2,}(\d{2}\/\d{2}\/\d{2}\s+\d{4})/g, '\n$1')
+  
+  return result
+}
+
+/**
+ * Split Active Problems and Active Medications lists
+ */
+function splitActiveProblemsAndMedications(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  
+  for (const line of lines) {
+    // Check for Active Problems inline
+    if (/Active Problems:/i.test(line) && line.length > 100) {
+      let result = line
+      // Split each problem onto its own line (they're usually separated by 2+ spaces)
+      result = result.replace(/\s{2,}([A-Z][a-z][a-zA-Z\s,()-]+)(?=\s{2,}|$)/g, '\n- $1')
+      output.push(result)
+      continue
+    }
+    
+    // Check for medication lists with ~ bullets
+    if (/~\s+[a-zA-Z]+\s+\d/.test(line) && line.length > 150) {
+      // Split on ~ that marks new medication
+      let result = line.replace(/\s*~\s+/g, '\n- ')
+      output.push(result)
+      continue
+    }
+    
+    output.push(line)
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Split on tilde bullets (~) - convert inline to proper list
+ */
+function splitTildeBullets(text: string): string {
+  // Convert ~ at start or after space to newline bullet
+  let result = text.replace(/\s+~\s+/g, '\n- ')
+  result = result.replace(/^~\s+/gm, '- ')
+  
+  // Handle diagnosis/procedure patterns with tilde
+  // Pattern: "~ DiagnosisName Date" should become newline
+  result = result.replace(/\s+~\s*([A-Za-z][A-Za-z\s,()-]+)(\s+\d{2}\/\d{2}\/\d{4}|\s+\d{4})?/g, '\n- $1$2')
+  
+  return result
+}
+
+/**
+ * Split dense Past Medical History lists
+ */
+function splitPastMedicalHistory(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let inPMH = false
+  
+  const pmhHeaders = ['past medical history', 'past surgical history', 'pmh', 'psh', 
+                      'medical history', 'surgical history', 'patient active problem list']
+  
+  for (const line of lines) {
+    const stripped = line.trim().toLowerCase().replace(/:$/, '')
+    
+    if (pmhHeaders.includes(stripped)) {
+      inPMH = true
+      output.push(line)
+      continue
+    }
+    
+    if (inPMH && isHeaderCandidate(line) && !pmhHeaders.includes(stripped)) {
+      inPMH = false
+    }
+    
+    if (inPMH && line.length > 150) {
+      // Split on diagnosis entries (~ Diagnosis Date pattern)
+      let result = line.replace(/\s{2,}~\s*/g, '\n- ')
+      result = result.replace(/^\s*~\s*/gm, '- ')
+      
+      // Split at date patterns followed by new diagnosis
+      result = result.replace(/(\d{2}\/\d{2}\/\d{4})\s{2,}([A-Z~])/g, '$1\n$2')
+      result = result.replace(/(\d{4})\s{2,}([A-Z~])/g, '$1\n$2')
+      
+      output.push(result)
+    } else {
+      output.push(line)
+    }
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Split dense lab result lines
+ */
+function splitDenseLabLines(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  
+  const labPatterns = [
+    /White Blood Cells?\s+[\d.]+/i,
+    /Red Blood Cells?\s+[\d.]+/i,
+    /Hemoglobin\s+[\d.]+/i,
+    /Hematocrit\s+[\d.]+/i,
+    /Platelet\s+[\d.]+/i,
+    /Sodium\s+[\d.]+/i,
+    /Potassium\s+[\d.]+/i,
+    /Chloride\s+[\d.]+/i,
+    /Glucose\s+[\d.]+/i,
+    /Creatinine\s+[\d.]+/i,
+    /BUN\s+[\d.]+/i,
+    /Calcium\s+[\d.]+/i,
+  ]
+  
+  for (const line of lines) {
+    // Check if line has multiple lab values
+    let matchCount = 0
+    for (const pattern of labPatterns) {
+      if (pattern.test(line)) matchCount++
+    }
+    
+    if (matchCount >= 2 && line.length > 100) {
+      // Split on lab name patterns
+      let result = line
+      result = result.replace(/\s{2,}(White Blood Cells?|Red Blood Cells?|Hemoglobin|Hematocrit|Platelet|Mean Cell|Nucleated|Neutrophils?|Lymph|Monocytes?|Eosinophils?|Basophils?|Sodium|Potassium|Chloride|Carbon Dioxide|Glucose|BUN|Creatinine|Calcium|Albumin|Bilirubin|Alkaline|Alanine|Aspartate|Protein)/gi, '\n$1')
+      output.push(result)
+    } else {
+      output.push(line)
+    }
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Split dense vitals tables
+ */
+function splitDenseVitals(text: string): string {
+  let result = text
+  
+  // Split vitals that are space-separated
+  // Pattern: "Temp Pulse Resp BP SpO2" followed by values
+  result = result.replace(
+    /(\d+(?:\.\d+)?\s*°?[CF]?)\s{2,}(\d+)\s{2,}(\d+)\s{2,}(\d+\/\d+)\s{2,}(\d+\s*%?)/g,
+    'Temp: $1\nPulse: $2\nResp: $3\nBP: $4\nSpO2: $5'
+  )
+  
+  // Split Temp src, Pulse Source, etc. patterns
+  result = result.replace(
+    /\s{2,}(Temp src|Pulse Source|Patient Position|BP Location|FiO2)/g,
+    '\n$1'
+  )
+  
+  return result
+}
+
+/**
+ * Format Axis diagnoses (psychiatric notes)
+ */
+function formatAxisDiagnoses(text: string): string {
+  let result = text
+  
+  // Split Axis I: ... Axis II: ... patterns
+  result = result.replace(/\s+(Axis\s+I)\s*:/gi, '\n$1:')
+  result = result.replace(/\s+(Axis\s+II)\s*:/gi, '\n$1:')
+  result = result.replace(/\s+(Axis\s+III)\s*:/gi, '\n$1:')
+  result = result.replace(/\s+(Axis\s+IV)\s*:/gi, '\n$1:')
+  result = result.replace(/\s+(Axis\s+V)\s*:/gi, '\n$1:')
+  
+  return result
+}
+
+/**
+ * Format Mental Status exam sections
+ */
+function formatMentalStatusExam(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let inMSE = false
+  
+  const mseLabels = [
+    'Appearance', 'Attitude', 'Activity', 'Language', 'Speech',
+    'Thought Process', 'Thought Content', 'SI/HI', 'Mood', 'Affect',
+    'Mood/Affect', 'Perception', 'Cognition', 'Judgment', 'Insight',
+    'Judgment and Insight', 'Orientation', 'Memory', 'Attention',
+    'Concentration', 'Behavior', 'Psychomotor',
+  ]
+  
+  for (const line of lines) {
+    const stripped = line.trim().toLowerCase().replace(/:$/, '')
+    
+    if (stripped === 'mental status' || stripped === 'mental status exam' || stripped === 'mse') {
+      inMSE = true
+      output.push(line)
+      continue
+    }
+    
+    if (inMSE && isHeaderCandidate(line) && !mseLabels.some(l => stripped.includes(l.toLowerCase()))) {
+      inMSE = false
+    }
+    
+    if (inMSE && line.length > 100) {
+      let result = line
+      // Split on MSE labels
+      for (const label of mseLabels) {
+        const pattern = new RegExp(`\\s{2,}(${escapeRegex(label)})\\s*:`, 'gi')
+        result = result.replace(pattern, '\n$1:')
+      }
+      output.push(result)
+    } else {
+      output.push(line)
+    }
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Format procedure notes - split dense procedure info
+ */
+function formatProcedureNotes(text: string): string {
+  let result = text
+  
+  // Split common procedure note patterns
+  result = result.replace(/\s{2,}(Performed by:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Authorized by:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Consent obtained:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Consent given by:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Risks discussed:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Alternatives discussed:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Indication)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Reason for procedure:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Complications\??:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Successful cannulation)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Total number of)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Gauge catheter)/gi, '\n$1')
+  
+  // CPT code patterns
+  result = result.replace(/\s{2,}(CPT\(?R?\)?\s*Code:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Procedure:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Surgeon:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Location:)/gi, '\n$1')
+  
+  return result
+}
+
+/**
+ * Split allergen reactions inline patterns
+ */
+function splitAllergenList(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let inAllergies = false
+  
+  for (const line of lines) {
+    const stripped = line.trim().toLowerCase().replace(/:$/, '')
+    
+    if (stripped === 'allergies' || stripped === 'allergen reactions') {
+      inAllergies = true
+      output.push(line)
+      continue
+    }
+    
+    if (inAllergies && isHeaderCandidate(line) && !stripped.includes('allerg')) {
+      inAllergies = false
+    }
+    
+    if (inAllergies && line.length > 80) {
+      // Split on ~ bullet patterns
+      let result = line.replace(/\s+~\s+/g, '\n- ')
+      output.push(result)
+    } else {
+      output.push(line)
+    }
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Split ED-specific dense sections
+ */
+function splitEDSections(text: string): string {
+  let result = text
+  
+  // ED Provider Notes patterns
+  result = result.replace(/\s{3,}(ED Provider Notes)/gi, '\n\n$1')
+  result = result.replace(/\s{3,}(ED Procedure Notes)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Chief Complaint)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(History of Present Illness)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Patient presents with)/gi, '\n\n$1')
+  
+  // ED Course & MDM
+  result = result.replace(/\s{2,}(ED Course & MDM)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(ED Course and Medical Decision Making)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Medical Decision Making)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Amount And\/Or Complexity)/gi, '\n\n$1')
+  
+  // ED Diagnoses
+  result = result.replace(/\s{2,}(ED Diagnoses)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Final diagnoses:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(ED Labs & Imaging)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Labs Reviewed)/gi, '\n\n$1')
+  
+  // Split "Patient Vitals for the past" patterns
+  result = result.replace(/\s{2,}(Patient Vitals)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Vitals signs)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Nursing note)/gi, '\n$1')
+  
+  return result
+}
+
+/**
+ * Split medication signature patterns
+ */
+function splitMedicationSigs(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let inMeds = false
+  
+  const medHeaders = ['medications', 'home medications', 'discharge medications', 
+                      'prior to admission medications', 'new medications',
+                      'modified medications', 'medications to continue']
+  
+  for (const line of lines) {
+    const stripped = line.trim().toLowerCase().replace(/:$/, '')
+    
+    if (medHeaders.some(h => stripped.includes(h))) {
+      inMeds = true
+      output.push(line)
+      continue
+    }
+    
+    if (inMeds && isHeaderCandidate(line) && !medHeaders.some(h => stripped.includes(h))) {
+      inMeds = false
+    }
+    
+    if (inMeds && line.length > 120) {
+      let result = line
+      
+      // Split on medication entries (~ medname pattern)
+      result = result.replace(/\s+~\s+/g, '\n- ')
+      
+      // Split after "Sig" followed by drug name
+      result = result.replace(/\s{2,}(Sig\s+[a-zA-Z])/gi, '\n$1')
+      
+      // Split between medications when we see drug pattern
+      result = result.replace(
+        /(\d+\s*(?:mg|mcg|mL|tablet|capsule)[^~]*?)\s{2,}([a-z]+[A-Z]|[A-Z][a-z]+\s+\d)/g,
+        '$1\n- $2'
+      )
+      
+      output.push(result)
+    } else {
+      output.push(line)
+    }
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Format Component Value Date lab tables
+ */
+function formatLabTables(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  
+  for (const line of lines) {
+    // Check for "Component Value Date" header pattern
+    if (/Component\s+Value\s+Date/i.test(line)) {
+      output.push(line)
+      continue
+    }
+    
+    // Check for "Lab Results" header followed by inline content
+    if (/Lab Results\s+Component/i.test(line)) {
+      let result = line.replace(/\s+(Lab Results)\s+(Component)/gi, '\n\n$1\n$2')
+      output.push(result)
+      continue
+    }
+    
+    // Split lines with multiple "LabName value date" entries
+    if (line.length > 100 && /[A-Z]+\s+[\d.]+\s+\d{2}\/\d{2}\/\d{4}/.test(line)) {
+      let result = line
+      // Split before uppercase lab names followed by values and dates
+      result = result.replace(
+        /\s{2,}([A-Z]+)\s+([\d.]+)\s+(\d{2}\/\d{2}\/\d{4})/g,
+        '\n$1 $2 $3'
+      )
+      output.push(result)
+    } else {
+      output.push(line)
+    }
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Format Intake/Output summary tables
+ */
+function formatIntakeOutputTables(text: string): string {
+  let result = text
+  
+  // Split Intake/Output Summary patterns
+  result = result.replace(/\s{2,}(Intake\/Output Summary)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Last data filed at)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Gross per 24 hour)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Intake)\s{2,}(\d+\s*ml)/gi, '\nIntake: $2')
+  result = result.replace(/\s{2,}(Output)\s{2,}(\d+\s*ml)/gi, '\nOutput: $2')
+  result = result.replace(/\s{2,}(Net)\s{2,}(-?\d+\s*ml)/gi, '\nNet: $2')
+  
+  return result
+}
+
+/**
+ * Format "Result Value" lab patterns from ED notes
+ * Pattern: "White Blood Cells 13.6 (*) Red Blood Cells 3.99 (*)"
+ */
+function formatResultValueLabs(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  
+  const labNames = [
+    'White Blood Cells', 'Red Blood Cells', 'Hemoglobin', 'Hematocrit',
+    'Mean Cell Volume', 'Mean Cell Hemoglobin', 'Mean Cell Hemoglobin Concentration',
+    'RDW SD', 'RDW CV', 'Platelet', 'Mean Platelet Volume',
+    'Nucleated RBC', 'Nucleated RBC Abs', 'Auto Neutrophil Absolute',
+    'Neutrophils', 'Absolute Neutrophils', 'Lymphs', 'Absolute Lymphocytes',
+    'Monocytes', 'Absolute Monocytes', 'Eosinophils', 'Absolute Eosinophils',
+    'Basophils', 'Absolute Basophils', 'Imm Gran Automated', 'Absolute Imm Gran',
+    'Lipase Level', 'Partial Thromboplastin Time', 'Prothrombin Time',
+    'International Normalization Ratio',
+    'Urine Color', 'Urine Appearance', 'Urine Specific Gravity', 'Urine pH',
+    'Urine Glucose', 'Urine Protein', 'Urine Ketones', 'Urine Bilirubin',
+    'Urine Urobilinogen', 'Urine Leukocyte Esterase', 'Urine Nitrite',
+    'Urine Blood', 'Urine WBC', 'Urine RBC', 'Urine Bacteria',
+    'Urine Mucous', 'Urine Hyaline Casts', 'Urine Squamous',
+    'Sodium', 'Potassium', 'Chloride', 'Total CO2', 'Carbon Dioxide',
+    'Calcium Ionized', 'Glucose', 'Blood Urea Nitrogen', 'BUN',
+    'Creatinine', 'Anion Gap', 'Hematocrit Handheld', 'Hemoglobin Handheld',
+    'Bilirubin Direct', 'Bilirubin Total', 'Albumin Level', 'Alkaline Phosphatase',
+    'Alanine Aminotransferase', 'Aspartate Aminotransferase', 'Protein Total',
+    'Patient Location POC',
+  ]
+  
+  for (const line of lines) {
+    // Count how many lab names are in this line
+    let count = 0
+    for (const name of labNames) {
+      if (line.includes(name)) count++
+    }
+    
+    if (count >= 2 && line.length > 80) {
+      let result = line
+      // Split before each lab name
+      for (const name of labNames) {
+        const pattern = new RegExp(`\\s{2,}(${escapeRegex(name)})\\s`, 'g')
+        result = result.replace(pattern, '\n$1 ')
+      }
+      output.push(result)
+    } else {
+      output.push(line)
+    }
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Format CBC/BMP/CMP panel headers
+ */
+function formatLabPanelHeaders(text: string): string {
+  let result = text
+  
+  // Split lab panel headers onto their own lines
+  const panels = [
+    'CBC W/ DIFFERENTIAL', 'CBC', 'BMP', 'CMP', 'COMPREHENSIVE METABOLIC PANEL',
+    'BASIC METABOLIC PANEL', 'LIPASE LVL', 'PARTIAL THROMBOPLASTIN TIME',
+    'URINALYSIS W/ MICRO', 'URINALYSIS', 'AUTO DIFF', 'URINALYSIS MICROSCOPIC',
+    'POC LYTES', 'HEPATIC FUNCTION PNL', 'PROTHROMBIN TIME', 'COAGULATION',
+    'THYROID PANEL', 'LIPID PANEL',
+  ]
+  
+  for (const panel of panels) {
+    // Add newline before panel names that follow other content
+    const pattern = new RegExp(`([^\\n])\\s{2,}(${escapeRegex(panel)})`, 'gi')
+    result = result.replace(pattern, '$1\n\n$2')
+  }
+  
+  return result
+}
+
+/**
+ * Split "- Abnormal" patterns in lab results
+ */
+function splitAbnormalLabPatterns(text: string): string {
+  let result = text
+  
+  // Pattern: "CBC W/ DIFFERENTIAL - Abnormal Result Value"
+  result = result.replace(/\s+-\s+(Abnormal|Normal)\s{2,}(Result\s+Value)/gi, ' - $1\n$2')
+  
+  // Split "Result Value" from inline position
+  result = result.replace(/\s{3,}(Result\s+Value)/gi, '\n\n$1')
+  
+  return result
+}
+
+/**
+ * Format tobacco/substance use patterns
+ */
+function formatSubstanceUse(text: string): string {
+  let result = text
+  
+  // Split Tobacco Use section patterns
+  result = result.replace(/\s{2,}(Tobacco Use)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(~\s*Smoking status:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(~\s*Smokeless tobacco:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Substance Use Topics)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(~\s*Alcohol use:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(~\s*Drug use:)/gi, '\n$1')
+  
+  return result
+}
+
+/**
+ * Format provider attestation blocks
+ */
+function formatAttestationBlocks(text: string): string {
+  let result = text
+  
+  // Split attestation patterns
+  result = result.replace(/\s{2,}(By signing my name)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Provider Attestation:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(I, [A-Z][a-z]+)/gi, '\n$1')
+  result = result.replace(/\s{2,}(personally performed)/gi, ' $1')
+  
+  // Split provider signatures
+  result = result.replace(/\s{3,}([A-Z][a-z]+,\s*(?:MD|DO|PA|NP|APRN|RN))/g, '\n\n$1')
+  result = result.replace(/\s{2,}(\d{2}\/\d{2}\/\d{2,4}\s+\d{1,2}:\d{2})/g, '\n$1')
+  
+  return result
+}
+
+/**
+ * Format History and Physical specific patterns
+ */
+function formatHPPatterns(text: string): string {
+  let result = text
+  
+  // H&P section patterns
+  result = result.replace(/\s{2,}(History and Physical)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Brief Pre-Operative H&P)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Review of symptoms:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(10 systems reviewed)/gi, '\n$1')
+  result = result.replace(/\s{2,}(systems negative except)/gi, ' $1')
+  
+  // Patient Active Problem List
+  result = result.replace(/\s{2,}(Patient Active Problem List)/gi, '\n\n$1')
+  
+  // Plan items
+  result = result.replace(/\s{2,}(\d+\.\s*To OR)/gi, '\n$1')
+  result = result.replace(/\s{2,}(\d+\.\s*R\/B\/A)/gi, '\n$1')
+  result = result.replace(/\s{2,}(\d+\.\s*Appropriate)/gi, '\n$1')
+  
+  return result
+}
+
+/**
+ * Format "History reviewed" patterns
+ */
+function formatHistoryReviewed(text: string): string {
+  let result = text
+  
+  result = result.replace(/\s{2,}(History reviewed\.)/gi, '\n$1')
+  result = result.replace(/\s{2,}(No past medical history pertinent negatives\.)/gi, '\n$1')
+  result = result.replace(/\s{2,}(No pertinent family history\.)/gi, '\n$1')
+  
+  return result
+}
+
+/**
+ * Format imaging results inline
+ */
+function formatImagingResults(text: string): string {
+  let result = text
+  
+  // CT, MRI, X-ray patterns
+  result = result.replace(/\s{2,}(CT\s+(?:abdomen|pelvis|chest|head|brain|spine))/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(MRI\s+(?:brain|spine|knee|shoulder))/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(X-ray|XR|CXR)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}\(Results Pending\)/gi, '\n(Results Pending)')
+  
+  return result
+}
+
+/**
+ * Format discharge instructions patterns
+ */
+function formatDischargeInstructionPatterns(text: string): string {
+  let result = text
+  
+  // New/Modified/Continue medication sections
+  result = result.replace(/\s{2,}(New Medications)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Modified Medications)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Medications To Continue)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Unreviewed Medications)/gi, '\n\n$1')
+  
+  // Instruction sections
+  result = result.replace(/\s{2,}(Diet Instructions)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Activity Instructions)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Scheduled Appointments)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Other Instructions)/gi, '\n\n$1')
+  
+  // What changed patterns
+  result = result.replace(/\s{2,}(What changed:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(·\s+)/g, '\n$1')
+  
+  return result
+}
+
+/**
+ * Format dense Physical Exam patterns
+ * Handles patterns like "GEN: ... HENT: ... RESP: ... C/V: ..."
+ */
+function formatDensePEPatterns(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  
+  // PE labels that appear in dense format
+  const denseLabels = [
+    'GEN', 'GENERAL', 'HENT', 'HEENT', 'HEAD', 'EYES', 'EARS', 'NOSE', 'THROAT',
+    'NECK', 'RESP', 'RESPIRATORY', 'C/V', 'CV', 'CARDIOVASCULAR', 'CARDIAC',
+    'HEART', 'LUNGS', 'PULMONARY', 'GI', 'ABD', 'ABDOMINAL', 'ABDOMEN',
+    'GU', 'GENITOURINARY', 'EXT', 'EXTREMITIES', 'MSK', 'MUSCULOSKELETAL',
+    'NEURO', 'NEUROLOGIC', 'NEUROLOGICAL', 'PSYCH', 'PSYCHIATRIC', 'SKIN',
+    'BACK', 'SPINE', 'LYMPH', 'VASCULAR', 'RECTAL', 'BREAST',
+  ]
+  
+  for (const line of lines) {
+    // Count PE labels in the line
+    let labelCount = 0
+    for (const label of denseLabels) {
+      const pattern = new RegExp(`\\b${label}\\s*:`, 'gi')
+      if (pattern.test(line)) labelCount++
+    }
+    
+    if (labelCount >= 2) {
+      let result = line
+      // Split before each PE label
+      for (const label of denseLabels) {
+        const pattern = new RegExp(`\\s{2,}(${label})\\s*:`, 'gi')
+        result = result.replace(pattern, '\n$1:')
+      }
+      output.push(result)
+    } else {
+      output.push(line)
+    }
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Format ROS in dense format
+ * Handles: "Constitutional: Positive for... HENT: Negative for..."
+ */
+function formatDenseROS(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  
+  for (const line of lines) {
+    // Check if line has multiple ROS entries (Positive for / Negative for patterns)
+    const posNegCount = (line.match(/(?:Positive|Negative) for/gi) || []).length
+    
+    if (posNegCount >= 2 && line.length > 100) {
+      let result = line
+      // Split before each ROS category
+      for (const label of ROS_LABELS) {
+        const pattern = new RegExp(`\\s{2,}(${escapeRegex(label)})\\s*:`, 'gi')
+        result = result.replace(pattern, '\n$1:')
+      }
+      output.push(result)
+    } else {
+      output.push(line)
+    }
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Format "Diagnosis Date" table patterns from PMH
+ */
+function formatDiagnosisDateTables(text: string): string {
+  let result = text
+  
+  // Split "Diagnosis Date" header
+  result = result.replace(/\s{2,}(Diagnosis\s+Date)/gi, '\n\n$1')
+  
+  // Split "Procedure Laterality Date" header
+  result = result.replace(/\s{2,}(Procedure\s+Laterality\s+Date)/gi, '\n\n$1')
+  
+  // Split "Problem Relation Age of Onset" header (Family History)
+  result = result.replace(/\s{2,}(Problem\s+Relation\s+Age)/gi, '\n\n$1')
+  
+  return result
+}
+
+/**
+ * Format Past Surgical History tables
+ */
+function formatPastSurgicalHistory(text: string): string {
+  let result = text
+  
+  // Split procedure entries that follow dates
+  result = result.replace(
+    /(\d{2}\/\d{2}\/\d{4})\s{2,}(~\s*[A-Z])/g,
+    '$1\n$2'
+  )
+  
+  // Split CPT codes onto their own lines
+  result = result.replace(/\s{2,}(\([A-Z0-9]+\))/g, ' $1')
+  
+  // Split "Procedure:" entries
+  result = result.replace(/\s{2,}(Procedure:)/gi, '\n$1')
+  
+  return result
+}
+
+/**
+ * Format Family History patterns
+ */
+function formatFamilyHistory(text: string): string {
+  let result = text
+  
+  // Family history problem/relation patterns
+  result = result.replace(/\s{2,}(~\s*(?:Diabetes|Hypertension|Cancer|Heart|Stroke|Kidney))/gi, '\n$1')
+  result = result.replace(/\s{2,}(Mother|Father|Brother|Sister|Sibling|Maternal|Paternal)/gi, '\n$1')
+  
+  // "No History of Family" patterns
+  result = result.replace(/\s{2,}(No History of Family)/gi, '\n$1')
+  
+  return result
+}
+
+/**
+ * Clean up signature/timestamp lines
+ */
+function formatSignatureLines(text: string): string {
+  let result = text
+  
+  // Signature patterns
+  result = result.replace(/\s{3,}([A-Z][a-z]+\s+[A-Z][a-z]+,?\s*(?:MD|DO|PA-C|NP|APRN|RN|MA))/g, '\n\n$1')
+  
+  // Date/time patterns at end
+  result = result.replace(/\s{2,}(\d{2}\/\d{2}\/\d{2,4}\s+\d{4})$/gm, '\n$1')
+  
+  // "Written by" patterns
+  result = result.replace(/\s{2,}(Writt(?:en|) by:?)/gi, '\n\n$1')
+  
+  return result
+}
+
+/**
+ * Format appointment scheduling patterns
+ */
+function formatAppointmentPatterns(text: string): string {
+  let result = text
+  
+  // Appointment date patterns
+  result = result.replace(
+    /\s{2,}((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})/gi,
+    '\n$1'
+  )
+  
+  // Time patterns
+  result = result.replace(/\s{2,}(\d{1,2}:\d{2}\s*(?:AM|PM)\s+(?:CDT|CST|EST|PST|EDT|PDT))/gi, '\n$1')
+  
+  // "Arrive by" patterns
+  result = result.replace(/\s{2,}(\(Arrive by)/gi, '\n$1')
+  
+  // Post-Op patterns
+  result = result.replace(/\s{2,}(Post-Op with)/gi, '\n$1')
+  
+  return result
+}
+
+/**
+ * Format "Commonly known as" medication patterns
+ */
+function formatCommonlyKnownAs(text: string): string {
+  let result = text
+  
+  // Split before "Commonly known as" patterns
+  result = result.replace(/\s{2,}(Commonly known as:)/gi, '\n$1')
+  
+  // Split before "Ask about:" patterns
+  result = result.replace(/\s{2,}(Ask about:)/gi, '\n$1')
+  
+  return result
+}
+
+/**
+ * Format Care Instructions patterns
+ */
+function formatCareInstructions(text: string): string {
+  let result = text
+  
+  // Care Instructions sections
+  result = result.replace(/\s{2,}(Care Instructions:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Reportable signs)/gi, '\n$1')
+  result = result.replace(/\s{2,}(MD\/Provider name)/gi, '\n$1')
+  result = result.replace(/\s{2,}(MD\/Provider phone)/gi, '\n$1')
+  
+  // Discharge instruction patterns
+  result = result.replace(/\s{2,}(Discharge instructions -)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Discharge activity)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Discharge diet)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Call Dr\/provider)/gi, '\n\n$1')
+  
+  // Diet Type patterns
+  result = result.replace(/\s{2,}(Diet Type:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Other \(specify\):)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Explanatory Comment:)/gi, '\n$1')
+  
+  return result
+}
+
+/**
+ * Split dense assessment and plan
+ */
+function splitAssessmentAndPlan(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  let inAP = false
+  
+  for (const line of lines) {
+    const stripped = line.trim().toLowerCase().replace(/:$/, '')
+    
+    if (stripped.includes('assessment') && (stripped.includes('plan') || stripped.endsWith('assessment'))) {
+      inAP = true
+      output.push(line)
+      continue
+    }
+    
+    if (inAP && isHeaderCandidate(line) && !stripped.includes('assessment') && !stripped.includes('plan')) {
+      inAP = false
+    }
+    
+    if (inAP) {
+      let result = line
+      
+      // Split numbered problems: "# Problem Name" or "1. Problem"
+      result = result.replace(/\s{2,}(#\s*[A-Za-z])/g, '\n\n$1')
+      result = result.replace(/\s{2,}(\d+\.\s*[A-Z])/g, '\n\n$1')
+      
+      // Split sub-items starting with dash
+      result = result.replace(/\s{2,}(-\s*[A-Za-z])/g, '\n$1')
+      
+      output.push(result)
+    } else {
+      output.push(line)
+    }
+  }
+  
+  return output.join('\n')
+}
+
+/**
+ * Format discharge summary sections
+ */
+function formatDischargeSummarySections(text: string): string {
+  let result = text
+  
+  // Split common discharge summary patterns
+  result = result.replace(/\s{2,}(PREADMISSION DIAGNOSIS:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(DISCHARGE DIAGNOSIS:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(ADMITTING DIAGNOSIS:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(FINAL DIAGNOSIS:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(BRIEF HISTORY:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(HOSPITAL COURSE:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(DISCHARGE INSTRUCTIONS:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(DISCHARGE MEDICATIONS:)/gi, '\n\n$1')
+  
+  // Synopsis and course
+  result = result.replace(/\s{2,}(Synopsis:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Hospital Course:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Physical Exam:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Consultations)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Condition at Discharge:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Disposition:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Patient Instructions:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Pending Items:)/gi, '\n\n$1')
+  
+  return result
+}
+
+/**
+ * Format psychiatry-specific patterns
+ */
+function formatPsychiatryNote(text: string): string {
+  let result = text
+  
+  // Laboratory Findings / Hospital Course
+  result = result.replace(/\s{2,}(Laboratory Findings:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Hospital Course:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Consultations:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Condition on Discharge:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Discharge Medications:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Prog[a-z]*:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Recommendations:)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Specific Instructions)/gi, '\n\n$1')
+  result = result.replace(/\s{2,}(Disposition on Discharge:)/gi, '\n\n$1')
+  
+  return result
+}
+
+/**
+ * Split dates from section content
+ */
+function splitDatePatterns(text: string): string {
+  let result = text
+  
+  // "Date of services:" patterns
+  result = result.replace(/\s{2,}(Date of services:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Date of Admission:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Date of Discharge:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Operation\/Procedure Date)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Sex:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Birthdate:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(DOB:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Age:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Race:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(PCP:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Attending:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(MRN:)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Account #:)/gi, '\n$1')
+  
+  // Date/Time stamps inline
+  result = result.replace(/\s{2,}(Date:)\s*(\d{2}\/\d{2}\/\d{4})/gi, '\n$1 $2')
+  result = result.replace(/\s{2,}(Time:)\s*(\d{1,2}:\d{2})/gi, '\n$1 $2')
+  
+  // Electronically signed patterns
+  result = result.replace(/\s{2,}(Electronically signed by)/gi, '\n\n$1')
+  
+  // "Last data filed at" patterns
+  result = result.replace(/\s{2,}(Last data filed at)/gi, '\n$1')
+  
+  // Common patient info patterns in dense notes
+  result = result.replace(/\s{2,}(Patient Name)/gi, '\n$1')
+  result = result.replace(/\s{2,}(MRN \(Required\):)/gi, '\n$1')
+  result = result.replace(/\s{2,}(Patient Location)/gi, '\n$1')
+  
+  return result
+}
+
+/**
+ * Split timestamp patterns in notes
+ * Handles patterns like "02/18/22 1725" appearing inline
+ */
+function splitTimestampPatterns(text: string): string {
+  let result = text
+  
+  // Split standalone timestamps (e.g., "02/18/22 1725 Left lower abdomen")
+  result = result.replace(/\s{2,}(\d{2}\/\d{2}\/\d{2,4}\s+\d{4})\s+([A-Z])/g, '\n$1 $2')
+  
+  // Split timestamp + location patterns
+  result = result.replace(/(\d{2}\/\d{2}\/\d{2,4})\s{2,}([A-Z][a-z]+\s+[A-Z][a-z]+)/g, '$1\n$2')
+  
+  return result
+}
+
+// =============================================================================
 // COMPOUND HEADER FIXES
 // =============================================================================
 
@@ -451,27 +1825,104 @@ function fixSplitCompoundHeaders(text: string): string {
   let result = text
   
   const fixes: Array<[RegExp, string]> = [
+    // History patterns
     [/(Past Medical)\s*\n+\s*(HISTORY:?)/gi, '$1 $2'],
     [/(Past Surgical)\s*\n+\s*(HISTORY:?)/gi, '$1 $2'],
     [/(Family Medical)\s*\n+\s*(HISTORY:?)/gi, '$1 $2'],
     [/(Family)\s*\n+\s*(HISTORY:?)/gi, '$1 $2'],
     [/(Social)\s*\n+\s*(HISTORY:?)/gi, '$1 $2'],
+    [/(BRIEF)\s*\n+\s*(HISTORY:?)/gi, '$1 $2'],
+    [/(HOSPITAL)\s*\n+\s*(COURSE:?)/gi, '$1 $2'],
+    
+    // Physical Exam
     [/(PHYSICAL)\s*\n+\s*(EXAMINATION:?)/gi, '$1 $2'],
     [/(PHYSICAL)\s*\n+\s*(EXAM:?)/gi, '$1 $2'],
     [/(Physical)\s*\n+\s*(Exam:?)/gi, '$1 $2'],
+    
+    // Assessment/Plan - comprehensive patterns for & and AND
     [/(Assessment)\s*\n+\s*(and Plan:?)/gi, '$1 $2'],
     [/(ASSESSMENT)\s*\n+\s*(AND PLAN:?)/gi, '$1 $2'],
+    [/(Assessment)\s*\n+\s*(&)\s*\n*\s*(Plan:?)/gi, 'Assessment & Plan$3'],
+    [/(ASSESSMENT)\s*\n+\s*(&)\s*\n*\s*(PLAN:?)/gi, 'ASSESSMENT & PLAN$3'],
+    [/(Assessment)\s*\n+\s*(&\s*Plan:?)/gi, 'Assessment & Plan'],
+    
+    // HPI
     [/(Review of)\s*\n+\s*(Systems:?)/gi, '$1 $2'],
     [/(History of Present)\s*\n+\s*(Illness:?)/gi, '$1 $2'],
+    [/(History of)\s*\n+\s*(Present Illness:?)/gi, '$1 $2'],
     [/(Chief)\s*\n+\s*(Complaint:?)/gi, '$1 $2'],
+    
+    // Vitals
     [/(Vital)\s*\n+\s*(Signs)/gi, '$1 $2'],
     [/(VITAL)\s*\n+\s*(SIGNS)/gi, '$1 $2'],
+    
+    // Mental Status
     [/(Mental)\s*\n+\s*(Status)/gi, '$1 $2'],
+    
+    // Medications
     [/(CURRENT)\s*\n+\s*(MEDICATIONS:?)/gi, '$1 $2'],
+    [/(DISCHARGE)\s*\n+\s*(MEDICATIONS:?)/gi, '$1 $2'],
+    [/(HOME)\s*\n+\s*(MEDICATIONS:?)/gi, '$1 $2'],
+    
+    // Lab
     [/(Laboratory)\s*\n+\s*(values)/gi, '$1 $2'],
     [/(LABORATORY)\s*\n+\s*(VALUES)/gi, '$1 $2'],
-    [/(ED Course)\s*\n+\s*(& MDM)/gi, '$1 $2'],
+    [/(Labs)\s*\n+\s*(&\s*Imaging)/gi, '$1 $2'],
+    [/(ED Labs)\s*\n+\s*(&\s*Imaging)/gi, '$1 $2'],
+    [/(Labs)\s*\n+\s*(and)\s*\n*\s*(Imaging)/gi, 'Labs and Imaging'],
+    [/(ED Labs)\s*\n+\s*(and)\s*\n*\s*(Imaging)/gi, 'ED Labs and Imaging'],
+    
+    // ED-specific - IMPORTANT: Keep compound headers together
+    [/(ED\s*Course)\s*\n+\s*(&)\s*\n+\s*(MDM)/gi, 'ED Course & MDM'],
+    [/(ED\s*Course)\s*\n+\s*(&\s*MDM)/gi, 'ED Course & MDM'],
+    [/(ED Course)\s*\n+\s*(& MDM)/gi, 'ED Course & MDM'],
+    [/(ED)\s*\n+\s*(Course)\s*\n*\s*(&)\s*\n*\s*(MDM)/gi, 'ED Course & MDM'],
+    [/(ED Course)\s*\n+\s*(and)\s*\n*\s*(MDM)/gi, 'ED Course & MDM'],
+    
+    // Medical Decision Making - comprehensive
     [/(Medical)\s*\n+\s*(Decision)\s*\n*\s*(Making)/gi, '$1 $2 $3'],
+    [/(MEDICAL)\s*\n+\s*(DECISION)\s*\n*\s*(MAKING)/gi, '$1 $2 $3'],
+    [/(ED COURSE)\s*\n+\s*(AND)\s*\n*\s*(MEDICAL)/gi, 'ED COURSE AND MEDICAL'],
+    [/(COURSE)\s*\n+\s*(AND)\s*\n*\s*(MEDICAL)/gi, 'COURSE AND MEDICAL'],
+    [/(ED COURSE AND)\s*\n+\s*(MEDICAL DECISION MAKING)/gi, 'ED COURSE AND MEDICAL DECISION MAKING'],
+    
+    // Discharge Summary - IMPORTANT: Keep DIAGNOSIS with prefix
+    [/(PREADMISSION)\s*\n+\s*(DIAGNOSIS:?)/gi, 'PREADMISSION DIAGNOSIS$2'],
+    [/(DISCHARGE)\s*\n+\s*(DIAGNOSIS:?)/gi, 'DISCHARGE DIAGNOSIS$2'],
+    [/(ADMITTING)\s*\n+\s*(DIAGNOSIS:?)/gi, 'ADMITTING DIAGNOSIS$2'],
+    [/(POSTOPERATIVE)\s*\n+\s*(DIAGNOSIS:?)/gi, 'POSTOPERATIVE DIAGNOSIS$2'],
+    [/(PREOPERATIVE)\s*\n+\s*(DIAGNOSIS:?)/gi, 'PREOPERATIVE DIAGNOSIS$2'],
+    [/(FINAL)\s*\n+\s*(DIAGNOSIS:?)/gi, 'FINAL DIAGNOSIS$2'],
+    
+    // Instructions
+    [/(DISCHARGE)\s*\n+\s*(INSTRUCTIONS:?)/gi, 'DISCHARGE INSTRUCTIONS$2'],
+    
+    // Code Status
+    [/(CODE)\s*\n+\s*(STATUS:?)/gi, 'CODE STATUS$2'],
+    
+    // Condition on Discharge
+    [/(Condition on)\s*\n+\s*(Discharge:?)/gi, '$1 $2'],
+    [/(Condition at)\s*\n+\s*(Discharge:?)/gi, '$1 $2'],
+    
+    // NEW: Lab value names split across lines
+    [/(Troponin)\s*\n+\s*(-?I)/gi, 'Troponin-I'],
+    [/(eGFR)\s*\n+\s*(cr)/gi, 'eGFRcr'],
+    [/(Lactic)\s*\n+\s*(Acid)\s*\n*\s*(Level)?/gi, 'Lactic Acid Level'],
+    [/(RDW)\s*\n+\s*(SD)/gi, 'RDW SD'],
+    [/(RDW)\s*\n+\s*(CV)/gi, 'RDW CV'],
+    [/(Thought)\s*\n+\s*(Content)/gi, 'Thought Content'],
+    
+    // NEW: Neuroexam protection (do NOT split)
+    [/(Neuro)\s*\n+\s*(exam:?)/gi, 'Neuroexam$2'],
+    [/\bNeuro\s*\n+\s*EXAM:?/gi, 'Neuroexam:'],
+    
+    // NEW: Findings/Impression - often split incorrectly
+    [/(FINDINGS)\s*\n+\s*(\/)\s*\n*\s*(IMPRESSION)/gi, 'FINDINGS/IMPRESSION'],
+    [/(IMPRESSION)\s*\n+\s*(FINDINGS)\s*\n*\s*(\/)/gi, 'IMPRESSION FINDINGS/'],
+    
+    // NEW: "of" splits - common in clinical phrases
+    [/(History)\s*\n+\s*(of)\s*\n*\s*(Present)/gi, 'History of Present'],
+    [/(Review)\s*\n+\s*(of)\s*\n*\s*(Systems)/gi, 'Review of Systems'],
   ]
   
   for (const [pattern, replacement] of fixes) {
@@ -509,15 +1960,44 @@ function breakOnLargeGaps(text: string): string {
 function insertSectionBreaks(text: string): string {
   let result = text
   
+  // Only process MULTI-WORD section headers or unambiguous single-word headers
+  // Avoid single common words like "History", "Exam", "Medications" that appear mid-sentence
+  // NOTE: Removed MEDICATIONS as it often appears mid-sentence ("the medications", "your medications")
+  const SAFE_SINGLE_WORD_HEADERS = new Set([
+    'ALLERGIES', 'VITALS', 'LABS', 'ROS', 'IMPRESSION', 'FINDINGS',
+    'ASSESSMENT', 'PLAN', 'DIAGNOSIS', 'DIAGNOSES',
+    'SUBJECTIVE', 'OBJECTIVE', 'ADDENDUM', 'SYNOPSIS',
+    'RADIOLOGY', 'IMAGING', 'LABORATORY', 'DISCUSSION', 'COMMENTS',
+    'RECOMMENDATIONS', 'ATTESTATION', 'TECHNIQUE', 'INDICATION', 'COMPARISON',
+  ])
+  
+  // Multi-word headers are safer to detect
+  const multiWordHeaders = SECTION_HEADERS.filter(h => h.includes(' ') || h.includes('/'))
+  
   // Sort by length (longest first) for proper matching
-  const sortedHeaders = [...SECTION_HEADERS].sort((a, b) => b.length - a.length)
+  const sortedHeaders = [...multiWordHeaders].sort((a, b) => b.length - a.length)
   
   for (const header of sortedHeaders) {
+    // Match only when preceded by sentence-ending punctuation or start of text
     const pattern = new RegExp(
-      `(?<![\\n])(${escapeRegex(header)})(?:\\b|:)`,
-      'gi'
+      `(?:^|[.!?;\\])])\\s*(${escapeRegex(header)})(?:\\b|:)`,
+      'gim'
     )
-    result = result.replace(pattern, '\n\n$1')
+    result = result.replace(pattern, (match, hdr) => {
+      const punct = match.match(/^[.!?;\])]/) ? match[0] : ''
+      return punct + '\n\n' + hdr
+    })
+  }
+  
+  // For single-word headers, only match at line start or after double-space
+  for (const header of SAFE_SINGLE_WORD_HEADERS) {
+    // Only if actually in SECTION_HEADERS
+    if (!SECTION_HEADERS.includes(header)) continue
+    const pattern = new RegExp(
+      `(?:^|\\n|  )(${escapeRegex(header)})\\s*:`,
+      'gim'
+    )
+    result = result.replace(pattern, '\n\n$1:')
   }
   
   return result
@@ -526,14 +2006,18 @@ function insertSectionBreaks(text: string): string {
 function forceHeaderOnNewline(text: string): string {
   let result = text
   
-  const sortedHeaders = [...SECTION_HEADERS].sort((a, b) => b.length - a.length)
+  // Only force newlines for multi-word headers or when preceded by sentence-ending punctuation
+  // This prevents breaking "extensive history taking" or "after medications patient"
+  const multiWordHeaders = SECTION_HEADERS.filter(h => h.includes(' ') || h.includes('/'))
+  const sortedHeaders = [...multiWordHeaders].sort((a, b) => b.length - a.length)
   
   for (const header of sortedHeaders) {
+    // Only match after sentence-ending punctuation (not arbitrary whitespace)
     const pattern = new RegExp(
-      `(?<=\\S)[ \\t]+(${escapeRegex(header)})(:?)`,
+      `([.!?;\\])"])[ \\t]+(${escapeRegex(header)})(:?)`,
       'gi'
     )
-    result = result.replace(pattern, '\n\n$1$2')
+    result = result.replace(pattern, '$1\n\n$2$3')
   }
   
   return result
@@ -2407,6 +3891,19 @@ function enforceOneMedPerLine(text: string): string {
   return output.join('\n')
 }
 
+function fixMissingMedicationWords(text: string): string {
+  let result = text
+  result = result.replace(
+    /No current facility-administered on file prior to encounter\./gi,
+    'No current facility-administered medications on file prior to encounter.'
+  )
+  result = result.replace(
+    /Current Outpatient\s*\n-?\s*on File Prior to Encounter/gi,
+    'Current Outpatient Medications on File Prior to Encounter'
+  )
+  return result
+}
+
 export function isPESubLabelLine(line: string): boolean {
   const stripped = line.trim()
   if (!stripped) return false
@@ -2616,6 +4113,270 @@ function cleanMedicationLines(text: string): string {
   return result
 }
 
+function normalizeLabelKey(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function rejoinAcronymHeaders(text: string): string {
+  const lines = text.split('\n')
+  const output: string[] = []
+  const knownLabels = new Set(
+    [
+      ...SECTION_HEADERS,
+      ...ROS_LABELS,
+      ...EXAM_LABELS,
+      ...PE_SUB_LABELS,
+      'HISTORY AND PHYSICAL',
+      'HISTORY AND PHYSICAL EXAM',
+      'HISTORY AND PHYSICAL EXAMINATION',
+      'VITALS/PHYSICAL EXAM',
+      'VITALS/PHYSICAL EXAMINATION',
+    ].map(normalizeLabelKey)
+  )
+  
+  let i = 0
+  while (i < lines.length) {
+    const curr = lines[i]
+    const currStripped = curr.trim()
+    
+    if (currStripped &&
+        !currStripped.includes(':') &&
+        /^[A-Z]{2,6}$/.test(currStripped)) {
+      const next = lines[i + 1]
+      if (next) {
+        const nextStripped = next.trim()
+        const match = nextStripped.match(/^([A-Z][A-Za-z/ &'-]{1,40}?):\s*(.*)$/)
+        if (match) {
+          const [, nextLabel, rest] = match
+          const combinedKey = normalizeLabelKey(currStripped + nextLabel.replace(/\s+/g, ''))
+          
+          if (knownLabels.has(combinedKey)) {
+            const mergedLabel = currStripped + nextLabel.replace(/\s+/g, '')
+            const mergedLine = rest ? `${mergedLabel}: ${rest.trim()}` : `${mergedLabel}:`
+            output.push(mergedLine)
+            i += 2
+            continue
+          }
+        }
+      }
+    }
+    
+    output.push(curr)
+    i++
+  }
+  
+  return output.join('\n')
+}
+
+function rejoinHistoryAndPhysical(text: string): string {
+  let result = text
+  result = result.replace(
+    /([A-Z ]*HISTORY)\s*\n+\s*(AND PHYSICAL(?: EXAM(?:INATION)?)?)/gi,
+    '$1 $2'
+  )
+  result = result.replace(
+    /(HISTORY)\s*\n+\s*(AND PHYSICAL)\s*\n+\s*(EXAM(?:INATION)?)/gi,
+    '$1 $2 $3'
+  )
+  return result
+}
+
+/**
+ * Fix isolated connectors (&, AND) that got separated from compound headers
+ * This runs early to rejoin things like "ED Course" + "&" + "MDM"
+ */
+function fixIsolatedConnectors(text: string): string {
+  const lines = text.split('\n')
+  const result: string[] = []
+  let i = 0
+  
+  while (i < lines.length) {
+    const line = lines[i].trim()
+    
+    // Check for isolated "&" or "AND" or "and" on their own line
+    if (line === '&' || line.toLowerCase() === 'and') {
+      // Look back for context
+      const prevLine = result.length > 0 ? result[result.length - 1].trim() : ''
+      // Look ahead for context
+      const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : ''
+      
+      // If we have content before and after, join them
+      if (prevLine && nextLine && 
+          !prevLine.endsWith('.') && !prevLine.endsWith('!') && !prevLine.endsWith('?')) {
+        // Remove the previous line and join with connector
+        result.pop()
+        result.push(`${prevLine} ${line} ${nextLine}`)
+        i += 2  // Skip next line since we consumed it
+        continue
+      }
+    }
+    
+    // Check for lines that are just isolated short words that shouldn't be alone
+    // These are common words that get incorrectly put on their own line
+    const isolatedPatterns = [
+      /^history$/i,
+      /^exam$/i,
+      /^results$/i,
+      /^found\.?$/i,
+      /^POS$/,
+      /^Final$/,
+      /^plan$/i,
+      /^medication$/i,
+      /^medications$/i,
+      /^of$/i,        // "history of", "review of"
+      /^study$/i,     // "limited study"
+      /^evaluation$/i,
+      /^motion$/i,    // "due to motion"
+      /^for$/i,       // "reason for", "positive for"
+    ]
+    
+    // Don't add isolated words as separate lines if they look like sentence fragments
+    if (isolatedPatterns.some(p => p.test(line))) {
+      const prevLine = result.length > 0 ? result[result.length - 1].trim() : ''
+      const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : ''
+      
+      // Check if this looks like it was incorrectly split
+      if (prevLine && !prevLine.endsWith('.') && !prevLine.endsWith(':') && 
+          !prevLine.endsWith('!') && !prevLine.endsWith('?')) {
+        // Join with previous line
+        result.pop()
+        result.push(`${prevLine} ${line}`)
+        i++
+        continue
+      } else if (nextLine && /^[a-z]/.test(nextLine)) {
+        // Join with next line (lowercase start = likely continuation)
+        result.push(`${line} ${nextLine}`)
+        i += 2
+        continue
+      }
+    }
+    
+    result.push(lines[i])
+    i++
+  }
+  
+  return result.join('\n')
+}
+
+/**
+ * Protect compound clinical terms from being split
+ * This runs early to protect terms that should stay together
+ */
+function protectCompoundTerms(text: string): string {
+  let result = text
+  
+  // Fix cross-line splits for clinical compounds
+  const compoundFixes: Array<[RegExp, string]> = [
+    // Lab values that get split at newlines
+    [/\bTroponin\s*-?\s*\n\s*I\b/gi, 'Troponin-I'],
+    [/\beGFR\s*\n\s*cr\b/gi, 'eGFRcr'],
+    [/\bLactic\s*\n\s*Acid\b/gi, 'Lactic Acid'],
+    [/\bLactic Acid\s*\n\s*Level\b/gi, 'Lactic Acid Level'],
+    
+    // PE/exam terms
+    [/\bNeuro\s*\n\s*exam/gi, 'Neuroexam'],
+    [/\bThought\s*\n\s*Content/gi, 'Thought Content'],
+    [/\bThought\s+Cont\s*\n?\s*ent/gi, 'Thought Content'],
+    
+    // Compound headers that get split
+    [/\bED\s*\n\s*Course\b/gi, 'ED Course'],
+    [/\bED Course\s*\n\s*&\s*\n\s*MDM\b/gi, 'ED Course & MDM'],
+    [/\bED Course\s*&\s*\n\s*MDM\b/gi, 'ED Course & MDM'],
+    [/\bED Course\s*\n\s*& MDM\b/gi, 'ED Course & MDM'],
+    [/\bMedical\s*\n\s*Decision\s*\n?\s*Making\b/gi, 'Medical Decision Making'],
+    [/\bCOURSE\s+AND\s*\n\s*MEDICAL/gi, 'COURSE AND MEDICAL'],
+    
+    // RDW splits
+    [/\bRDW\s*\n\s*SD\b/g, 'RDW SD'],
+    [/\bRDW\s*\n\s*CV\b/g, 'RDW CV'],
+    
+    // Assessment & Plan splits
+    [/\bAssessment\s*\n\s*&\s*\n\s*Plan\b/gi, 'Assessment & Plan'],
+    [/\bAssessment\s*&\s*\n\s*Plan\b/gi, 'Assessment & Plan'],
+    [/\bAssessment\s*\n\s*& Plan\b/gi, 'Assessment & Plan'],
+    
+    // FINDINGS/IMPRESSION splits  
+    [/\bFINDINGS\s*\/?\s*\n\s*IMPRESSION\b/gi, 'FINDINGS/IMPRESSION'],
+    [/\bIMPRESSION\s*\n\s*FINDINGS\s*\/?\b/gi, 'IMPRESSION FINDINGS/'],
+    
+    // No results found
+    [/\bNo\s*\n\s*results\s*\n\s*found\b/gi, 'No results found'],
+    
+    // Diagnostic Studies
+    [/\bDiagnostic\s*\n\s*Studies\b/gi, 'Diagnostic Studies'],
+    
+    // Labs and Imaging
+    [/\bLabs\s*\n\s*and\s*\n?\s*Imaging\b/gi, 'Labs and Imaging'],
+    [/\bED\s*Labs\s*\n\s*and\s*\n?\s*Imaging\b/gi, 'ED Labs and Imaging'],
+    
+    // NEW: Common phrase splits in discharge notes
+    [/\btreatment\s*\n\s*plan\b/gi, 'treatment plan'],
+    [/\bFollow-up\s*\n\s*Care\b/gi, 'Follow-up Care'],
+    [/\bFollow-up Care\s*\n\s*and\s*\n?\s*Appointments\b/gi, 'Follow-up Care and Appointments'],
+    [/\bthe above\s*\n\s*medication/gi, 'the above medication'],
+    [/\bthe\s*\n\s*medications\b/gi, 'the medications'],
+    [/\babove\s*\n\s*medication/gi, 'above medication'],
+    [/\bover-the-counter\s*\n\s*medications/gi, 'over-the-counter medications'],
+    [/\bprimary care\s*\n\s*provider/gi, 'primary care provider'],
+    [/\bfollow-up\s*\n\s*care/gi, 'follow-up care'],
+    
+    // NEW: More header combinations
+    [/\bVital\s*\n\s*Signs\b/gi, 'Vital Signs'],
+    [/\bReview of\s*\n\s*Systems\b/gi, 'Review of Systems'],
+    [/\bPast Medical\s*\n\s*History\b/gi, 'Past Medical History'],
+    [/\bPast Surgical\s*\n\s*History\b/gi, 'Past Surgical History'],
+    [/\bSocial\s*\n\s*History\b/gi, 'Social History'],
+    [/\bFamily\s*\n\s*History\b/gi, 'Family History'],
+    [/\bPhysical\s*\n\s*Exam\b/gi, 'Physical Exam'],
+    [/\bPhysical\s*\n\s*Examination\b/gi, 'Physical Examination'],
+    
+    // NEW: Mental Status splits
+    [/\bMental\s*\n\s*Status\b/gi, 'Mental Status'],
+    
+    // NEW: Further history (prevent splitting when part of a phrase)  
+    [/\bFurther\s*\n\s*history\b/gi, 'Further history'],
+    [/\bextensive\s*\n\s*history\b/gi, 'extensive history'],
+    
+    // NEW: Some medications phrases
+    [/\bSome\s*\n\s*medications\b/gi, 'Some medications'],
+    [/\bother\s*\n\s*medications\b/gi, 'other medications'],
+    
+    // NEW: "history of" pattern - very common in clinical notes
+    [/\bhistory\s*\n\s*of\b/gi, 'history of'],
+    [/\bHistory\s*\n\s*of\b/g, 'History of'],
+    
+    // NEW: Radiology patterns
+    [/\bLimited\s*\n\s*exam\b/gi, 'Limited exam'],
+    [/\bLimited\s*\n\s*study\b/gi, 'Limited study'],
+    [/\bLimited\s*\n\s*evaluation\b/gi, 'Limited evaluation'],
+    [/\bdue to\s*\n\s*motion\b/gi, 'due to motion'],
+    [/\bdue to\s*\n\s*artifact\b/gi, 'due to artifact'],
+    [/\bDelayed\s*\n\s*nephrogram\b/gi, 'Delayed nephrogram'],
+    
+    // NEW: More clinical phrase preservations
+    [/\breason for\s*\n\s*study\b/gi, 'reason for study'],
+    [/\breason for\s*\n\s*exam\b/gi, 'reason for exam'],
+    [/\breason for\s*\n\s*visit\b/gi, 'reason for visit'],
+    [/\bwithout\s*\n\s*evidence\b/gi, 'without evidence'],
+    [/\bno evidence\s*\n\s*of\b/gi, 'no evidence of'],
+    [/\bpositive\s*\n\s*for\b/gi, 'positive for'],
+    [/\bnegative\s*\n\s*for\b/gi, 'negative for'],
+  ]
+  
+  for (const [pattern, replacement] of compoundFixes) {
+    result = result.replace(pattern, replacement)
+  }
+  
+  return result
+}
+
+function fixNoKnownVitalsPhysical(text: string): string {
+  let result = text
+  result = result.replace(/No Known Vitals\/Physical Exam/gi, 'No Known Allergies\nVitals/Physical Exam')
+  result = result.replace(/No Known Allergies\s+Vitals\/Physical Exam/gi, 'No Known Allergies\nVitals/Physical Exam')
+  return result
+}
+
 // =============================================================================
 // MAIN FORMATTING PIPELINE
 // =============================================================================
@@ -2631,9 +4392,59 @@ const FORMATTING_PIPELINE: FormattingStep[] = [
   stripBrTags,
   unescapeLiteralNewlines,
   collapseMultipleSpaces,
+  
+  // EARLY PROTECTION: Fix compound terms BEFORE splitting to prevent incorrect breaks
+  protectCompoundTerms,
+  
+  // CRITICAL: Dense line splitting FIRST - handles compressed single-line notes
+  splitDenseLines,
+  splitClinicalSections,      // NEW: Master line break function for clinical sections
+  splitSOAPSections,          // NEW: Handle ultra-dense SOAP notes
+  splitPostOpSections,        // NEW: Handle post-op note formatting
+  splitActiveProblemsAndMedications, // NEW: Handle Active Problems/Medications lists
+  splitTildeBullets,
+  splitEDSections,
+  formatDischargeSummarySections,
+  formatPsychiatryNote,
+  formatAxisDiagnoses,
+  formatMentalStatusExam,
+  formatProcedureNotes,
+  splitDatePatterns,
+  splitTimestampPatterns,     // NEW: Handle inline timestamps
+  
   splitLongLines,
   fixUnhyphenatedWordSplits,
   fixBrokenWords,
+  
+  // Dense content splitting
+  splitPastMedicalHistory,
+  splitDenseLabLines,
+  splitDenseVitals,
+  splitAllergenList,
+  splitMedicationSigs,
+  formatLabTables,
+  formatIntakeOutputTables,   // NEW: Handle Intake/Output tables
+  formatResultValueLabs,
+  formatLabPanelHeaders,
+  splitAbnormalLabPatterns,
+  splitAssessmentAndPlan,
+  
+  // Additional dense pattern handling
+  formatSubstanceUse,
+  formatAttestationBlocks,
+  formatHPPatterns,
+  formatHistoryReviewed,
+  formatImagingResults,
+  formatDischargeInstructionPatterns,
+  formatDensePEPatterns,
+  formatDenseROS,
+  formatDiagnosisDateTables,
+  formatPastSurgicalHistory,
+  formatFamilyHistory,
+  formatSignatureLines,
+  formatAppointmentPatterns,
+  formatCommonlyKnownAs,
+  formatCareInstructions,
   
   // Early compound header fixes
   fixSplitCompoundHeaders,
@@ -2676,6 +4487,7 @@ const FORMATTING_PIPELINE: FormattingStep[] = [
   splitAlsoKnownAsMeds,
   joinSplitMedicationLines,
   enforceOneMedPerLine,
+  fixMissingMedicationWords,
   cleanMedicationLines,
   
   // ROS and PE formatting
@@ -2757,10 +4569,16 @@ const FORMATTING_PIPELINE: FormattingStep[] = [
   (text) => wrapLines(text, 98),
   tightenBlankLines,
   standardizeSectionSpacing,
+  rejoinAcronymHeaders,
+  rejoinHistoryAndPhysical,
+  fixNoKnownVitalsPhysical,
+  fixFragmentedLabels,
   
   // Post-wrap cleanup
   removeInternalDoubleSpaces,
-  fixSplitCompoundHeaders,
+  fixSplitCompoundHeaders,  // Run again to fix any splits that occurred during processing
+  protectCompoundTerms,     // Run again to fix compound terms split during processing
+  fixIsolatedConnectors,    // Fix isolated & and AND connectors
   normalizeListSpacing,
   normalizeAllergyList,
   trimLines,
@@ -2771,6 +4589,11 @@ const FORMATTING_PIPELINE: FormattingStep[] = [
   
   // Final radiology pass
   formatRadiologyNote,
+  
+  // Final compound header fix pass
+  fixSplitCompoundHeaders,
+  protectCompoundTerms,
+  fixIsolatedConnectors,
 ]
 
 /**

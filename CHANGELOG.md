@@ -2,6 +2,82 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.5.70] - 2025-12-07
+
+### Feature: BiLSTM Section Detection in Annotate Mode
+- **Section badges in document** - Toggle "Sections" to detect and display section headers (HPI, PMH, ALLERGIES, LABS, etc.) inline in the note
+- **Click-to-navigate** - Click section pills in toolbar to jump to that section
+- **BiLSTM-powered** - Uses the same v4 multi-head model as Format view for accurate section detection
+- **Cached results** - Section detection results cached per note for instant re-display
+
+### Bug Fixes
+- **Fixed `showDropError` initialization error** - Moved function definition before callbacks that use it
+- **Fixed drag-drop** - Now works correctly in browser mode
+
+### Scripts Cleanup
+- **Removed old model versions** - Deleted v1, v2, v5, and old LLM model files
+- **Kept only v4** - `layout_tagger_v4` is the production model
+- **Updated docs** - `docs/bilstm_formatter.md` now documents v4 architecture
+
+### Files Removed
+- `scripts/clinical_layout_model.py` (old v2 code)
+- `scripts/layout_model_llm_v2.pt` (31 MB)
+- `scripts/layout_model_llm_v2.pt.vocab.pt`
+- `scripts/layout_tagger_v1*` (v1 model + config + vocab)
+- `scripts/layout_tagger_v2*` (v2 model + config + vocab)
+- `scripts/layout_tagger_v5_attn.vocab.pt`
+
+## [0.6.0] - 2025-12-06
+
+### Major Feature: BiLSTM Formatter with Interpretability
+
+- **Three formatter modes** - Choose between:
+  - `None` - No formatting (passthrough)
+  - `Regex` - Rule-based formatting (140+ patterns, fast)
+  - `Model` - BiLSTM neural network (97.5% accuracy, runs locally via ONNX)
+
+- **Runs Entirely in Browser** - No Python server needed!
+  - Model converted to ONNX format for browser inference
+  - Uses ONNX Runtime Web (WebAssembly)
+  - Works offline, no external dependencies
+
+- **Formatter Mode Selector** - Available in:
+  - Format View header (quick switch)
+  - Settings modal (with model info)
+  - Mode selection prompt when importing files
+
+- **Model Interpretability** - See exactly how the BiLSTM model makes decisions:
+  - Token-by-token visualization with color coding
+  - Confidence scores for each decision
+  - Probability distributions (space/newline/blank_line)
+  - Reason inference (section_header, list_item, learned_pattern)
+  - Statistics panel (total tokens, breaks, avg confidence)
+
+- **Format Comparison View** - Enhanced with:
+  - Three-panel layout: Original | Formatted | Model Decisions
+  - Toggle interpretability panel on/off
+  - Mode badge showing which formatter was used
+  - Error banner when fallback occurs
+
+### Technical Details
+
+- BiLSTM model: 7.8M parameters, 97.5% accuracy
+- Trained on 18,718 LLM-formatted notes (Kimi K2-0905)
+- ONNX model: `public/bilstm-formatter.onnx` (31MB)
+- Vocabulary: `public/bilstm-vocab.json` (120k tokens)
+- Documentation: `docs/bilstm_formatter.md`
+
+### Files Added/Modified
+
+- `src/lib/bilstm-inference.ts` - ONNX Runtime inference
+- `src/lib/bilstm-formatter.ts` - TypeScript integration
+- `src/lib/types.ts` - Added formatter types
+- `src/components/FormatView.tsx` - Full UI overhaul
+- `src/components/SettingsModal.tsx` - Formatter settings
+- `src/hooks/useStore.ts` - formatterMode state
+- `public/bilstm-formatter.onnx` - ONNX model
+- `public/bilstm-vocab.json` - Vocabulary
+
 ## [0.5.62] - 2025-12-05
 
 ### Fix: Rapid Highlighting and Overlap Detection

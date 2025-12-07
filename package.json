@@ -1,7 +1,7 @@
 {
   "name": "nota",
   "private": true,
-  "version": "0.5.62",
+  "version": "0.5.70",
   "description": "Local clinical note annotation tool",
   "type": "module",
   "scripts": {
@@ -20,6 +20,7 @@
     "@tauri-apps/plugin-fs": "^2.4.4",
     "@tauri-apps/plugin-store": "^2.4.1",
     "lucide-react": "^0.460.0",
+    "onnxruntime-web": "^1.23.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.0"

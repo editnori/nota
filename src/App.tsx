@@ -8,10 +8,11 @@ import { ReviewView } from './components/ReviewView'
 import { FormatView } from './components/FormatView'
 import { QuestionPicker } from './components/QuestionPicker'
 import { AnnotationList } from './components/AnnotationList'
-import { importFromDrop, handleImportWithProgress, formatNoteText } from './lib/importers'
+import { ImportModeModal } from './components/ImportModeModal'
+import { importFromDrop, importFiles, handleImportWithProgress, formatTextWithMode } from './lib/importers'
 import { setBulkOperation } from './hooks/useStore'
 import { Loader2, Upload } from 'lucide-react'
-import type { Note } from './lib/types'
+import type { Note, FormatterMode } from './lib/types'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 // Check if running in Tauri desktop app
@@ -22,10 +23,12 @@ function isTauri(): boolean {
 function AppContent() {
   const { 
     notes, mode, currentNoteIndex, selectedQuestion, addAnnotation, 
-    isLoaded, isTransitioning, darkMode, isImporting, importProgress, setImporting
+    isLoaded, isTransitioning, darkMode, isImporting, importProgress, setImporting,
+    pendingImport, setPendingImport
   } = useStore()
   const [isDragging, setIsDragging] = useState(false)
   const [dropError, setDropError] = useState<string | null>(null)
+  const [pendingFileCount, setPendingFileCount] = useState(0)
   const dragCountRef = useRef(0)
 
   const currentNote = notes[currentNoteIndex]
@@ -38,48 +41,140 @@ function AppContent() {
     }
   }, [darkMode])
 
-  // Handle drag-drop import - uses shared import handler (for web)
-  const handleDropImport = useCallback(async (dataTransfer: DataTransfer) => {
-    if (!dataTransfer.items || dataTransfer.items.length === 0) return
-    
-    await handleImportWithProgress(() => 
-      importFromDrop(dataTransfer, (progress) => {
-        if (progress.phase === 'scanning') {
-          setImporting(true, 'Scanning...')
-        } else if (progress.phase === 'processing') {
-          setImporting(true, `${progress.current} / ${progress.total}`)
-        } else if (progress.phase === 'done') {
-          setImporting(true, `${progress.current} notes`)
-        }
-      })
-    )
-  }, [setImporting])
-
-  // Show error toast with auto-dismiss
+  // Show error toast with auto-dismiss - defined early so other callbacks can use it
   const showDropError = useCallback((msg: string) => {
     setDropError(msg)
     setTimeout(() => setDropError(null), 3000)
   }, [])
 
-  // Handle Tauri file drop - processes file paths directly
-  const handleTauriDrop = useCallback(async (paths: string[]) => {
+  // Handle drag-drop import - extracts files immediately (DataTransfer becomes stale after event)
+  const handleDropImport = useCallback(async (dataTransfer: DataTransfer) => {
+    const files: File[] = []
+    
+    // Try webkitGetAsEntry first (supports folders)
+    const entries: FileSystemEntry[] = []
+    if (dataTransfer.items && dataTransfer.items.length > 0) {
+      for (let i = 0; i < dataTransfer.items.length; i++) {
+        const item = dataTransfer.items[i]
+        if (item.webkitGetAsEntry) {
+          const entry = item.webkitGetAsEntry()
+          if (entry) entries.push(entry)
+        }
+      }
+    }
+    
+    // Collect files from entries (including from folders)
+    if (entries.length > 0) {
+      async function collectFiles(entry: FileSystemEntry): Promise<void> {
+        if (entry.isFile) {
+          try {
+            const file = await new Promise<File>((resolve, reject) => {
+              (entry as FileSystemFileEntry).file(resolve, reject)
+            })
+            if (file.name.endsWith('.txt') || file.name.endsWith('.json') || file.name.endsWith('.jsonl')) {
+              files.push(file)
+            }
+          } catch (err) {
+            console.warn('Failed to get file from entry:', entry.name, err)
+          }
+        } else if (entry.isDirectory) {
+          const dir = entry as FileSystemDirectoryEntry
+          const reader = dir.createReader()
+          let batch: FileSystemEntry[]
+          do {
+            batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+              reader.readEntries(resolve, reject)
+            })
+            for (const sub of batch) {
+              await collectFiles(sub)
+            }
+          } while (batch.length > 0)
+        }
+      }
+      
+      for (const entry of entries) {
+        await collectFiles(entry)
+      }
+    }
+    
+    // Fallback to dataTransfer.files if no entries
+    if (files.length === 0 && dataTransfer.files && dataTransfer.files.length > 0) {
+      for (let i = 0; i < dataTransfer.files.length; i++) {
+        const file = dataTransfer.files[i]
+        if (file.name.endsWith('.txt') || file.name.endsWith('.json') || file.name.endsWith('.jsonl')) {
+          files.push(file)
+        }
+      }
+    }
+    
+    if (files.length === 0) {
+      showDropError('No valid files found (use .txt, .json, or .jsonl)')
+      return
+    }
+    
+    setPendingFileCount(files.length)
+    setPendingImport({ type: 'files', data: files })
+  }, [setPendingImport, showDropError])
+
+  // Process import with selected mode
+  const processImportWithMode = useCallback(async (mode: FormatterMode) => {
+    if (!pendingImport) return
+    
+    setPendingImport(null)
+    
+    if (pendingImport.type === 'files') {
+      // Files were already extracted from DataTransfer
+      await handleImportWithProgress(() => 
+        importFiles(pendingImport.data, (progress) => {
+          if (progress.phase === 'scanning') {
+            setImporting(true, 'Scanning...')
+          } else if (progress.phase === 'processing') {
+            setImporting(true, `${progress.current} / ${progress.total}`)
+          } else if (progress.phase === 'done') {
+            setImporting(true, `${progress.current} notes`)
+          }
+        }, mode)
+      )
+    } else if (pendingImport.type === 'drop') {
+      // Legacy: DataTransfer (might be stale, but kept for compatibility)
+      await handleImportWithProgress(() => 
+        importFromDrop(pendingImport.data, (progress) => {
+          if (progress.phase === 'scanning') {
+            setImporting(true, 'Scanning...')
+          } else if (progress.phase === 'processing') {
+            setImporting(true, `${progress.current} / ${progress.total}`)
+          } else if (progress.phase === 'done') {
+            setImporting(true, `${progress.current} notes`)
+          }
+        }, mode)
+      )
+    } else if (pendingImport.type === 'tauri') {
+      // Handle Tauri drop with mode
+      await handleTauriDropWithMode(pendingImport.data, mode)
+    }
+  }, [pendingImport, setPendingImport, setImporting])
+
+  // Handle Tauri file drop - shows mode modal first
+  const handleTauriDrop = useCallback((paths: string[]) => {
     if (paths.length === 0) return
-    
+    setPendingFileCount(paths.length)
+    setPendingImport({ type: 'tauri', data: paths })
+  }, [setPendingImport])
+
+  // Process Tauri drop with selected mode
+  const handleTauriDropWithMode = useCallback(async (paths: string[], mode: FormatterMode) => {
     setImporting(true, 'Reading files...')
-    setBulkOperation(true) // Prevent rapid saves during import
+    setBulkOperation(true)
     
-    // Helper to get filename from path (handles both / and \)
     const getFileName = (p: string) => {
       const parts = p.replace(/\\/g, '/').split('/')
       return parts[parts.length - 1] || 'note'
     }
     
-    // Helper to check extension (case-insensitive)
     const hasExt = (name: string, ext: string) => 
       name.toLowerCase().endsWith(ext.toLowerCase())
     
     let errorMsg = ''
-    let filesProcessed = 0
     let unsupportedFiles: string[] = []
     
     try {
@@ -91,7 +186,6 @@ function AppContent() {
           const info = await stat(filePath)
           
           if (info.isDirectory) {
-            // Read directory contents
             setImporting(true, `Scanning folder...`)
             const entries = await readDir(filePath)
             const txtFiles = entries.filter(e => e.name && hasExt(e.name, '.txt'))
@@ -101,33 +195,31 @@ function AppContent() {
               const entryName = entry.name || ''
               setImporting(true, `Processing ${i + 1}/${txtFiles.length}`)
               
-              // Use proper path separator based on original path format
               const sep = filePath.includes('\\') ? '\\' : '/'
               const fullPath = `${filePath}${sep}${entryName}`
               const content = await readTextFile(fullPath)
+              const formattedText = await formatTextWithMode(content, mode)
               importedNotes.push({
                 id: entryName.replace(/\.txt$/i, ''),
-                text: formatNoteText(content),
+                text: formattedText,
                 meta: { source: entryName, rawText: content }
               })
-              filesProcessed++
             }
             
             if (txtFiles.length === 0) {
               unsupportedFiles.push(`${getFileName(filePath)}/ (no .txt files)`)
             }
           } else {
-            // Single file
             const fileName = getFileName(filePath)
             if (hasExt(fileName, '.txt')) {
               setImporting(true, `Reading ${fileName}`)
               const content = await readTextFile(filePath)
+              const formattedText = await formatTextWithMode(content, mode)
               importedNotes.push({
                 id: fileName.replace(/\.txt$/i, ''),
-                text: formatNoteText(content),
+                text: formattedText,
                 meta: { source: fileName, rawText: content }
               })
-              filesProcessed++
             } else if (hasExt(fileName, '.json') || hasExt(fileName, '.jsonl')) {
               setImporting(true, `Reading ${fileName}`)
               const content = await readTextFile(filePath)
@@ -138,13 +230,13 @@ function AppContent() {
                 const items = Array.isArray(parsed) ? parsed : (parsed.notes || [parsed])
                 for (const item of items) {
                   const rawItemText = String(item.text || '')
+                  const formattedText = await formatTextWithMode(rawItemText, mode)
                   importedNotes.push({
                     id: String(item.id || item.note_id || `note_${Date.now()}_${Math.random().toString(36).slice(2,6)}`),
-                    text: formatNoteText(rawItemText),
+                    text: formattedText,
                     meta: { source: fileName, type: item.note_type, rawText: rawItemText }
                   })
                 }
-                filesProcessed++
               } catch (parseErr) {
                 console.error('Failed to parse JSON:', parseErr)
                 errorMsg = `Invalid JSON in ${fileName}`
@@ -156,7 +248,6 @@ function AppContent() {
         } catch (err: any) {
           const fileName = getFileName(filePath)
           console.error('Failed to process path:', filePath, err)
-          // Provide specific error messages
           if (err?.message?.includes('permission') || err?.message?.includes('Permission')) {
             errorMsg = `Permission denied: ${fileName}`
           } else if (err?.message?.includes('not found') || err?.message?.includes('No such file')) {
@@ -168,7 +259,6 @@ function AppContent() {
       }
       
       if (importedNotes.length > 0) {
-        // Get fresh state to avoid stale closure issues
         const { notes: currentNotes, addNotes: doAddNotes, setNotes: doSetNotes } = useStore.getState()
         if (currentNotes.length > 0) {
           doAddNotes(importedNotes)
@@ -176,13 +266,9 @@ function AppContent() {
           doSetNotes(importedNotes)
         }
         
-        // Re-enable saves synchronously
         setBulkOperation(false)
-        
-        // Show success message and wait for React to process notes update
         setImporting(true, `${importedNotes.length} notes imported`)
         
-        // Wait a frame to ensure React has rendered the new notes
         await new Promise<void>(resolve => {
           requestAnimationFrame(() => {
             setTimeout(() => {
@@ -207,7 +293,6 @@ function AppContent() {
       console.error('Tauri drop error:', err)
       setBulkOperation(false)
       setImporting(false)
-      // Show meaningful error instead of silently failing
       const msg = err?.message?.includes('permission') 
         ? 'Permission denied - try Import button instead'
         : 'Drop failed - try Import button instead'
@@ -432,6 +517,15 @@ function AppContent() {
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[70] bg-red-100 dark:bg-red-900/90 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-2 rounded-lg shadow-lg text-sm animate-toast-enter">
           {dropError}
         </div>
+      )}
+
+      {/* Import mode selection modal */}
+      {pendingImport && (
+        <ImportModeModal
+          fileCount={pendingFileCount}
+          onSelect={processImportWithMode}
+          onCancel={() => setPendingImport(null)}
+        />
       )}
     </div>
   )

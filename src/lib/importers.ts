@@ -1,45 +1,47 @@
-import type { Note } from './types'
+import type { Note, FormatterMode } from './types'
 import { useStore, setBulkOperation } from '../hooks/useStore'
 import { formatNoteText } from './formatter'
+import { formatNote } from './bilstm-formatter'
 
 // Re-export formatNoteText from the comprehensive formatter
-// This provides the full clinical note formatting pipeline with:
-// - 140+ section headers
-// - Physical Exam formatting
-// - Review of Systems formatting  
-// - Medication list formatting
-// - Lab value formatting
-// - Drug name preservation
-// - And much more...
 export { formatNoteText }
 
-export async function importJSON(file: File): Promise<Note[]> {
+// Format text based on mode - async because model mode is async
+export async function formatTextWithMode(raw: string, mode: FormatterMode): Promise<string> {
+  if (mode === 'none') return raw
+  if (mode === 'regex') return formatNoteText(raw)
+  // Model mode
+  const result = await formatNote(raw, { mode: 'model' })
+  return result.formatted
+}
+
+export async function importJSON(file: File, mode: FormatterMode = 'regex'): Promise<Note[]> {
   const text = await file.text()
   const data = JSON.parse(text)
   
   if (Array.isArray(data)) {
-    return data.map(normalizeNote)
+    return Promise.all(data.map(d => normalizeNote(d, mode)))
   }
   
   if (data.notes && Array.isArray(data.notes)) {
-    return data.notes.map(normalizeNote)
+    return Promise.all(data.notes.map((d: Record<string, unknown>) => normalizeNote(d, mode)))
   }
   
   throw new Error('Invalid JSON format. Expected array of notes or { notes: [...] }')
 }
 
-export async function importJSONL(file: File): Promise<Note[]> {
+export async function importJSONL(file: File, mode: FormatterMode = 'regex'): Promise<Note[]> {
   const text = await file.text()
   const lines = text.trim().split('\n').filter(Boolean)
-  return lines.map(line => normalizeNote(JSON.parse(line)))
+  return Promise.all(lines.map(line => normalizeNote(JSON.parse(line), mode)))
 }
 
-export async function importTXT(files: File[], noteType?: string): Promise<Note[]> {
+export async function importTXT(files: File[], noteType?: string, mode: FormatterMode = 'regex'): Promise<Note[]> {
   const notes: Note[] = []
   
   for (const file of files) {
     const rawText = await file.text()
-    const text = formatNoteText(rawText)  // Auto-format
+    const text = await formatTextWithMode(rawText, mode)
     const id = file.name.replace(/\.txt$/, '')
     notes.push({
       id,
@@ -73,26 +75,27 @@ const PARALLEL_BATCH_SIZE = 20
 // Returns processed notes instead of mutating array (better for parallelization)
 async function processFileWithFolder(
   file: File, 
-  folder: string
+  folder: string,
+  mode: FormatterMode = 'regex'
 ): Promise<Note[]> {
   const results: Note[] = []
   try {
     if (file.name.endsWith('.txt')) {
       const rawText = await file.text()
-      const text = formatNoteText(rawText)
+      const text = await formatTextWithMode(rawText, mode)
       results.push({
         id: file.name.replace(/\.txt$/, ''),
         text,
         meta: { source: file.name, type: folder || undefined, rawText: rawText }
       })
     } else if (file.name.endsWith('.json')) {
-      const imported = await importJSON(file)
+      const imported = await importJSON(file, mode)
       imported.forEach(n => {
         if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
         results.push(n)
       })
     } else if (file.name.endsWith('.jsonl')) {
-      const imported = await importJSONL(file)
+      const imported = await importJSONL(file, mode)
       imported.forEach(n => {
         if (folder && !n.meta?.type) n.meta = { ...n.meta, type: folder }
         results.push(n)
@@ -107,6 +110,7 @@ async function processFileWithFolder(
 // Process files in parallel batches for better performance
 async function processFilesInBatches(
   files: { file: File; folder: string }[],
+  mode: FormatterMode = 'regex',
   onProgress?: (processed: number, total: number, currentFile?: string) => void
 ): Promise<Note[]> {
   const allNotes: Note[] = []
@@ -119,7 +123,7 @@ async function processFilesInBatches(
     
     // Process batch in parallel
     const batchResults = await Promise.all(
-      batch.map(({ file, folder }) => processFileWithFolder(file, folder))
+      batch.map(({ file, folder }) => processFileWithFolder(file, folder, mode))
     )
     
     // Flatten and collect results
@@ -138,7 +142,8 @@ async function processFilesInBatches(
 // Optimized with parallel batch processing for faster imports
 export async function importFiles(
   files: FileList | File[],
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  mode: FormatterMode = 'regex'
 ): Promise<Note[]> {
   const fileArray = Array.from(files)
   const total = fileArray.length
@@ -156,7 +161,7 @@ export async function importFiles(
   }
   
   // Process files in parallel batches
-  const notes = await processFilesInBatches(allFiles, (processed, total, currentFile) => {
+  const notes = await processFilesInBatches(allFiles, mode, (processed, total, currentFile) => {
     onProgress?.({ 
       phase: 'processing', 
       current: processed, 
@@ -173,51 +178,80 @@ export async function importFiles(
 // Optimized with parallel batch processing for faster imports
 export async function importFromDrop(
   dataTransfer: DataTransfer,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  mode: FormatterMode = 'regex'
 ): Promise<Note[]> {
-  const entries: FileSystemEntry[] = []
-  
-  // Get entries from DataTransfer
-  for (let i = 0; i < dataTransfer.items.length; i++) {
-    const entry = dataTransfer.items[i].webkitGetAsEntry()
-    if (entry) entries.push(entry)
-  }
-  
-  if (entries.length === 0) return []
-  
-  // Collect all files first to get total count
   const allFiles: { file: File; folder: string }[] = []
   
-  async function collectFiles(entry: FileSystemEntry, folder: string): Promise<void> {
-    if (entry.isFile) {
-      const file = await new Promise<File>((resolve, reject) => {
-        (entry as FileSystemFileEntry).file(resolve, reject)
-      })
-      allFiles.push({ file, folder })
-    } else if (entry.isDirectory) {
-      const dir = entry as FileSystemDirectoryEntry
-      const reader = dir.createReader()
-      let batch: FileSystemEntry[]
-      
-      do {
-        batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
-          reader.readEntries(resolve, reject)
-        })
-        for (const sub of batch) {
-          await collectFiles(sub, dir.name)
-        }
-      } while (batch.length > 0)
+  // Try to get entries from DataTransfer (supports folders)
+  const entries: FileSystemEntry[] = []
+  if (dataTransfer.items) {
+    for (let i = 0; i < dataTransfer.items.length; i++) {
+      const item = dataTransfer.items[i]
+      // webkitGetAsEntry may not be available in all browsers
+      if (item.webkitGetAsEntry) {
+        const entry = item.webkitGetAsEntry()
+        if (entry) entries.push(entry)
+      }
     }
   }
   
   onProgress?.({ phase: 'scanning', current: 0, total: 0 })
   
-  for (const entry of entries) {
-    await collectFiles(entry, '')
+  // If we have entries (supports folder traversal)
+  if (entries.length > 0) {
+    async function collectFiles(entry: FileSystemEntry, folder: string): Promise<void> {
+      if (entry.isFile) {
+        try {
+          const file = await new Promise<File>((resolve, reject) => {
+            (entry as FileSystemFileEntry).file(resolve, reject)
+          })
+          // Only add supported file types
+          if (file.name.endsWith('.txt') || file.name.endsWith('.json') || file.name.endsWith('.jsonl')) {
+            allFiles.push({ file, folder })
+          }
+        } catch (err) {
+          console.warn('Failed to read file entry:', entry.name, err)
+        }
+      } else if (entry.isDirectory) {
+        const dir = entry as FileSystemDirectoryEntry
+        const reader = dir.createReader()
+        let batch: FileSystemEntry[]
+        
+        do {
+          batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+            reader.readEntries(resolve, reject)
+          })
+          for (const sub of batch) {
+            await collectFiles(sub, dir.name)
+          }
+        } while (batch.length > 0)
+      }
+    }
+    
+    for (const entry of entries) {
+      await collectFiles(entry, '')
+    }
+  } 
+  // Fallback: use dataTransfer.files directly (doesn't support folders but works everywhere)
+  else if (dataTransfer.files && dataTransfer.files.length > 0) {
+    for (let i = 0; i < dataTransfer.files.length; i++) {
+      const file = dataTransfer.files[i]
+      // Only add supported file types
+      if (file.name.endsWith('.txt') || file.name.endsWith('.json') || file.name.endsWith('.jsonl')) {
+        allFiles.push({ file, folder: '' })
+      }
+    }
+  }
+  
+  // If no valid files found, return empty
+  if (allFiles.length === 0) {
+    console.warn('importFromDrop: No valid files found. Supported: .txt, .json, .jsonl')
+    return []
   }
   
   // Process files in parallel batches (much faster than sequential)
-  const notes = await processFilesInBatches(allFiles, (processed, total, currentFile) => {
+  const notes = await processFilesInBatches(allFiles, mode, (processed, total, currentFile) => {
     onProgress?.({ 
       phase: 'processing', 
       current: processed, 
@@ -299,11 +333,12 @@ export async function handleImportWithProgress(
   }
 }
 
-function normalizeNote(raw: Record<string, unknown>): Note {
+async function normalizeNote(raw: Record<string, unknown>, mode: FormatterMode = 'regex'): Promise<Note> {
   const originalText = String(raw.text || '')
+  const formattedText = await formatTextWithMode(originalText, mode)
   return {
     id: String(raw.id || raw.note_id || `note_${Date.now()}_${Math.random().toString(36).slice(2,6)}`),
-    text: formatNoteText(originalText),  // Auto-format
+    text: formattedText,
     meta: {
       type: raw.note_type as string | undefined,
       date: raw.date as string | undefined,
