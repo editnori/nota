@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X, Plus, Trash2, RotateCcw, Cpu, Code, Ban } from 'lucide-react'
 import { loadQuestions, saveQuestions, DEFAULT_QUESTIONS } from '../lib/questions'
 import { ConfirmModal } from './ConfirmModal'
+import { UpdateChecker } from './UpdateChecker'
 import { useStore } from '../hooks/useStore'
 import type { Question, FormatterMode } from '../lib/types'
 
@@ -192,6 +193,11 @@ export function SettingsModal({ onClose }: Props) {
             <p className="text-xs text-amber-800 dark:text-amber-300">
               Changes to questions will take effect after saving. Your existing annotations will keep their original question references.
             </p>
+          </div>
+
+          {/* Updates Section */}
+          <div className="mt-8">
+            <UpdateChecker />
           </div>
         </div>
 
