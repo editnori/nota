@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, RefreshCw, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { Download, RefreshCw, CheckCircle, AlertCircle, Loader2, ExternalLink } from 'lucide-react'
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'up-to-date' | 'error'
 
@@ -17,6 +17,7 @@ interface ReleaseInfo {
   body: string
   assets: ReleaseAsset[]
   publishedAt: string
+  htmlUrl: string
 }
 
 function compareVersions(current: string, latest: string): number {
@@ -43,11 +44,10 @@ function getPlatform(): 'windows' | 'macos' | 'linux' | 'unknown' {
 function findAssetForPlatform(assets: ReleaseAsset[]): ReleaseAsset | null {
   const platform = getPlatform()
   
-  // Priority order for each platform
   const patterns: Record<string, RegExp[]> = {
-    windows: [/\.msi$/i, /\.exe$/i],
-    macos: [/\.dmg$/i, /\.app\.tar\.gz$/i],
-    linux: [/\.AppImage$/i, /\.deb$/i, /\.tar\.gz$/i]
+    windows: [/\.msi$/i, /-setup\.exe$/i],
+    macos: [/_x64\.dmg$/i, /\.dmg$/i],
+    linux: [/\.AppImage$/i, /\.deb$/i]
   }
   
   const platformPatterns = patterns[platform] || []
@@ -94,13 +94,15 @@ export function UpdateChecker() {
           version: latestVersion,
           body: data.body || '',
           assets: data.assets || [],
-          publishedAt: new Date(data.published_at).toLocaleDateString()
+          publishedAt: new Date(data.published_at).toLocaleDateString(),
+          htmlUrl: data.html_url
         })
         setStatus('available')
       } else {
         setStatus('up-to-date')
       }
     } catch (err) {
+      console.error('Update check failed:', err)
       setError(err instanceof Error ? err.message : 'Failed to check')
       setStatus('error')
     }
@@ -111,7 +113,7 @@ export function UpdateChecker() {
     
     const asset = findAssetForPlatform(release.assets)
     if (!asset) {
-      setError('No installer available for your platform')
+      setError('No installer for your platform')
       setStatus('error')
       return
     }
@@ -120,21 +122,22 @@ export function UpdateChecker() {
     setProgress(0)
     
     try {
-      // Check if we're in Tauri
       const isTauri = '__TAURI__' in window
       
       if (isTauri) {
-        // Use Tauri to download and run installer
-        const [{ open }, { tempDir, join }, { writeFile }] = await Promise.all([
+        const [{ Command }, { downloadDir, join }, { writeFile }] = await Promise.all([
           import('@tauri-apps/plugin-shell'),
           import('@tauri-apps/api/path'),
           import('@tauri-apps/plugin-fs')
         ])
         
-        const tempPath = await tempDir()
-        const filePath = await join(tempPath, asset.name)
+        // Save to Downloads folder so user can find it
+        const downloadsPath = await downloadDir()
+        const filePath = await join(downloadsPath, asset.name)
         
-        // Download with fetch and track progress
+        console.log('[Update] Downloading to:', filePath)
+        
+        // Download with progress
         const response = await fetch(asset.browser_download_url)
         if (!response.ok) throw new Error(`Download failed: ${response.status}`)
         
@@ -157,7 +160,7 @@ export function UpdateChecker() {
           }
         }
         
-        // Combine chunks and write file
+        // Combine chunks
         const data = new Uint8Array(loaded)
         let offset = 0
         for (const chunk of chunks) {
@@ -165,31 +168,56 @@ export function UpdateChecker() {
           offset += chunk.length
         }
         
+        // Write file
         await writeFile(filePath, data)
+        console.log('[Update] File written, size:', data.length)
+        
         setStatus('installing')
         
-        // Run the installer
+        // Run the installer based on platform
         const platform = getPlatform()
-        if (platform === 'linux') {
-          // Linux - make executable first
-          const { Command } = await import('@tauri-apps/plugin-shell')
+        console.log('[Update] Platform:', platform, 'File:', asset.name)
+        
+        if (platform === 'windows') {
+          // Windows - run msiexec for .msi or just execute .exe
+          if (asset.name.endsWith('.msi')) {
+            await Command.create('msiexec', ['/i', filePath]).execute()
+          } else {
+            await Command.create('cmd', ['/c', 'start', '', filePath]).execute()
+          }
+        } else if (platform === 'macos') {
+          // macOS - open the dmg
+          await Command.create('open', [filePath]).execute()
+        } else if (platform === 'linux') {
+          // Linux - make executable and run
           await Command.create('chmod', ['+x', filePath]).execute()
+          // Open file manager to show the file instead of auto-running
+          await Command.create('xdg-open', [downloadsPath]).execute()
         }
         
-        await open(filePath)
-        
-        // Close app after starting installer
-        setTimeout(() => window.close(), 1000)
+        // Don't auto-close - let user handle the installer
+        setStatus('idle')
+        setRelease(null)
         
       } else {
-        // Browser fallback - just open download URL
+        // Browser - open download URL directly
         window.open(asset.browser_download_url, '_blank')
         setStatus('available')
       }
     } catch (err) {
-      console.error('Download failed:', err)
+      console.error('[Update] Error:', err)
       setError(err instanceof Error ? err.message : 'Download failed')
       setStatus('error')
+    }
+  }
+
+  async function openReleasePage() {
+    if (!release?.htmlUrl) return
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(release.htmlUrl)
+    } catch {
+      window.open(release.htmlUrl, '_blank')
     }
   }
 
@@ -261,14 +289,23 @@ export function UpdateChecker() {
                 </span>
               )}
             </div>
-            <button
-              onClick={downloadAndInstall}
-              disabled={!asset}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-maple-400 rounded-md transition-colors"
-            >
-              <Download size={12} />
-              {asset ? 'Download & Install' : 'No installer available'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={downloadAndInstall}
+                disabled={!asset}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-maple-400 rounded-md transition-colors"
+              >
+                <Download size={12} />
+                {asset ? 'Download' : 'No installer'}
+              </button>
+              <button
+                onClick={openReleasePage}
+                className="px-2 py-1.5 text-[11px] text-maple-500 hover:text-maple-700 dark:text-maple-400 dark:hover:text-maple-200 border border-maple-300 dark:border-maple-600 rounded-md transition-colors"
+                title="View on GitHub"
+              >
+                <ExternalLink size={12} />
+              </button>
+            </div>
           </div>
         )}
 
@@ -293,22 +330,22 @@ export function UpdateChecker() {
           <div className="flex items-center gap-2">
             <Loader2 size={14} className="text-green-500 animate-spin" />
             <span className="text-xs text-maple-600 dark:text-maple-300">
-              Starting installer...
+              Opening installer...
             </span>
           </div>
         )}
 
         {status === 'error' && (
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle size={14} className="text-amber-500" />
-              <span className="text-xs text-maple-600 dark:text-maple-300">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertCircle size={14} className="text-amber-500 flex-shrink-0" />
+              <span className="text-xs text-maple-600 dark:text-maple-300 truncate">
                 {error || 'Update failed'}
               </span>
             </div>
             <button
               onClick={checkForUpdates}
-              className="text-[10px] text-maple-400 hover:text-maple-600 dark:hover:text-maple-300"
+              className="text-[10px] text-maple-400 hover:text-maple-600 dark:hover:text-maple-300 flex-shrink-0 ml-2"
             >
               Retry
             </button>

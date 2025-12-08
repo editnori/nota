@@ -5,7 +5,9 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:path:default",
     "shell:allow-open",
+    "shell:allow-execute",
     "dialog:default",
     "fs:default",
     "store:default",
@@ -14,7 +16,15 @@
       "allow": [{ "path": "**" }]
     },
     {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "**" }]
+    },
+    {
       "identifier": "fs:allow-read-text-file", 
+      "allow": [{ "path": "**" }]
+    },
+    {
+      "identifier": "fs:allow-read-file",
       "allow": [{ "path": "**" }]
     },
     {
