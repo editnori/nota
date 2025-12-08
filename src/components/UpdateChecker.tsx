@@ -3,7 +3,7 @@ import { Download, RefreshCw, CheckCircle, AlertCircle, Loader2, ExternalLink } 
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'up-to-date' | 'error'
 
-const APP_VERSION = '0.5.75'
+const APP_VERSION = '0.5.76'
 const GITHUB_REPO = 'editnori/nota'
 
 interface ReleaseAsset {
