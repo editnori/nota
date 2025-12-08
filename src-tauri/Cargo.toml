@@ -5,6 +5,10 @@ description = "Clinical note annotation tool"
 authors = ["Dr. Layth M Qassem PharmD MSACI"]
 edition = "2021"
 
+[lib]
+name = "nota_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

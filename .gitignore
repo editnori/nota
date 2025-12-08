@@ -14,3 +14,7 @@ bun.lockb
 .idea/
 .vscode/
 *.swp
+
+# Mobile build outputs
+src-tauri/gen/
+releases/
