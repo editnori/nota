@@ -4,12 +4,8 @@ import { Download, Upload, Trash2, Settings, Check, Share2, ChevronDown, Moon, S
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { SettingsModal } from './SettingsModal'
 import { ConfirmModal } from './ConfirmModal'
-import { loadQuestions } from '../lib/questions'
-
-// Check if running in Tauri desktop app
-function isTauri(): boolean {
-  return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
-}
+import { loadQuestions, saveQuestions } from '../lib/questions'
+import { isTauri } from '../lib/platform'
 
 interface ConfirmState {
   isOpen: boolean
@@ -206,8 +202,28 @@ export function Header() {
           })
         })
         
-        if (result.questions) {
-          localStorage.setItem('annotator_questions', JSON.stringify(result.questions))
+        // Update questions from session if present, and ensure any annotation
+        // question IDs are represented to avoid orphaned labels.
+        const baseQuestions = result.questions || loadQuestions()
+        const seenIds = new Set(baseQuestions.map(q => q.id))
+        const missingIds = new Set<string>()
+        for (const ann of result.annotations) {
+          for (const qid of ann.questions || []) {
+            if (!seenIds.has(qid)) missingIds.add(qid)
+          }
+        }
+        if (result.questions || missingIds.size > 0) {
+          const merged = [...baseQuestions]
+          for (const id of missingIds) {
+            merged.push({
+              id,
+              name: id,
+              color: '#78716c',
+              hotkey: '',
+              hint: 'Imported from session'
+            })
+          }
+          saveQuestions(merged)
         }
         
         // Re-enable saves synchronously
@@ -318,7 +334,7 @@ export function Header() {
   }
 
   return (
-    <header className="h-12 bg-white dark:bg-maple-900 border-b border-maple-200 dark:border-maple-700 flex items-center px-4 gap-4">
+    <header className="h-12 bg-white dark:bg-maple-900 border-b border-maple-200 dark:border-maple-800 flex items-center px-4 gap-4">
       <div className="flex items-center gap-2">
         <img src="/favicon.svg" alt="" className="w-5 h-5" />
         <span className="text-sm font-medium text-maple-800 dark:text-maple-100">Nota</span>

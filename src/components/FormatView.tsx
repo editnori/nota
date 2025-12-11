@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Download, FileText, Loader2, ChevronLeft, ChevronRight, Cpu, Code, Ban, CheckCircle, Minus, Plus } from 'lucide-react'
-import { useStore } from '../hooks/useStore'
+import { Download, FileText, Loader2, ChevronLeft, ChevronRight, Ban, CheckCircle, Minus, Plus } from 'lucide-react'
+import { useStore, setBulkOperation } from '../hooks/useStore'
 import { downloadFile } from '../lib/exporters'
 import { formatNote, isModelReady, initializeModel } from '../lib/bilstm-formatter'
-import type { FormatterMode, FormatExplanation, TokenExplanation, SectionType } from '../lib/types'
+import type { Note, FormatterMode, FormatExplanation, TokenExplanation, SectionType } from '../lib/types'
+import { SECTION_STYLES, DEFAULT_SECTION_STYLE } from '../lib/sections'
+import { FORMATTER_MODE_CONFIG as MODE_CONFIG } from '../lib/formatterModes'
 
 interface ProcessedNote {
   name: string
@@ -14,35 +16,12 @@ interface ProcessedNote {
   error?: string
 }
 
-const MODE_CONFIG = {
-  none: { icon: Ban, label: 'None', desc: 'No formatting' },
-  regex: { icon: Code, label: 'Regex', desc: 'Rule-based (140+ patterns)' },
-  model: { icon: Cpu, label: 'BiLSTM', desc: 'Neural network (97.5% acc)' }
-} as const
-
-// Section styling - matches annotation colors
-const SECTION_STYLES: Partial<Record<SectionType, { bg: string; text: string; border: string }>> = {
-  'HPI': { bg: 'bg-rose-50 dark:bg-rose-900/20', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-300 dark:border-rose-700' },
-  'PMH': { bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-300 dark:border-amber-700' },
-  'PSH': { bg: 'bg-orange-50 dark:bg-orange-900/20', text: 'text-orange-700 dark:text-orange-300', border: 'border-orange-300 dark:border-orange-700' },
-  'MEDS': { bg: 'bg-emerald-50 dark:bg-emerald-900/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-300 dark:border-emerald-700' },
-  'ALLERGIES': { bg: 'bg-red-50 dark:bg-red-900/20', text: 'text-red-700 dark:text-red-300', border: 'border-red-300 dark:border-red-700' },
-  'ROS': { bg: 'bg-blue-50 dark:bg-blue-900/20', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-300 dark:border-blue-700' },
-  'PE': { bg: 'bg-indigo-50 dark:bg-indigo-900/20', text: 'text-indigo-700 dark:text-indigo-300', border: 'border-indigo-300 dark:border-indigo-700' },
-  'VITALS': { bg: 'bg-teal-50 dark:bg-teal-900/20', text: 'text-teal-700 dark:text-teal-300', border: 'border-teal-300 dark:border-teal-700' },
-  'LABS': { bg: 'bg-cyan-50 dark:bg-cyan-900/20', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-300 dark:border-cyan-700' },
-  'IMAGING': { bg: 'bg-purple-50 dark:bg-purple-900/20', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-300 dark:border-purple-700' },
-  'ASSESSMENT': { bg: 'bg-violet-50 dark:bg-violet-900/20', text: 'text-violet-700 dark:text-violet-300', border: 'border-violet-300 dark:border-violet-700' },
-  'PLAN': { bg: 'bg-green-50 dark:bg-green-900/20', text: 'text-green-700 dark:text-green-300', border: 'border-green-300 dark:border-green-700' },
-  'COURSE': { bg: 'bg-pink-50 dark:bg-pink-900/20', text: 'text-pink-700 dark:text-pink-300', border: 'border-pink-300 dark:border-pink-700' },
-  'SOCIAL': { bg: 'bg-yellow-50 dark:bg-yellow-900/20', text: 'text-yellow-700 dark:text-yellow-300', border: 'border-yellow-300 dark:border-yellow-700' },
-  'FAMILY': { bg: 'bg-lime-50 dark:bg-lime-900/20', text: 'text-lime-700 dark:text-lime-300', border: 'border-lime-300 dark:border-lime-700' },
-}
-
-const DEFAULT_SECTION_STYLE = { bg: 'bg-maple-100 dark:bg-maple-700', text: 'text-maple-600 dark:text-maple-300', border: 'border-maple-300 dark:border-maple-600' }
-
 export function FormatView() {
-  const { notes, formatterMode, setFormatterMode, fontSize, setFontSize } = useStore()
+  const notes = useStore(s => s.notes)
+  const formatterMode = useStore(s => s.formatterMode)
+  const setFormatterMode = useStore(s => s.setFormatterMode)
+  const fontSize = useStore(s => s.fontSize)
+  const setFontSize = useStore(s => s.setFontSize)
   const [processed, setProcessed] = useState<ProcessedNote[]>([])
   const [processing, setProcessing] = useState(false)
   const [previewIndex, setPreviewIndex] = useState(0)
@@ -130,6 +109,62 @@ export function FormatView() {
     }
   }
 
+  async function sendToAnnotate() {
+    const validProcessed = processed.filter(p => !p.error)
+    if (validProcessed.length === 0) return
+
+    const idCounts = new Map<string, number>()
+    const formattedNotes: Note[] = validProcessed.map(p => {
+      const baseId = p.name.replace(/\.txt$/i, '')
+      const count = idCounts.get(baseId) ?? 0
+      idCounts.set(baseId, count + 1)
+      const id = count === 0 ? baseId : `${baseId}_${count + 1}`
+      return {
+        id,
+        text: p.formatted,
+        meta: { source: p.name, rawText: p.raw }
+      }
+    })
+
+    setBulkOperation(true)
+    const state = useStore.getState()
+    const hasExisting = state.notes.length > 0 || state.annotations.length > 0
+
+    // If there is already a session, ask whether to append or replace.
+    let replaceExisting = false
+    if (hasExisting) {
+      const add = window.confirm(
+        'You already have notes loaded.\n\nOK = Add formatted notes to this session.\nCancel = Replace notes (clears existing annotations).'
+      )
+      replaceExisting = !add
+    }
+
+    if (replaceExisting) {
+      useStore.setState({ isTransitioning: true })
+      requestAnimationFrame(() => {
+        useStore.setState({
+          notes: formattedNotes,
+          annotations: [],
+          annotationsByNote: new Map(),
+          annotationsById: new Map(),
+          currentNoteIndex: 0,
+          selectedQuestion: null,
+          undoStack: [],
+          filteredNoteIds: null,
+          highlightedAnnotation: null,
+          isTransitioning: false
+        })
+      })
+    } else {
+      const fresh = useStore.getState()
+      if (fresh.notes.length > 0) fresh.addNotes(formattedNotes)
+      else fresh.setNotes(formattedNotes)
+    }
+
+    useStore.getState().setMode('annotate')
+    setBulkOperation(false)
+  }
+
   // Toggle section selection and scroll to it
   function toggleSection(section: SectionType) {
     if (!formattedScrollRef.current || !current?.explanation) return
@@ -167,7 +202,7 @@ export function FormatView() {
   return (
     <div className="flex-1 flex flex-col">
       {/* Header - matches DocumentView style */}
-      <div className="h-10 bg-white dark:bg-maple-800 border-b border-maple-200 dark:border-maple-700 flex items-center px-3 gap-2">
+      <div className="h-10 bg-white dark:bg-maple-800 border-b border-maple-200 dark:border-maple-800 flex items-center px-3 gap-2">
         {/* Mode Selector - pill style */}
         <div className="flex items-center bg-maple-100 dark:bg-maple-700 rounded-full shrink-0">
           {(Object.keys(MODE_CONFIG) as FormatterMode[]).map(mode => {
@@ -225,28 +260,23 @@ export function FormatView() {
 
         <input ref={fileInputRef} type="file" multiple accept=".txt" onChange={e => handleFileSelect(e.target.files)} className="hidden" />
 
-        {hasAnnotatorNotes && (
+        {/* Keep load/open actions in the empty state; show here only while previewing */}
+        {processed.length > 0 && (
           <button
-            onClick={loadFromAnnotator}
-            disabled={processing || isFromAnnotator}
-            className={`flex items-center gap-1.5 px-3 py-1 text-[10px] rounded-full transition-colors ${
-              isFromAnnotator
-                ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20'
-                : 'text-maple-600 dark:text-maple-300 bg-maple-100 dark:bg-maple-700 hover:bg-maple-200 dark:hover:bg-maple-600'
-            }`}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={processing}
+            className="flex items-center gap-1.5 px-3 py-1 text-[10px] text-maple-600 dark:text-maple-300 bg-maple-100 dark:bg-maple-700 rounded-full hover:bg-maple-200 dark:hover:bg-maple-600 disabled:opacity-50"
           >
-            {isFromAnnotator ? `Loaded (${notes.length})` : `Load Notes (${notes.length})`}
+            {processing ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
+            {processing ? 'Processing...' : 'Open Files'}
           </button>
         )}
 
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={processing}
-          className="flex items-center gap-1.5 px-3 py-1 text-[10px] text-maple-600 dark:text-maple-300 bg-maple-100 dark:bg-maple-700 rounded-full hover:bg-maple-200 dark:hover:bg-maple-600 disabled:opacity-50"
-        >
-          {processing ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
-          {processing ? 'Processing...' : 'Open Files'}
-        </button>
+        {processed.length > 0 && !isFromAnnotator && (
+          <button onClick={sendToAnnotate} disabled={processing} className="btn btn-xs btn-secondary">
+            Send to Annotate
+          </button>
+        )}
 
         {processed.length > 0 && !isFromAnnotator && (
           <button onClick={downloadAll} className="flex items-center gap-1.5 px-3 py-1 text-[10px] text-white bg-maple-700 dark:bg-maple-600 rounded-full hover:bg-maple-600 dark:hover:bg-maple-500">
@@ -269,11 +299,12 @@ export function FormatView() {
             noteCount={notes.length} 
             mode={formatterMode}
             onLoad={loadFromAnnotator}
+            onOpen={() => fileInputRef.current?.click()}
           />
         ) : (
           <div className="h-full flex flex-col">
             {/* Navigation Bar */}
-            <div className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-maple-800 border-b border-maple-200 dark:border-maple-700">
+            <div className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-maple-800 border-b border-maple-200 dark:border-maple-800">
               {/* Nav Controls */}
               <div className="flex items-center bg-maple-100 dark:bg-maple-700 rounded-full shrink-0">
                 <button 
@@ -346,8 +377,8 @@ export function FormatView() {
             <div className="flex-1 flex min-h-0 p-4 gap-4 overflow-hidden">
               {/* Original Panel */}
               <div className="flex-1 flex flex-col min-w-0">
-                <div className="bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-700 rounded-xl shadow-sm flex flex-col h-full overflow-hidden">
-                  <div className="px-4 py-2 border-b border-maple-100 dark:border-maple-700">
+                <div className="bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-800 rounded-xl shadow-sm flex flex-col h-full overflow-hidden">
+                  <div className="px-4 py-2 border-b border-maple-100 dark:border-maple-800">
                     <span className="text-[10px] uppercase tracking-wider text-maple-500 dark:text-maple-400 font-medium">Original</span>
                   </div>
                   <div className="flex-1 overflow-auto p-4">
@@ -411,7 +442,19 @@ export function FormatView() {
 
 // --- Sub-components ---
 
-function EmptyState({ hasNotes, noteCount, mode, onLoad }: { hasNotes: boolean; noteCount: number; mode: FormatterMode; onLoad: () => void }) {
+function EmptyState({
+  hasNotes,
+  noteCount,
+  mode,
+  onLoad,
+  onOpen
+}: {
+  hasNotes: boolean
+  noteCount: number
+  mode: FormatterMode
+  onLoad: () => void
+  onOpen: () => void
+}) {
   return (
     <div className="h-full flex items-center justify-center">
       <div className="text-center max-w-sm">
@@ -421,15 +464,34 @@ function EmptyState({ hasNotes, noteCount, mode, onLoad }: { hasNotes: boolean; 
         {hasNotes ? (
           <>
             <p className="text-sm text-maple-700 dark:text-maple-200 mb-1">{noteCount} notes ready</p>
-            <p className="text-xs text-maple-500 dark:text-maple-400 mb-4">Compare original vs {MODE_CONFIG[mode].label} formatted</p>
-            <button onClick={onLoad} className="px-4 py-2 text-xs text-white bg-maple-700 dark:bg-maple-600 rounded-full hover:bg-maple-600">
-              Load Notes
-            </button>
+            <p className="text-xs text-maple-500 dark:text-maple-400 mb-4">
+              Compare original vs {MODE_CONFIG[mode].label} formatted
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              <button
+                onClick={onLoad}
+                className="px-4 py-2 text-xs text-white bg-maple-700 dark:bg-maple-600 rounded-full hover:bg-maple-600"
+              >
+                Load Notes
+              </button>
+              <button
+                onClick={onOpen}
+                className="px-4 py-2 text-xs text-maple-700 dark:text-maple-200 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-800 rounded-full hover:bg-maple-50 dark:hover:bg-maple-700"
+              >
+                Open Files
+              </button>
+            </div>
           </>
         ) : (
           <>
             <p className="text-sm text-maple-600 dark:text-maple-300 mb-1">No notes loaded</p>
-            <p className="text-xs text-maple-400 dark:text-maple-500">Drop files or click "Open Files"</p>
+            <p className="text-xs text-maple-400 dark:text-maple-500 mb-4">Open .txt files to format</p>
+            <button
+              onClick={onOpen}
+              className="px-4 py-2 text-xs text-white bg-maple-700 dark:bg-maple-600 rounded-full hover:bg-maple-600"
+            >
+              Open Files
+            </button>
           </>
         )}
       </div>
@@ -517,10 +579,13 @@ function Token({ item, isInSelectedSection, isNewSection }: {
 
   // Tooltip
   const tooltipParts: string[] = []
-  if (isBreak) tooltipParts.push(`${item.decision === 'newline' ? '↵ Newline' : '¶ Paragraph'} (${Math.round(item.confidence * 100)}%)`)
+  if (isBreak) {
+    const label = item.decision === 'newline' ? 'Newline' : 'Paragraph break'
+    tooltipParts.push(`${label} (${Math.round(item.confidence * 100)}%)`)
+  }
   if (item.lineType !== 'NARRATIVE' && item.isLineStart) tooltipParts.push(`Type: ${item.lineType}`)
   if (item.section !== 'NONE') tooltipParts.push(`Section: ${item.section}`)
-  if (item.ambiguous) tooltipParts.push('⚠ Ambiguous')
+  if (item.ambiguous) tooltipParts.push('Ambiguous')
   
   return (
     <span 
@@ -528,8 +593,6 @@ function Token({ item, isInSelectedSection, isNewSection }: {
       title={tooltipParts.length ? tooltipParts.join('\n') : undefined}
     >
       {item.token}
-      {item.decision === 'newline' && <span className="text-emerald-500 dark:text-emerald-400 text-[9px] ml-0.5 opacity-70">↵</span>}
-      {item.decision === 'blank_line' && <span className="text-sky-500 dark:text-sky-400 text-[9px] ml-0.5 opacity-70">¶</span>}
     </span>
   )
 }

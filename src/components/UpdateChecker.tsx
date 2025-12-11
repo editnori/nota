@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Download, RefreshCw, CheckCircle, AlertCircle, Loader2, ExternalLink } from 'lucide-react'
+import { isTauri } from '../lib/platform'
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'up-to-date' | 'error'
 
-const APP_VERSION = '0.5.76'
+const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.5.77'
 const GITHUB_REPO = 'editnori/nota'
 
 interface ReleaseAsset {
@@ -21,8 +22,12 @@ interface ReleaseInfo {
 }
 
 function compareVersions(current: string, latest: string): number {
-  const c = current.replace(/^v/, '').split('.').map(Number)
-  const l = latest.replace(/^v/, '').split('.').map(Number)
+  const parse = (p: string) => {
+    const n = parseInt(p, 10)
+    return Number.isFinite(n) ? n : 0
+  }
+  const c = current.replace(/^v/, '').split('.').map(parse)
+  const l = latest.replace(/^v/, '').split('.').map(parse)
   
   for (let i = 0; i < Math.max(c.length, l.length); i++) {
     const cv = c[i] || 0
@@ -122,9 +127,9 @@ export function UpdateChecker() {
     setProgress(0)
     
     try {
-      const isTauri = '__TAURI__' in window
+      const inTauri = isTauri()
       
-      if (isTauri) {
+      if (inTauri) {
         const [{ Command }, { downloadDir, join }, { writeFile }] = await Promise.all([
           import('@tauri-apps/plugin-shell'),
           import('@tauri-apps/api/path'),

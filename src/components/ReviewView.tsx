@@ -3,7 +3,7 @@ import { useStore } from '../hooks/useStore'
 import { useDebounce } from '../hooks/useDebounce'
 import { loadQuestions, getQuestion } from '../lib/questions'
 import { ConfirmModal } from './ConfirmModal'
-import { X, ExternalLink, Search, Wand2, Loader2, MessageSquare } from 'lucide-react'
+import { X, ExternalLink, Search, Wand2, Loader2, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const PAGE_SIZE = 50
 
@@ -26,6 +26,7 @@ export function ReviewView() {
   const [page, setPage] = useState(0)
   const [highlightedCard, setHighlightedCard] = useState<string | null>(null)
   const [bulkTagConfirm, setBulkTagConfirm] = useState<{ questionId: string; name: string } | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const questions = loadQuestions()
 
   // Debounce searches
@@ -104,9 +105,10 @@ export function ReviewView() {
       let idx = 0
       let matchCount = 0
       const maxMatchesPerNote = 10
+      const noteLower = note.text.toLowerCase()
       
       while (idx < note.text.length && matchCount < maxMatchesPerNote) {
-        const foundIdx = note.text.toLowerCase().indexOf(lower, idx)
+        const foundIdx = noteLower.indexOf(lower, idx)
         if (foundIdx === -1) break
         
         const posKey = `${note.id}:${foundIdx}:${foundIdx + debouncedBulkSearch.length}`
@@ -218,15 +220,29 @@ export function ReviewView() {
   return (
     <div className="flex-1 flex">
       {/* Sidebar */}
-      <aside className="w-48 bg-white dark:bg-maple-800 border-r border-maple-200 dark:border-maple-700 flex flex-col">
-        <div className="p-2 space-y-2 border-b border-maple-100 dark:border-maple-700">
+      <aside
+        className={`relative bg-white dark:bg-maple-900 border-r border-maple-200 dark:border-maple-900 flex flex-col transition-all duration-200 ${
+          sidebarCollapsed ? 'w-10' : 'w-52'
+        }`}
+      >
+        <button
+          onClick={() => setSidebarCollapsed(c => !c)}
+          className="absolute top-1/2 -right-3 -translate-y-1/2 p-1.5 rounded-full bg-white dark:bg-maple-900 border border-maple-200 dark:border-maple-900 shadow-sm hover:bg-maple-50 dark:hover:bg-maple-800 text-maple-500 dark:text-maple-400 z-10"
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
+
+        {!sidebarCollapsed && (
+          <>
+            <div className="p-2 space-y-2 border-b border-maple-100 dark:border-maple-800">
           <div className="relative">
             <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-maple-400" />
             <input
               value={searchText}
               onChange={e => { setSearchText(e.target.value); setPage(0) }}
               placeholder="Search..."
-              className="w-full pl-7 pr-7 py-1 text-[10px] bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded focus:outline-none dark:text-maple-200"
+              className="w-full pl-7 pr-7 py-1 text-[10px] bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded-lg focus:outline-none dark:text-maple-200"
             />
             {isSearching && (
               <Loader2 size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-maple-400 animate-spin" />
@@ -234,7 +250,7 @@ export function ReviewView() {
           </div>
           
           {/* Source filter */}
-          <div className="flex text-[9px] border border-maple-200 dark:border-maple-600 rounded overflow-hidden">
+          <div className="flex text-[9px] border border-maple-200 dark:border-maple-600 rounded-lg overflow-hidden">
             {(['all', 'manual', 'auto'] as const).map(f => (
               <button
                 key={f}
@@ -247,7 +263,7 @@ export function ReviewView() {
           </div>
 
           {/* Comment filter */}
-          <div className="flex text-[9px] border border-maple-200 dark:border-maple-600 rounded overflow-hidden">
+          <div className="flex text-[9px] border border-maple-200 dark:border-maple-600 rounded-lg overflow-hidden">
             <button
               onClick={() => { setCommentFilter('all'); setPage(0) }}
               className={`flex-1 py-1 ${commentFilter === 'all' ? 'bg-maple-800 dark:bg-maple-600 text-white' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'}`}
@@ -272,11 +288,13 @@ export function ReviewView() {
           </div>
         </div>
         
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
           <button
             onClick={() => { setSelectedQ(null); setPage(0) }}
-            className={`w-full text-left px-2 py-2 text-[11px] flex justify-between ${
-              !selectedQ ? 'bg-maple-100 dark:bg-maple-700 font-medium' : 'hover:bg-maple-50 dark:hover:bg-maple-700'
+            className={`w-full text-left px-2 py-2 text-[11px] flex justify-between rounded-lg transition-colors ${
+              !selectedQ
+                ? 'bg-maple-100 dark:bg-maple-700 font-medium ring-1 ring-maple-300 dark:ring-maple-600'
+                : 'hover:bg-maple-50 dark:hover:bg-maple-800'
             }`}
           >
             <span className="dark:text-maple-200">All</span>
@@ -289,8 +307,10 @@ export function ReviewView() {
               <button
                 key={q.id}
                 onClick={() => { setSelectedQ(q.id); setPage(0) }}
-                className={`w-full text-left px-2 py-1.5 flex items-center gap-2 ${
-                  selectedQ === q.id ? 'bg-maple-50 dark:bg-maple-700' : 'hover:bg-maple-50 dark:hover:bg-maple-700'
+                className={`w-full text-left px-2 py-1.5 flex items-center gap-2 rounded-lg transition-colors ${
+                  selectedQ === q.id
+                    ? 'bg-maple-100 dark:bg-maple-700 ring-1 ring-maple-300 dark:ring-maple-600'
+                    : 'hover:bg-maple-50 dark:hover:bg-maple-800'
                 }`}
               >
                 <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] text-white" style={{ backgroundColor: q.color }}>
@@ -307,10 +327,10 @@ export function ReviewView() {
           })}
         </div>
 
-        <div className="p-2 border-t border-maple-100 dark:border-maple-700 space-y-1">
+        <div className="p-2 border-t border-maple-100 dark:border-maple-800 space-y-1">
           <button
             onClick={() => { setShowBulkTag(!showBulkTag); setExcludedMatches(new Set()); setBulkSearch('') }}
-            className={`w-full flex items-center gap-1.5 px-2 py-1 text-[9px] rounded ${
+            className={`w-full flex items-center gap-1.5 px-2 py-1 text-[9px] rounded-lg ${
               showBulkTag ? 'bg-maple-200 dark:bg-maple-600 text-maple-700 dark:text-maple-200' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'
             }`}
           >
@@ -321,13 +341,15 @@ export function ReviewView() {
             {manualCount} manual + {suggestedCount} auto
           </div>
         </div>
+        </>
+        )}
       </aside>
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto p-3 bg-maple-50 dark:bg-maple-900">
         {/* Bulk tag panel */}
         {showBulkTag && (
-          <div className="max-w-2xl mx-auto mb-3 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-700 rounded-lg p-3">
+          <div className="max-w-2xl mx-auto mb-3 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-800 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-2">
               <Wand2 size={14} className="text-maple-600 dark:text-maple-300" />
               <span className="text-[11px] font-medium text-maple-700 dark:text-maple-200">Search & Tag</span>
@@ -425,7 +447,7 @@ export function ReviewView() {
             <button
               onClick={() => setPage(p => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-700 disabled:opacity-30"
+              className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-800 disabled:opacity-30"
             >
               Prev
             </button>
@@ -435,7 +457,7 @@ export function ReviewView() {
             <button
               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
-              className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-700 disabled:opacity-30"
+              className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-800 disabled:opacity-30"
             >
               Next
             </button>
@@ -474,7 +496,7 @@ export function ReviewView() {
                   id={`ann-card-${ann.id}`}
                   key={ann.id} 
                   className={`bg-white dark:bg-maple-800 border rounded-lg p-3 ${
-                    isSuggested ? 'border-maple-300 dark:border-maple-600 border-dashed' : 'border-maple-200 dark:border-maple-700'
+                    isSuggested ? 'border-maple-300 dark:border-maple-600 border-dashed' : 'border-maple-200 dark:border-maple-800'
                   } ${isHighlighted ? 'animate-ring' : ''}`}
                 >
                   <div className="flex items-start gap-2 mb-2">

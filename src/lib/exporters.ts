@@ -1,5 +1,6 @@
 import type { Note, Annotation, Question } from './types'
 import { loadQuestions } from './questions'
+import { isTauri } from './platform'
 
 interface ExportData {
   exportedAt: string
@@ -128,25 +129,8 @@ export function importSession(jsonString: string): { notes: Note[], annotations:
   throw new Error('Invalid session format')
 }
 
-// Check if running in Tauri desktop app
-async function isTauri(): Promise<boolean> {
-  try {
-    // Tauri 2.x detection
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      return true
-    }
-    // Fallback check
-    if (typeof window !== 'undefined' && '__TAURI__' in window) {
-      return true
-    }
-    return false
-  } catch {
-    return false
-  }
-}
-
 export async function downloadFile(content: string, filename: string, type: string) {
-  const inTauri = await isTauri()
+  const inTauri = isTauri()
   
   if (inTauri) {
     try {

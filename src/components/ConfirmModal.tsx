@@ -78,7 +78,7 @@ export function ConfirmModal({
           </div>
         </div>
         
-        <div className="flex items-center justify-end gap-3 px-6 py-4 bg-maple-50 dark:bg-maple-900/50 border-t border-maple-200 dark:border-maple-700">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 bg-maple-50 dark:bg-maple-900/50 border-t border-maple-200 dark:border-maple-800">
           <button
             onClick={onCancel}
             className="px-4 py-2 text-sm text-maple-600 dark:text-maple-300 hover:bg-maple-100 dark:hover:bg-maple-700 rounded-lg"

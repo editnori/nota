@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 
 // Provide minimal browser globals before importing the store
 const localStorageMock = {
@@ -68,9 +68,14 @@ function resetStore() {
 
 describe('useStore core behaviors', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
     resetStore()
     localStorageMock.clear()
-    vi.restoreAllMocks()
+    vi.clearAllMocks()
+  })
+  
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('adds an annotation in a batched flush and keeps indexes in sync', async () => {
@@ -88,7 +93,7 @@ describe('useStore core behaviors', () => {
     })
 
     // Let the async batch flush run
-    await new Promise((resolve) => setTimeout(resolve, 30))
+    await vi.advanceTimersByTimeAsync(50)
 
     const state = useStore.getState()
     expect(state.annotations).toHaveLength(1)
@@ -162,7 +167,7 @@ describe('useStore core behaviors', () => {
     })
 
     useStore.getState().clearSuggestedAnnotations()
-    await new Promise((resolve) => setTimeout(resolve, 30))
+    await vi.advanceTimersByTimeAsync(50)
 
     const state = useStore.getState()
     expect(state.annotations).toHaveLength(1)

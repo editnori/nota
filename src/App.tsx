@@ -9,16 +9,12 @@ import { FormatView } from './components/FormatView'
 import { QuestionPicker } from './components/QuestionPicker'
 import { AnnotationList } from './components/AnnotationList'
 import { ImportModeModal } from './components/ImportModeModal'
-import { importFromDrop, importFiles, handleImportWithProgress, formatTextWithMode } from './lib/importers'
+import { importFiles, handleImportWithProgress, formatTextWithMode } from './lib/importers'
 import { setBulkOperation } from './hooks/useStore'
-import { Loader2, Upload } from 'lucide-react'
+import { Loader2, Upload, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { Note, FormatterMode } from './lib/types'
 import { ErrorBoundary } from './components/ErrorBoundary'
-
-// Check if running in Tauri desktop app
-function isTauri(): boolean {
-  return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
-}
+import { isTauri } from './lib/platform'
 
 function AppContent() {
   const { 
@@ -30,6 +26,7 @@ function AppContent() {
   const [dropError, setDropError] = useState<string | null>(null)
   const [pendingFileCount, setPendingFileCount] = useState(0)
   const dragCountRef = useRef(0)
+  const [rightCollapsed, setRightCollapsed] = useState(false)
 
   const currentNote = notes[currentNoteIndex]
   
@@ -126,19 +123,6 @@ function AppContent() {
       // Files were already extracted from DataTransfer
       await handleImportWithProgress(() => 
         importFiles(pendingImport.data, (progress) => {
-          if (progress.phase === 'scanning') {
-            setImporting(true, 'Scanning...')
-          } else if (progress.phase === 'processing') {
-            setImporting(true, `${progress.current} / ${progress.total}`)
-          } else if (progress.phase === 'done') {
-            setImporting(true, `${progress.current} notes`)
-          }
-        }, mode)
-      )
-    } else if (pendingImport.type === 'drop') {
-      // Legacy: DataTransfer (might be stale, but kept for compatibility)
-      await handleImportWithProgress(() => 
-        importFromDrop(pendingImport.data, (progress) => {
           if (progress.phase === 'scanning') {
             setImporting(true, 'Scanning...')
           } else if (progress.phase === 'processing') {
@@ -402,7 +386,7 @@ function AppContent() {
       window.removeEventListener('dragleave', onDragLeave)
       window.removeEventListener('drop', onDrop)
     }
-  }, [handleDropImport, mode])
+  }, [handleDropImport])
   
   const handleTagSelection = useCallback((questionId: string) => {
     const sel = window.getSelection()
@@ -475,11 +459,24 @@ function AppContent() {
           <>
             <NotesList />
             <DocumentView onCreateAnnotation={handleCreateAnnotation} />
-            <aside className="w-64 bg-white dark:bg-maple-800 border-l border-maple-200 dark:border-maple-700 flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto">
-                <QuestionPicker onSelect={handleTagSelection} />
-                {currentNote && <AnnotationList noteId={currentNote.id} />}
-              </div>
+            <aside
+              className={`relative bg-white dark:bg-maple-900 border-l border-maple-200 dark:border-maple-900 flex flex-col transition-all duration-200 ${
+                rightCollapsed ? 'w-10' : 'w-64'
+              }`}
+            >
+              <button
+                onClick={() => setRightCollapsed(c => !c)}
+                className="absolute top-1/2 -left-3 -translate-y-1/2 p-1.5 rounded-full bg-white dark:bg-maple-900 border border-maple-200 dark:border-maple-900 shadow-sm hover:bg-maple-50 dark:hover:bg-maple-800 text-maple-500 dark:text-maple-400 z-10"
+                title={rightCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                {rightCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {!rightCollapsed && (
+                <div className="flex-1 overflow-y-auto">
+                  <QuestionPicker onSelect={handleTagSelection} />
+                  {currentNote && <AnnotationList noteId={currentNote.id} />}
+                </div>
+              )}
             </aside>
           </>
         )}

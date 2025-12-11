@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback, memo, useEffect } from 'react'
+import { useState, useMemo, useCallback, memo, useEffect, useRef } from 'react'
 import { useStore } from '../hooks/useStore'
 import { useDebounce } from '../hooks/useDebounce'
-import { Search, ChevronUp, ChevronDown, Filter, X, Loader2, Zap } from 'lucide-react'
+import { Search, ChevronUp, ChevronDown, Filter, X, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { SmartFilter } from './SmartFilter'
 import type { Note } from '../lib/types'
 
@@ -26,8 +26,10 @@ const NoteItem = memo(function NoteItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-2 py-2 border-b border-maple-100 dark:border-maple-700 ${
-        isSelected ? 'bg-maple-100 dark:bg-maple-700' : 'hover:bg-maple-50 dark:hover:bg-maple-700/50'
+      className={`w-full text-left px-2 py-2 rounded-lg transition-colors ${
+        isSelected
+          ? 'bg-maple-100 dark:bg-maple-700 ring-1 ring-maple-300 dark:ring-maple-600'
+          : 'hover:bg-maple-50 dark:hover:bg-maple-800'
       }`}
     >
       <div className="flex items-center gap-1.5 mb-0.5">
@@ -78,6 +80,7 @@ export function NotesList() {
   const [showTypeFilter, setShowTypeFilter] = useState(false)
   const [showSmartFilter, setShowSmartFilter] = useState(false)
   const [page, setPage] = useState(0)
+  const [collapsed, setCollapsed] = useState(false)
 
   // Debounce search for performance with large datasets
   const debouncedSearch = useDebounce(search, 200)
@@ -127,33 +130,69 @@ export function NotesList() {
     return { noteTypes: Array.from(types).sort(), typeCounts: counts }
   }, [notes])
 
-  // Build search index for faster lookups
-  // Threshold lowered to 100 for better search performance at moderate scale
-  const searchIndex = useMemo(() => {
-    if (notes.length < 100) return null
-    
-    const index = new Map<string, Set<number>>()
-    
-    notes.forEach((note, idx) => {
-      // Index note ID words
-      const idWords = note.id.toLowerCase().split(/\W+/)
-      for (const word of idWords) {
-        if (word.length < 2) continue
-        if (!index.has(word)) index.set(word, new Set())
-        index.get(word)!.add(idx)
+  // Build search index for faster lookups.
+  // For very large datasets, build incrementally to avoid UI freezes.
+  const [searchIndex, setSearchIndex] = useState<Map<string, Set<number>> | null>(null)
+  const buildTaskRef = useRef(0)
+
+  useEffect(() => {
+    if (notes.length < 100) {
+      setSearchIndex(null)
+      return
+    }
+
+    const taskId = ++buildTaskRef.current
+    setSearchIndex(null)
+
+    const buildIndex = async () => {
+      const index = new Map<string, Set<number>>()
+      const total = notes.length
+      const batchSize = total > 5000 ? 200 : total
+
+      for (let start = 0; start < total; start += batchSize) {
+        if (taskId !== buildTaskRef.current) return
+        const slice = notes.slice(start, start + batchSize)
+
+        slice.forEach((note, localIdx) => {
+          const idx = start + localIdx
+
+          // Index note ID words
+          const idWords = note.id.toLowerCase().split(/\W+/)
+          for (const word of idWords) {
+            if (word.length < 2) continue
+            let setForWord = index.get(word)
+            if (!setForWord) {
+              setForWord = new Set()
+              index.set(word, setForWord)
+            }
+            setForWord.add(idx)
+          }
+
+          // Index first 500 chars of text (for performance)
+          const textSample = note.text.slice(0, 500).toLowerCase()
+          const textWords = textSample.split(/\W+/)
+          for (const word of textWords) {
+            if (word.length < 3) continue
+            let setForWord = index.get(word)
+            if (!setForWord) {
+              setForWord = new Set()
+              index.set(word, setForWord)
+            }
+            setForWord.add(idx)
+          }
+        })
+
+        if (total > 5000) {
+          await new Promise(resolve => setTimeout(resolve, 0))
+        }
       }
-      
-      // Index first 500 chars of text (for performance)
-      const textSample = note.text.slice(0, 500).toLowerCase()
-      const textWords = textSample.split(/\W+/)
-      for (const word of textWords) {
-        if (word.length < 3) continue
-        if (!index.has(word)) index.set(word, new Set())
-        index.get(word)!.add(idx)
+
+      if (taskId === buildTaskRef.current) {
+        setSearchIndex(index)
       }
-    })
-    
-    return index
+    }
+
+    buildIndex()
   }, [notes])
 
   // Filter notes - memoized for performance
@@ -316,20 +355,33 @@ export function NotesList() {
   }
 
   return (
-    <aside className="w-52 bg-white dark:bg-maple-800 border-r border-maple-200 dark:border-maple-700 flex flex-col">
-      <div className="p-2 space-y-2 border-b border-maple-100 dark:border-maple-700">
-        {/* Smart Filter button */}
-        <button
-          onClick={() => setShowSmartFilter(true)}
-          className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] rounded border transition-all ${
-            filteredNoteIds && filteredNoteIds.size > 0
-              ? 'bg-maple-100 dark:bg-maple-700 border-maple-400 dark:border-maple-500 text-maple-700 dark:text-maple-200 font-medium'
-              : 'border-maple-200 dark:border-maple-600 text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'
-          }`}
-        >
-          <Zap size={12} />
-          {filteredNoteIds && filteredNoteIds.size > 0 ? `Filtered: ${filteredNoteIds.size}` : 'Smart Filter'}
-        </button>
+    <aside
+      className={`relative bg-white dark:bg-maple-900 border-r border-maple-200 dark:border-maple-900 flex flex-col transition-all duration-200 ${
+        collapsed ? 'w-10' : 'w-52'
+      }`}
+    >
+      <button
+        onClick={() => setCollapsed(c => !c)}
+        className="absolute top-1/2 -right-3 -translate-y-1/2 p-1.5 rounded-full bg-white dark:bg-maple-900 border border-maple-200 dark:border-maple-900 shadow-sm hover:bg-maple-50 dark:hover:bg-maple-800 text-maple-500 dark:text-maple-400 z-10"
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+      </button>
+
+      {!collapsed && (
+        <>
+          <div className="p-2 space-y-2 border-b border-maple-100 dark:border-maple-800">
+            {/* Smart Filter button */}
+            <button
+              onClick={() => setShowSmartFilter(true)}
+              className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] rounded-lg border transition-all ${
+                filteredNoteIds && filteredNoteIds.size > 0
+                  ? 'bg-maple-100 dark:bg-maple-700 border-maple-400 dark:border-maple-500 text-maple-700 dark:text-maple-200 font-medium'
+                  : 'border-maple-200 dark:border-maple-600 text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'
+              }`}
+            >
+              {filteredNoteIds && filteredNoteIds.size > 0 ? `Filtered: ${filteredNoteIds.size}` : 'Smart Filter'}
+            </button>
 
         {/* Active smart filter indicator */}
         {filteredNoteIds && filteredNoteIds.size > 0 && (
@@ -355,7 +407,7 @@ export function NotesList() {
         </div>
         
         <div className="flex gap-1">
-          <div className="flex flex-1 text-[9px] border border-maple-200 dark:border-maple-600 rounded overflow-hidden">
+          <div className="flex flex-1 text-[9px] border border-maple-200 dark:border-maple-600 rounded-lg overflow-hidden">
             {(['all', 'done', 'todo'] as const).map(f => (
               <button
                 key={f}
@@ -370,7 +422,7 @@ export function NotesList() {
           {noteTypes.length > 0 && (
             <button
               onClick={() => setShowTypeFilter(!showTypeFilter)}
-              className={`p-1 rounded border ${
+              className={`p-1 rounded-lg border ${
                 typeFilter || showTypeFilter
                   ? 'bg-maple-100 dark:bg-maple-700 border-maple-300 dark:border-maple-600 text-maple-600 dark:text-maple-300'
                   : 'border-maple-200 dark:border-maple-600 text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'
@@ -421,83 +473,85 @@ export function NotesList() {
             </button>
           </div>
         )}
-      </div>
-
-      {/* Pagination header */}
-      {filtered.length > PAGE_SIZE && (
-        <div className="flex items-center justify-between px-2 py-1 bg-maple-50 dark:bg-maple-700/50 border-b border-maple-100 dark:border-maple-700">
-          <button
-            onClick={() => setPage(p => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="p-0.5 rounded hover:bg-maple-200 dark:hover:bg-maple-600 disabled:opacity-30"
-          >
-            <ChevronUp size={12} />
-          </button>
-          <button 
-            onClick={jumpToCurrent}
-            className="text-[9px] text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200"
-            title="Jump to current note"
-          >
-            {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
-          </button>
-          <button
-            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-            disabled={page >= totalPages - 1}
-            className="p-0.5 rounded hover:bg-maple-200 dark:hover:bg-maple-600 disabled:opacity-30"
-          >
-            <ChevronDown size={12} />
-          </button>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto">
-        {paged.map((note) => {
-          const originalIndex = noteIndexMap.get(note.id) ?? 0
-          return (
-            <NoteItem
-              key={note.id}
-              note={note}
-              index={originalIndex}
-              isSelected={originalIndex === currentNoteIndex}
-              annotationCount={annotationCounts.get(note.id) || 0}
-              hasSuggested={suggestedNotes.has(note.id)}
-              onClick={() => setCurrentNoteIndex(originalIndex)}
-            />
-          )
-        })}
-        
-        {paged.length === 0 && (
-          <div className="p-6 text-center">
-            <div className="w-10 h-10 bg-maple-100 dark:bg-maple-700 rounded-full flex items-center justify-center mx-auto mb-2">
-              {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) 
-                ? <Search size={16} className="text-maple-400 dark:text-maple-500" />
-                : <span className="text-sm text-maple-400 dark:text-maple-500">N</span>
-              }
-            </div>
-            <p className="text-xs text-maple-600 dark:text-maple-300 font-medium">
-              {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) ? 'No matches' : 'No notes'}
-            </p>
-            <p className="text-[10px] text-maple-500 dark:text-maple-400 mt-1">
-              {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) 
-                ? 'Try different search terms' 
-                : 'Import notes to begin'}
-            </p>
           </div>
-        )}
-      </div>
 
-      <div className="p-1.5 border-t border-maple-100 dark:border-maple-700 text-[9px] text-maple-400 dark:text-maple-500 text-center">
-        {annotatedCount}/{notes.length} done
-      </div>
+          {/* Pagination header */}
+          {filtered.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between px-2 py-1 bg-maple-50 dark:bg-maple-700/50 border-b border-maple-100 dark:border-maple-800">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="p-0.5 rounded-full hover:bg-maple-200 dark:hover:bg-maple-600 disabled:opacity-30"
+              >
+                <ChevronUp size={12} />
+              </button>
+              <button 
+                onClick={jumpToCurrent}
+                className="text-[9px] text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200"
+                title="Jump to current note"
+              >
+                {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="p-0.5 rounded-full hover:bg-maple-200 dark:hover:bg-maple-600 disabled:opacity-30"
+              >
+                <ChevronDown size={12} />
+              </button>
+            </div>
+          )}
 
-      {/* Smart Filter Modal */}
-      {showSmartFilter && (
-        <SmartFilter
-          notes={notes}
-          onApply={handleSmartFilterApply}
-          onDeleteNonMatching={handleDeleteNonMatching}
-          onClose={() => setShowSmartFilter(false)}
-        />
+          <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
+            {paged.map((note) => {
+              const originalIndex = noteIndexMap.get(note.id) ?? 0
+              return (
+                <NoteItem
+                  key={note.id}
+                  note={note}
+                  index={originalIndex}
+                  isSelected={originalIndex === currentNoteIndex}
+                  annotationCount={annotationCounts.get(note.id) || 0}
+                  hasSuggested={suggestedNotes.has(note.id)}
+                  onClick={() => setCurrentNoteIndex(originalIndex)}
+                />
+              )
+            })}
+            
+            {paged.length === 0 && (
+              <div className="p-6 text-center">
+                <div className="w-10 h-10 bg-maple-100 dark:bg-maple-700 rounded-full flex items-center justify-center mx-auto mb-2">
+                  {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) 
+                    ? <Search size={16} className="text-maple-400 dark:text-maple-500" />
+                    : <span className="text-sm text-maple-400 dark:text-maple-500">N</span>
+                  }
+                </div>
+                <p className="text-xs text-maple-600 dark:text-maple-300 font-medium">
+                  {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) ? 'No matches' : 'No notes'}
+                </p>
+                <p className="text-[10px] text-maple-500 dark:text-maple-400 mt-1">
+                  {search || typeFilter || (filteredNoteIds && filteredNoteIds.size > 0) 
+                    ? 'Try different search terms' 
+                    : 'Import notes to begin'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="p-1.5 border-t border-maple-100 dark:border-maple-800 text-[9px] text-maple-400 dark:text-maple-500 text-center">
+            {annotatedCount}/{notes.length} done
+          </div>
+
+          {/* Smart Filter Modal */}
+          {showSmartFilter && (
+            <SmartFilter
+              notes={notes}
+              onApply={handleSmartFilterApply}
+              onDeleteNonMatching={handleDeleteNonMatching}
+              onClose={() => setShowSmartFilter(false)}
+            />
+          )}
+        </>
       )}
     </aside>
   )

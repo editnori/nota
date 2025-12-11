@@ -6,7 +6,8 @@ interface Props {
 }
 
 export function QuestionPicker({ onSelect }: Props) {
-  const { selectedQuestion, setSelectedQuestion } = useStore()
+  const selectedQuestion = useStore(s => s.selectedQuestion)
+  const setSelectedQuestion = useStore(s => s.setSelectedQuestion)
   const questions = loadQuestions()
 
   function handleClick(qid: string) {
@@ -15,7 +16,7 @@ export function QuestionPicker({ onSelect }: Props) {
   }
 
   return (
-    <div className="p-3 border-b border-maple-100 dark:border-maple-700">
+    <div className="p-3 border-b border-maple-100 dark:border-maple-800">
       <div className="text-[10px] uppercase tracking-wide text-maple-500 dark:text-maple-400 mb-3">
         Select question (or press 1-0)
       </div>

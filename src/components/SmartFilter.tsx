@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { X, Search, ChevronRight, Ban, Plus, Trash2, Check } from 'lucide-react'
 import { loadQuestions } from '../lib/questions'
 import { ConfirmModal } from './ConfirmModal'
 import type { Note } from '../lib/types'
+import { extractRadiologyEntities, initRadiologyModel, type RadiologyEntity } from '../lib/radiology-inference'
 
 // Default patterns per question
 const DEFAULT_PATTERNS: Record<string, { terms: string[]; regex: string[]; negation: boolean }> = {
@@ -105,6 +106,15 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
   const [autoTag, setAutoTag] = useState(false)
   const [newTerm, setNewTerm] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  
+  // Model-based extraction for Q6 (radiology)
+  const [useModel, setUseModel] = useState(false)
+  const [modelLoading, setModelLoading] = useState(false)
+  const [modelProgress, setModelProgress] = useState({ current: 0, total: 0, status: '' })
+  const [modelEntities, setModelEntities] = useState<Map<string, RadiologyEntity[]>>(new Map())
+  const [modelError, setModelError] = useState<string | null>(null)
+  const [showModelModal, setShowModelModal] = useState(false)
+  const [abortController, setAbortController] = useState<AbortController | null>(null)
 
   // Persist state on changes
   useEffect(() => {
@@ -114,6 +124,95 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
       minLen
     }))
   }, [selected, excludes, minLen])
+
+  // Run model inference - triggered manually via button
+  const runModelInference = useCallback(async () => {
+    const controller = new AbortController()
+    setAbortController(controller)
+    setShowModelModal(true)
+    setModelLoading(true)
+    setModelError(null)
+    setModelProgress({ current: 0, total: notes.length, status: 'Loading model...' })
+    
+    try {
+      await initRadiologyModel()
+      
+      if (controller.signal.aborted) return
+      
+      setModelProgress({ current: 0, total: notes.length, status: 'Analyzing notes...' })
+      
+      const results = new Map<string, RadiologyEntity[]>()
+      const batchSize = 20
+      let processed = 0
+      let foundEntities = 0
+      
+      for (let i = 0; i < notes.length; i += batchSize) {
+        if (controller.signal.aborted) break
+        
+        const batch = notes.slice(i, i + batchSize)
+        await Promise.all(batch.map(async (note) => {
+          if (controller.signal.aborted) return
+          try {
+            const text = note.meta?.rawText || note.text
+            const entities = await extractRadiologyEntities(text)
+            if (entities.length > 0) {
+              results.set(note.id, entities)
+              foundEntities += entities.length
+            }
+          } catch (err) {
+            console.error(`Error processing ${note.id}:`, err)
+          }
+        }))
+        
+        processed = Math.min(i + batchSize, notes.length)
+        setModelProgress({ 
+          current: processed, 
+          total: notes.length, 
+          status: `Found ${foundEntities} entities in ${results.size} notes...` 
+        })
+        
+        // Yield to UI
+        await new Promise(r => setTimeout(r, 0))
+      }
+      
+      if (!controller.signal.aborted) {
+        setModelEntities(results)
+        setUseModel(true)
+        setModelProgress({ 
+          current: notes.length, 
+          total: notes.length, 
+          status: `Done! ${foundEntities} entities in ${results.size} notes` 
+        })
+        
+        // Auto-close after success
+        setTimeout(() => {
+          if (!controller.signal.aborted) {
+            setShowModelModal(false)
+          }
+        }, 1500)
+      }
+    } catch (err: any) {
+      if (!controller.signal.aborted) {
+        setModelError(err.message || 'Failed to load model')
+        console.error('Model inference error:', err)
+      }
+    } finally {
+      setModelLoading(false)
+      setAbortController(null)
+    }
+  }, [notes])
+  
+  const cancelModelInference = useCallback(() => {
+    abortController?.abort()
+    setShowModelModal(false)
+    setModelLoading(false)
+    setAbortController(null)
+  }, [abortController])
+  
+  const clearModelResults = useCallback(() => {
+    setModelEntities(new Map())
+    setUseModel(false)
+  }, [])
 
   function savePatterns(updated: typeof patterns) {
     setPatterns(updated)
@@ -127,10 +226,11 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
   )
 
   // Calculate matches - optimized with pre-compiled patterns
-  const { matchingNotes, matches, excludedCount } = useMemo(() => {
+  const { matchingNotes, matches, excludedCount, modelMatchCount } = useMemo(() => {
     const matching = new Set<string>()
     const allMatches: Match[] = []
     let excluded = 0
+    let modelMatches = 0
 
     // Pre-process excludes once (not per-note)
     const excludeTerms = excludes.split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean)
@@ -157,8 +257,29 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
 
       let found = false
       
-      // Use pre-compiled patterns
+      // Check model entities for Q6 if useModel is enabled
+      if (useModel && selected.has('Q6') && modelEntities.has(note.id)) {
+        found = true
+        modelMatches++
+        if (collectMatches) {
+          const entities = modelEntities.get(note.id)!
+          for (const ent of entities) {
+            allMatches.push({
+              noteId: note.id,
+              term: ent.text,  // Just the text, no type prefix
+              start: ent.start,
+              end: ent.end,
+              questionId: 'Q6'
+            })
+          }
+        }
+      }
+      
+      // Use pre-compiled patterns (skip Q6 if using model)
       for (const [qid, compiled] of compiledPatterns) {
+        // Skip Q6 pattern matching if using model
+        if (useModel && qid === 'Q6') continue
+        
         // Check pre-lowercased terms
         for (const term of compiled.terms) {
           let idx = lower.indexOf(term)
@@ -223,8 +344,8 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
       
       if (found) matching.add(note.id)
     }
-    return { matchingNotes: matching, matches: allMatches, excludedCount: excluded }
-  }, [notes, selected, compiledPatterns, excludes, minLen, autoTag])
+    return { matchingNotes: matching, matches: allMatches, excludedCount: excluded, modelMatchCount: modelMatches }
+  }, [notes, selected, compiledPatterns, excludes, minLen, autoTag, useModel, modelEntities])
 
   function toggle(qid: string) {
     const next = new Set(selected)
@@ -291,9 +412,9 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white dark:bg-maple-800 rounded-lg shadow-xl w-full max-w-md max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-maple-800 rounded-xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
         
-        <div className="flex items-center justify-between px-4 py-2 border-b border-maple-200 dark:border-maple-700">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-maple-200 dark:border-maple-800">
           <span className="text-sm font-medium text-maple-700 dark:text-maple-200">Find Notes</span>
           <div className="flex items-center gap-3">
             <button onClick={resetAll} className="text-[10px] text-maple-400 hover:text-maple-600">Reset</button>
@@ -309,7 +430,7 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
             
             return (
               <div key={q.id} className="mb-1">
-                <div className={`flex items-center gap-2 p-2 rounded ${isActive ? 'bg-maple-50 dark:bg-maple-700/50' : ''}`}>
+                <div className={`flex items-center gap-2 p-2 rounded-lg ${isActive ? 'bg-maple-50 dark:bg-maple-700/50' : ''}`}>
                   <button
                     onClick={() => toggle(q.id)}
                     className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
@@ -324,7 +445,7 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
                     {q.name}
                   </button>
                   
-                  {config?.negation && <span className="text-[8px] px-1 py-0.5 bg-amber-100 text-amber-600 rounded">neg</span>}
+                  {config?.negation && <span className="text-[8px] px-1 py-0.5 bg-amber-100 text-amber-600 rounded-full">neg</span>}
                   
                   <button onClick={() => expand(q.id)} className="p-1 text-maple-400 hover:text-maple-600">
                     <ChevronRight size={12} className={isExpanded ? 'rotate-90' : ''} />
@@ -332,13 +453,48 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
                 </div>
 
                 {isExpanded && config && (
-                  <div className="ml-7 mr-2 mb-2 p-2 bg-maple-50 dark:bg-maple-700/30 rounded text-[10px] space-y-2">
+                  <div className="ml-7 mr-2 mb-2 p-2 bg-maple-50 dark:bg-maple-700/30 rounded-lg text-[10px] space-y-2">
+                    {/* Model option for Q6 (Radiology) */}
+                    {q.id === 'Q6' && (
+                      <div className="p-2 bg-maple-100 dark:bg-maple-700/50 rounded-lg space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-maple-700 dark:text-maple-200 font-medium">BiLSTM Span Model</span>
+                          </div>
+                          {!useModel ? (
+                            <button
+                              onClick={runModelInference}
+                              className="btn btn-xs btn-primary"
+                            >
+                              Run Model
+                            </button>
+                          ) : (
+                            <button
+                              onClick={clearModelResults}
+                              className="btn btn-xs btn-secondary"
+                            >
+                              Clear Results
+                            </button>
+                          )}
+                        </div>
+                        {useModel && modelEntities.size > 0 && (
+                          <div className="text-[9px] text-maple-600 dark:text-maple-300 flex items-center gap-1">
+                            <Check size={10} />
+                            {modelEntities.size} notes with entities detected
+                          </div>
+                        )}
+                        {modelError && (
+                          <div className="text-red-500 text-[9px]">{modelError}</div>
+                        )}
+                      </div>
+                    )}
+                    
                     {/* Terms */}
                     <div>
                       <div className="text-maple-500 mb-1">Terms:</div>
                       <div className="flex flex-wrap gap-1">
                         {config.terms.map((t, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white dark:bg-maple-800 rounded">
+                          <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white dark:bg-maple-800 rounded-full">
                             {t}
                             <button onClick={() => removeTerm(q.id, i)} className="text-maple-400 hover:text-red-500"><X size={8} /></button>
                           </span>
@@ -350,9 +506,9 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
                           onChange={e => setNewTerm(e.target.value)}
                           onKeyDown={e => e.key === 'Enter' && addTerm(q.id)}
                           placeholder="Add term..."
-                          className="flex-1 px-1.5 py-0.5 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded text-[10px] dark:text-maple-200"
+                          className="flex-1 px-1.5 py-0.5 bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-600 rounded-lg text-[10px] dark:text-maple-200"
                         />
-                        <button onClick={() => addTerm(q.id)} className="px-1.5 py-0.5 bg-maple-600 text-white rounded"><Plus size={10} /></button>
+                        <button onClick={() => addTerm(q.id)} className="px-1.5 py-0.5 bg-maple-600 text-white rounded-full"><Plus size={10} /></button>
                       </div>
                     </div>
 
@@ -361,12 +517,12 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
                       <div className="text-maple-500 mb-1">Patterns (regex):</div>
                       <div className="flex flex-wrap gap-1">
                         {config.regex.map((r, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded font-mono text-[9px]">
+                          <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-maple-100 dark:bg-maple-700 text-maple-700 dark:text-maple-200 rounded-full font-mono text-[9px]">
                             {r}
-                            <button onClick={() => removeRegex(q.id, i)} className="text-blue-400 hover:text-red-500"><X size={8} /></button>
+                            <button onClick={() => removeRegex(q.id, i)} className="text-maple-400 hover:text-red-500"><X size={8} /></button>
                           </span>
                         ))}
-                        <button onClick={() => addRegex(q.id)} className="px-1.5 py-0.5 text-blue-600 hover:bg-blue-50 rounded">+ regex</button>
+                        <button onClick={() => addRegex(q.id)} className="px-1.5 py-0.5 text-maple-600 dark:text-maple-300 hover:bg-maple-100 dark:hover:bg-maple-700/50 rounded-full">+ regex</button>
                       </div>
                     </div>
 
@@ -378,22 +534,12 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
                   </div>
                 )}
 
-                {isActive && !isExpanded && config && (
-                  <div className="ml-7 mr-2 flex flex-wrap gap-1 pb-1 text-[9px]">
-                    {config.terms.slice(0, 3).map((t, i) => (
-                      <span key={i} className="px-1 py-0.5 bg-maple-100 dark:bg-maple-700 text-maple-500 rounded">{t}</span>
-                    ))}
-                    {(config.terms.length > 3 || config.regex.length > 0) && (
-                      <span className="text-maple-400">+{config.terms.length - 3 + config.regex.length}</span>
-                    )}
-                  </div>
-                )}
               </div>
             )
           })}
 
           {/* Excludes */}
-          <div className="mt-3 pt-3 border-t border-maple-100 dark:border-maple-700">
+          <div className="mt-3 pt-3 border-t border-maple-100 dark:border-maple-800">
             <div className="flex items-center gap-2 mb-2">
               <Ban size={12} className="text-maple-400" />
               <span className="text-[10px] text-maple-500">Exclude notes containing:</span>
@@ -402,7 +548,7 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
               value={excludes}
               onChange={e => setExcludes(e.target.value)}
               placeholder="telephone, physical therapy, short order..."
-              className="w-full px-2 py-1 text-[10px] bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded dark:text-maple-200"
+              className="w-full px-2 py-1 text-[10px] bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded-lg dark:text-maple-200"
             />
             <div className="flex items-center gap-2 mt-2">
               <span className="text-[10px] text-maple-500">Min chars:</span>
@@ -410,36 +556,41 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
                 value={minLen}
                 onChange={e => setMinLen(e.target.value)}
                 placeholder="0"
-                className="w-16 px-2 py-1 text-[10px] bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded dark:text-maple-200"
+                className="w-16 px-2 py-1 text-[10px] bg-maple-50 dark:bg-maple-700 border border-maple-200 dark:border-maple-600 rounded-lg dark:text-maple-200"
               />
             </div>
           </div>
         </div>
 
-        <div className="px-3 py-2 border-t border-maple-100 dark:border-maple-700">
+        <div className="px-3 py-2 border-t border-maple-100 dark:border-maple-800">
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={autoTag} onChange={e => setAutoTag(e.target.checked)} className="rounded border-maple-300 text-maple-600" />
             <span className="text-[10px] text-maple-600 dark:text-maple-300">Auto-tag matches with their question</span>
           </label>
         </div>
 
-        <div className="flex items-center justify-between px-3 py-2 border-t border-maple-200 dark:border-maple-700 bg-maple-50 dark:bg-maple-700/50">
+        <div className="flex items-center justify-between px-3 py-2 border-t border-maple-200 dark:border-maple-800 bg-maple-50 dark:bg-maple-700/50">
           <span className="text-[11px]">
             <b className="text-maple-700 dark:text-maple-200">{matchingNotes.size}</b>
             <span className="text-maple-400"> / {notes.length} notes</span>
             {excludedCount > 0 && <span className="text-maple-400"> ({excludedCount} excluded)</span>}
+            {useModel && modelMatchCount > 0 && (
+              <span className="text-maple-500 dark:text-maple-400 ml-1">
+                ({modelMatchCount} via model)
+              </span>
+            )}
           </span>
           <div className="flex items-center gap-2">
             {onDeleteNonMatching && matchingNotes.size > 0 && matchingNotes.size < notes.length && (
               <button 
                 onClick={() => setShowDeleteConfirm(true)} 
-                className="flex items-center gap-1 px-2 py-1 text-[10px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                className="btn btn-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full"
                 title="Permanently delete notes that don't match filter"
               >
                 <Trash2 size={10} /> Delete {notes.length - matchingNotes.size}
               </button>
             )}
-            <button onClick={apply} className="flex items-center gap-1 px-3 py-1 text-[11px] bg-maple-700 text-white rounded">
+            <button onClick={apply} className="btn btn-sm btn-primary">
               <Search size={11} /> Filter
             </button>
           </div>
@@ -453,12 +604,71 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
         confirmText={`Delete ${notes.length - matchingNotes.size} Notes`}
         variant="danger"
         onConfirm={() => {
+          // Auto-tag first if enabled, then delete
+          if (autoTag && matches.length > 0) {
+            onApply(matchingNotes, matches)
+          }
           onDeleteNonMatching?.(matchingNotes)
           setShowDeleteConfirm(false)
           onClose()
         }}
         onCancel={() => setShowDeleteConfirm(false)}
       />
+
+      {/* Model Analysis Progress Modal */}
+      {showModelModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-maple-800 rounded-xl shadow-xl p-6 w-80 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-maple-100 dark:bg-maple-700 rounded-full" />
+              <div>
+                <h3 className="font-medium text-maple-800 dark:text-maple-100">Model analysis</h3>
+                <p className="text-[11px] text-maple-500">Detecting radiology entities</p>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-maple-600 dark:text-maple-300">{modelProgress.status}</span>
+                <span className="text-maple-400">
+                  {modelProgress.current} / {modelProgress.total}
+                </span>
+              </div>
+              
+              <div className="h-2 bg-maple-100 dark:bg-maple-700 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-maple-600 transition-all duration-300"
+                  style={{ width: `${modelProgress.total ? (modelProgress.current / modelProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+            
+            {modelError && (
+              <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-[11px] text-red-600 dark:text-red-400">
+                {modelError}
+              </div>
+            )}
+            
+            <div className="flex justify-end gap-2">
+              {modelLoading ? (
+                <button
+                  onClick={cancelModelInference}
+                  className="btn btn-sm btn-secondary"
+                >
+                  Cancel
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowModelModal(false)}
+                  className="btn btn-sm btn-primary"
+                >
+                  Done
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

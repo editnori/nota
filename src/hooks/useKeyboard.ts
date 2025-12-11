@@ -1,12 +1,28 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useStore } from './useStore'
 import { getQuestionByHotkey } from '../lib/questions'
 
 export function useKeyboard(onTagSelection: (questionId: string) => void) {
-  const { notes, currentNoteIndex, setCurrentNoteIndex, mode, setMode, setSelectedQuestion, undo, isTransitioning } = useStore()
+  const onTagSelectionRef = useRef(onTagSelection)
+
+  // Keep latest callback without re-registering listeners
+  useEffect(() => {
+    onTagSelectionRef.current = onTagSelection
+  }, [onTagSelection])
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      const {
+        notes,
+        currentNoteIndex,
+        setCurrentNoteIndex,
+        mode,
+        setMode,
+        setSelectedQuestion,
+        undo,
+        isTransitioning
+      } = useStore.getState()
+
       // Block ALL keyboard shortcuts during state transitions to prevent race conditions
       if (isTransitioning) {
         return
@@ -38,7 +54,7 @@ export function useKeyboard(onTagSelection: (questionId: string) => void) {
         if (q) {
           e.preventDefault()
           setSelectedQuestion(q.id)
-          onTagSelection(q.id)
+          onTagSelectionRef.current(q.id)
         }
         return
       }
@@ -73,5 +89,5 @@ export function useKeyboard(onTagSelection: (questionId: string) => void) {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [notes, currentNoteIndex, mode, setCurrentNoteIndex, setMode, setSelectedQuestion, onTagSelection, undo, isTransitioning])
+  }, [])
 }

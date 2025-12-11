@@ -1,14 +1,9 @@
-import { Ban, Code, Cpu, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useStore } from '../hooks/useStore'
 import { isModelReady, initializeModel } from '../lib/bilstm-formatter'
 import type { FormatterMode } from '../lib/types'
-
-const MODE_CONFIG = {
-  none: { icon: Ban, label: 'None', desc: 'No formatting (raw text)' },
-  regex: { icon: Code, label: 'Regex', desc: 'Rule-based formatting (140+ patterns, fast)' },
-  model: { icon: Cpu, label: 'BiLSTM', desc: 'Neural network (97.5% accuracy, slower)' }
-} as const
+import { FORMATTER_MODE_CONFIG as MODE_CONFIG } from '../lib/formatterModes'
 
 interface Props {
   fileCount: number
@@ -17,7 +12,7 @@ interface Props {
 }
 
 export function ImportModeModal({ fileCount, onSelect, onCancel }: Props) {
-  const { formatterMode } = useStore()
+  const formatterMode = useStore(s => s.formatterMode)
   const [modelStatus, setModelStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
 
   // Check model status on mount

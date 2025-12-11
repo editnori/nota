@@ -1,23 +1,19 @@
 import { useState } from 'react'
-import { X, Plus, Trash2, RotateCcw, Cpu, Code, Ban } from 'lucide-react'
+import { X, Plus, Trash2, RotateCcw } from 'lucide-react'
 import { loadQuestions, saveQuestions, DEFAULT_QUESTIONS } from '../lib/questions'
 import { ConfirmModal } from './ConfirmModal'
 import { UpdateChecker } from './UpdateChecker'
 import { useStore } from '../hooks/useStore'
 import type { Question, FormatterMode } from '../lib/types'
+import { FORMATTER_MODE_CONFIG as MODE_INFO } from '../lib/formatterModes'
 
 interface Props {
   onClose: () => void
 }
 
-const MODE_INFO: Record<FormatterMode, { icon: typeof Cpu, label: string }> = {
-  none: { icon: Ban, label: 'None' },
-  regex: { icon: Code, label: 'Regex' },
-  model: { icon: Cpu, label: 'BiLSTM' }
-}
-
 export function SettingsModal({ onClose }: Props) {
-  const { formatterMode, setFormatterMode } = useStore()
+  const formatterMode = useStore(s => s.formatterMode)
+  const setFormatterMode = useStore(s => s.setFormatterMode)
   const [questions, setQuestions] = useState<Question[]>(loadQuestions)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
 
@@ -59,7 +55,7 @@ export function SettingsModal({ onClose }: Props) {
     <div className="fixed inset-0 bg-black/30 dark:bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white dark:bg-maple-800 rounded-xl shadow-xl w-full max-w-xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-maple-200 dark:border-maple-700">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-maple-200 dark:border-maple-800">
           <h2 className="text-sm font-medium text-maple-800 dark:text-maple-100">Settings</h2>
           <button onClick={onClose} className="p-1 text-maple-400 hover:text-maple-600 dark:hover:text-maple-300 rounded">
             <X size={16} />
@@ -166,7 +162,7 @@ export function SettingsModal({ onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-maple-200 dark:border-maple-700">
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-maple-200 dark:border-maple-800">
           <button
             onClick={onClose}
             className="px-3 py-1.5 text-xs text-maple-500 dark:text-maple-400 hover:bg-maple-100 dark:hover:bg-maple-700 rounded-lg"

@@ -47,7 +47,7 @@ type ProgressCallback = (progress: ImportProgress) => void
 // Higher = faster but more memory; lower = slower but less memory pressure
 const PARALLEL_BATCH_SIZE = 20
 
-// Shared file processing - used by both importFiles and importFromDrop
+// Shared file processing - used by importFiles
 // Returns processed notes instead of mutating array (better for parallelization)
 async function processFileWithFolder(
   file: File, 
@@ -109,6 +109,11 @@ async function processFilesInBatches(
     
     processed += batch.length
     onProgress?.(processed, total, batch[batch.length - 1]?.file.name)
+
+    // Yield to UI between batches for very large imports (e.g. 30k notes)
+    if (total > 500) {
+      await new Promise(resolve => setTimeout(resolve, 0))
+    }
   }
   
   return allNotes
@@ -137,96 +142,6 @@ export async function importFiles(
   }
   
   // Process files in parallel batches
-  const notes = await processFilesInBatches(allFiles, mode, (processed, total, currentFile) => {
-    onProgress?.({ 
-      phase: 'processing', 
-      current: processed, 
-      total, 
-      currentFile
-    })
-  })
-  
-  onProgress?.({ phase: 'done', current: notes.length, total: notes.length })
-  return notes
-}
-
-// Import from drag-drop DataTransfer
-// Optimized with parallel batch processing for faster imports
-export async function importFromDrop(
-  dataTransfer: DataTransfer,
-  onProgress?: ProgressCallback,
-  mode: FormatterMode = 'regex'
-): Promise<Note[]> {
-  const allFiles: { file: File; folder: string }[] = []
-  
-  // Try to get entries from DataTransfer (supports folders)
-  const entries: FileSystemEntry[] = []
-  if (dataTransfer.items) {
-    for (let i = 0; i < dataTransfer.items.length; i++) {
-      const item = dataTransfer.items[i]
-      // webkitGetAsEntry may not be available in all browsers
-      if (item.webkitGetAsEntry) {
-        const entry = item.webkitGetAsEntry()
-        if (entry) entries.push(entry)
-      }
-    }
-  }
-  
-  onProgress?.({ phase: 'scanning', current: 0, total: 0 })
-  
-  // If we have entries (supports folder traversal)
-  if (entries.length > 0) {
-    async function collectFiles(entry: FileSystemEntry, folder: string): Promise<void> {
-      if (entry.isFile) {
-        try {
-          const file = await new Promise<File>((resolve, reject) => {
-            (entry as FileSystemFileEntry).file(resolve, reject)
-          })
-          // Only add supported file types
-          if (file.name.endsWith('.txt') || file.name.endsWith('.json') || file.name.endsWith('.jsonl')) {
-            allFiles.push({ file, folder })
-          }
-        } catch (err) {
-          console.warn('Failed to read file entry:', entry.name, err)
-        }
-      } else if (entry.isDirectory) {
-        const dir = entry as FileSystemDirectoryEntry
-        const reader = dir.createReader()
-        let batch: FileSystemEntry[]
-        
-        do {
-          batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
-            reader.readEntries(resolve, reject)
-          })
-          for (const sub of batch) {
-            await collectFiles(sub, dir.name)
-          }
-        } while (batch.length > 0)
-      }
-    }
-    
-    for (const entry of entries) {
-      await collectFiles(entry, '')
-    }
-  } 
-  // Fallback: use dataTransfer.files directly (doesn't support folders but works everywhere)
-  else if (dataTransfer.files && dataTransfer.files.length > 0) {
-    for (let i = 0; i < dataTransfer.files.length; i++) {
-      const file = dataTransfer.files[i]
-      // Only add supported file types
-      if (file.name.endsWith('.txt') || file.name.endsWith('.json') || file.name.endsWith('.jsonl')) {
-        allFiles.push({ file, folder: '' })
-      }
-    }
-  }
-  
-  // If no valid files found, return empty
-  if (allFiles.length === 0) {
-    console.warn('importFromDrop: No valid files found. Supported: .txt, .json, .jsonl')
-    return []
-  }
-  
-  // Process files in parallel batches (much faster than sequential)
   const notes = await processFilesInBatches(allFiles, mode, (processed, total, currentFile) => {
     onProgress?.({ 
       phase: 'processing', 

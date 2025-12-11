@@ -28,7 +28,7 @@ interface State {
   importProgress: string
   highlightedAnnotation: string | null
   filteredNoteIds: Set<string> | null  // Smart filter results
-  pendingImport: { type: 'files' | 'drop' | 'tauri', data: any } | null  // Files waiting for mode selection
+  pendingImport: { type: 'files' | 'tauri', data: any } | null  // Files waiting for mode selection
   
   setNotes: (notes: Note[]) => void
   addNotes: (notes: Note[]) => void
@@ -51,13 +51,13 @@ interface State {
   setImporting: (importing: boolean, progress?: string) => void
   setHighlightedAnnotation: (id: string | null) => void
   setFilteredNoteIds: (ids: Set<string> | null) => void
-  setPendingImport: (pending: { type: 'files' | 'drop' | 'tauri', data: any } | null) => void
+  setPendingImport: (pending: { type: 'files' | 'tauri', data: any } | null) => void
   getAnnotationsForNote: (noteId: string) => Annotation[]
   getAnnotationById: (id: string) => Annotation | undefined
 }
 
 // Build annotation indexes
-export interface AnnotationIndexes {
+interface AnnotationIndexes {
   byNote: Map<string, Annotation[]>
   byId: Map<string, Annotation>
 }
@@ -158,7 +158,8 @@ function updateInIndexes(
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
 let isBulkOperation = false
 let isSaving = false
-let lastSavedHash = ''
+let lastSavedNotesRef: Note[] | null = null
+let lastSavedAnnotationsRef: Annotation[] | null = null
 let lastAnnotationTime = 0
 
 // Reset all module-level save state - called by clearSession
@@ -169,7 +170,8 @@ function resetSaveState() {
   }
   isBulkOperation = false  // Reset bulk operation flag to ensure clean state
   isSaving = false
-  lastSavedHash = ''
+  lastSavedNotesRef = null
+  lastSavedAnnotationsRef = null
   lastAnnotationTime = 0
 }
 
@@ -221,11 +223,6 @@ function flushAnnotationBatch() {
   })
 }
 
-// Simple hash to detect if data actually changed
-function quickHash(notes: Note[], annotations: Annotation[]): string {
-  return `${notes.length}-${annotations.length}-${annotations[annotations.length - 1]?.id || ''}`
-}
-
 function debouncedSave() {
   // Skip saving during bulk operations or if already saving
   if (isBulkOperation || isSaving) return Date.now()
@@ -248,10 +245,10 @@ function debouncedSave() {
       // Get FRESH state when actually saving
       const freshState = useStore.getState()
       
-      // Check if data actually changed
-      const newHash = quickHash(freshState.notes, freshState.annotations)
-      if (newHash === lastSavedHash) {
-        return // Nothing changed, skip save
+      // Check if data actually changed by reference.
+      // We use immutable updates everywhere, so identity is a cheap and correct dirty check.
+      if (freshState.notes === lastSavedNotesRef && freshState.annotations === lastSavedAnnotationsRef) {
+        return
       }
       
       isSaving = true
@@ -263,7 +260,8 @@ function debouncedSave() {
           mode: freshState.mode,
           selectedQuestion: freshState.selectedQuestion
         })
-        lastSavedHash = newHash
+        lastSavedNotesRef = freshState.notes
+        lastSavedAnnotationsRef = freshState.annotations
       } finally {
         isSaving = false
       }

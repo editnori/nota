@@ -24,7 +24,7 @@
 // SECTION HEADERS - Comprehensive list of clinical note sections
 // =============================================================================
 
-export const SECTION_HEADERS: readonly string[] = [
+const SECTION_HEADERS: readonly string[] = [
   // Chief Complaint / HPI
   'CHIEF COMPLAINT', 'CC', 'HISTORY OF PRESENT ILLNESS', 'HPI',
   'REASON FOR VISIT', 'REASON FOR CONSULTATION', 'PRESENTING COMPLAINT', 'PRESENT ILLNESS',
@@ -123,7 +123,7 @@ export const SECTION_HEADERS: readonly string[] = [
 ] as const
 
 // Physical Exam subsections
-export const EXAM_LABELS: readonly string[] = [
+const EXAM_LABELS: readonly string[] = [
   'General', 'HEENT', 'HEENT/Neck', 'Head', 'Eyes', 'Ears', 'Nose', 'Throat', 'Mouth', 'Neck',
   'Cardiac', 'Cardiovascular', 'CV', 'Heart',
   'Lungs', 'Respiratory', 'Pulmonary', 'Chest',
@@ -138,14 +138,14 @@ export const EXAM_LABELS: readonly string[] = [
 ] as const
 
 // PE sub-labels
-export const PE_SUB_LABELS: readonly string[] = [
+const PE_SUB_LABELS: readonly string[] = [
   'Rate and Rhythm', 'Pulses', 'Effort', 'Breath sounds', 'Palpations',
   'Tenderness', 'Appearance', 'Coloration', 'Mental Status', 'Mood and Affect',
   'Capillary Refill', 'Comments', 'Findings',
 ] as const
 
 // Review of Systems categories
-export const ROS_LABELS: readonly string[] = [
+const ROS_LABELS: readonly string[] = [
   'Constitutional', 'HENT', 'HEENT', 'Ears/Nose/Throat', 'Ear/Nose/Throat',
   'Eyes', 'Eye', 'ENT', 'Respiratory', 'Cardiovascular', 'CV', 'Cardiac',
   'Gastrointestinal', 'GI', 'Urinary', 'Genitourinary', 'GU',
@@ -157,7 +157,7 @@ export const ROS_LABELS: readonly string[] = [
 ] as const
 
 // Lab value tokens
-export const LAB_VALUE_PATTERNS: readonly string[] = [
+const LAB_VALUE_PATTERNS: readonly string[] = [
   'White Blood Cells', 'Red Blood Cells', 'Hemoglobin', 'Hematocrit',
   'Mean Cell Volume', 'Mean Cell Hemoglobin', 'Mean Cell Hemoglobin Concentration',
   'Mean Platelet Volume', 'Platelet', 'Nucleated RBC', 'Nucleated RBC Abs',
@@ -174,11 +174,6 @@ export const LAB_VALUE_PATTERNS: readonly string[] = [
   'eGFR', 'eGFRAA',
 ] as const
 
-// Negation prefixes
-export const NEGATION_PREFIXES: readonly string[] = [
-  'no ', 'not ', 'denies ', 'negative for ', 'without ', 'absent ',
-] as const
-
 // Common abbreviations
 const ABBREVIATIONS: readonly string[] = [
   'mr.', 'mrs.', 'ms.', 'dr.', 'prof.', 'vs.', 'no.', 'pt.', 'hx.', 'dx.',
@@ -187,14 +182,6 @@ const ABBREVIATIONS: readonly string[] = [
   'oz.', 'lb.', 'kg.', 'mg.', 'mcg.', 'ml.', 'cm.', 'mm.', 'in.', 'ft.',
   'a.m.', 'p.m.', 'b.i.d.', 't.i.d.', 'q.i.d.', 'p.r.n.', 'q.d.', 'q.h.',
   'q.o.d.', 'h.s.', 'a.c.', 'p.c.', 'stat.', 'prn.', 'bid.', 'tid.', 'qid.',
-] as const
-
-// Radiology headers
-export const RADIOLOGY_HEADERS: readonly string[] = [
-  'FINDINGS', 'IMPRESSION', 'COMPARISON', 'TECHNIQUE', 'HISTORY',
-  'INDICATION', 'CLINICAL INDICATION', 'CLINICAL HISTORY',
-  'EXAM', 'EXAMINATION', 'PROCEDURE', 'VIEWS', 'REASON FOR STUDY',
-  'RECOMMENDATION', 'CONCLUSION', 'OPINION', 'INTERPRETATION',
 ] as const
 
 // =============================================================================
@@ -298,7 +285,7 @@ const PE_SECTION_HEADERS = new Set([
   'physical exam', 'physical examination', 'pe', 'physical findings', 'objective exam', 'exam', 'examination'
 ])
 
-export function isHeaderCandidate(line: string): boolean {
+function isHeaderCandidate(line: string): boolean {
   const stripped = line.trim().replace(/:$/, '')
   if (!stripped) return false
   
@@ -312,12 +299,12 @@ export function isHeaderCandidate(line: string): boolean {
   return false
 }
 
-export function isPELine(line: string): boolean {
+function isPELine(line: string): boolean {
   const stripped = line.trim().toLowerCase().replace(/:$/, '')
   return ROS_PE_LABELS_LOWER.has(stripped)
 }
 
-export function isROSOrPELine(line: string): boolean {
+function isROSOrPELine(line: string): boolean {
   return isPELine(line)
 }
 
@@ -336,7 +323,7 @@ function isNumberedListItem(line: string): boolean {
   return /^\s*\d+[.)]\s/.test(line)
 }
 
-export function isMedicationLine(line: string): boolean {
+function isMedicationLine(line: string): boolean {
   const lower = line.toLowerCase()
   return /\d+\s*(mg|mcg|ml|g|tablet|capsule|inhaler)\b/i.test(line) ||
          /\b(take|inhale|apply|inject)\s+\d/i.test(line) ||
@@ -3075,7 +3062,7 @@ function splitLongLines(text: string, maxLen: number = 1200): string {
   return output.join('\n')
 }
 
-export function wrapLines(text: string, width: number = 98): string {
+function wrapLines(text: string, width: number = 98): string {
   const lines = text.split('\n')
   const output: string[] = []
   
@@ -3904,25 +3891,7 @@ function fixMissingMedicationWords(text: string): string {
   return result
 }
 
-export function isPESubLabelLine(line: string): boolean {
-  const stripped = line.trim()
-  if (!stripped) return false
-  
-  // Allow bullet prefixes
-  let check = stripped
-  if (check.startsWith('- ') || check.startsWith('* ') || check.startsWith('• ')) {
-    check = check.slice(2).trim()
-  }
-  
-  for (const label of PE_SUB_LABELS) {
-    if (check.toLowerCase().startsWith(label.toLowerCase() + ':')) {
-      return true
-    }
-  }
-  return false
-}
-
-export function isLabResultLine(line: string): boolean {
+function isLabResultLine(line: string): boolean {
   const stripped = line.trim()
   if (!stripped) return false
   
@@ -3935,13 +3904,6 @@ export function isLabResultLine(line: string): boolean {
   
   // Check for common lab patterns
   return /\d+\.?\d*\s*(mg\/dL|mmol\/L|mEq\/L|g\/dL|%|K\/uL|M\/uL)/i.test(stripped)
-}
-
-export function isMedSectionHeader(line: string): boolean {
-  const stripped = line.trim().toLowerCase().replace(/:$/, '')
-  const medHeaders = ['medications', 'medication', 'current medications', 'home medications',
-                      'discharge medications', 'active medications', 'outpatient medications']
-  return medHeaders.includes(stripped)
 }
 
 function formatDenseLabBlocks(text: string): string {

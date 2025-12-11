@@ -2,6 +2,7 @@
 // Uses Tauri store in desktop app, localStorage in browser
 
 import type { Note, Annotation, Mode } from './types'
+import { isTauri } from './platform'
 
 const STORAGE_KEY = 'nota_session'
 
@@ -11,11 +12,6 @@ interface SessionData {
   currentNoteIndex: number
   mode: Mode
   selectedQuestion: string | null
-}
-
-// Check if running in Tauri
-function isTauri(): boolean {
-  return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
 }
 
 let tauriStore: any = null
