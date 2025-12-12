@@ -116,6 +116,15 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
   const [showModelModal, setShowModelModal] = useState(false)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
 
+  const isRadiologyNote = useCallback((note: Note) => {
+    const id = note.id || ''
+    if (id.startsWith('RAD')) return true
+    const t = note.meta?.type?.toLowerCase() || ''
+    if (t.includes('rad') || t.includes('imaging')) return true
+    const text = note.text || note.meta?.rawText || ''
+    return /\b(renal sonogram|renal ultrasound|ct abdomen|ct urogram|mri abdomen|impression:|findings:|kidneys\/ureters)\b/i.test(text)
+  }, [])
+
   // Persist state on changes
   useEffect(() => {
     localStorage.setItem(STATE_KEY, JSON.stringify({
@@ -153,7 +162,8 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
         await Promise.all(batch.map(async (note) => {
           if (controller.signal.aborted) return
           try {
-            const text = note.meta?.rawText || note.text
+            if (!isRadiologyNote(note)) return
+            const text = note.text  // Use displayed text so offsets match annotations/highlights
             const entities = await extractRadiologyEntities(text)
             if (entities.length > 0) {
               results.set(note.id, entities)
@@ -200,7 +210,7 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
       setModelLoading(false)
       setAbortController(null)
     }
-  }, [notes])
+  }, [notes, isRadiologyNote])
   
   const cancelModelInference = useCallback(() => {
     abortController?.abort()

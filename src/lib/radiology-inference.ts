@@ -22,14 +22,17 @@ export interface RadiologyEntity {
   confidence: number
 }
 
-// Entity labels (must match training) - simplified for contextual phrases
-const ENTITY_LABELS = [
-  'O', 'KIDNEY_FINDING', 'STONE', 'HYDRO', 'OBSTRUCTION', 'CYST', 'URETER'
-]
+// Default labels fallback (older binary model)
+const DEFAULT_LABELS = ['O', 'RADIOLOGY']
+
+// Collapse all positive labels into a single Radiology span for Q6 UI.
+// Keeps inference robust and prevents fragmented highlights.
+const COLLAPSE_ALL_POSITIVE = true
 
 // Model state
 let session: ort.InferenceSession | null = null
-let vocab: { stoi: Record<string, number>; unk_idx: number } | null = null
+let vocab: { stoi: Record<string, number>; unk_idx: number; labels?: string[] } | null = null
+let labelList: string[] = DEFAULT_LABELS
 let loadPromise: Promise<void> | null = null
 let loadError: string | null = null
 
@@ -53,6 +56,15 @@ export async function initRadiologyModel(): Promise<void> {
       if (!vocabResponse.ok) throw new Error(`Failed to load vocab: ${vocabResponse.status}`)
       vocab = await vocabResponse.json()
       console.log(`[Radiology] Vocab loaded: ${Object.keys(vocab!.stoi).length} tokens`)
+
+      // Prefer labels shipped with the vocab (multi-class model); fall back to binary.
+      const maybeLabels = (vocab as any)?.labels
+      if (Array.isArray(maybeLabels) && maybeLabels.length > 1) {
+        labelList = maybeLabels
+        console.log(`[Radiology] Labels loaded: ${labelList.join(', ')}`)
+      } else {
+        labelList = DEFAULT_LABELS
+      }
       
       // Configure ONNX Runtime
       const isDev = import.meta.env.DEV
@@ -139,6 +151,29 @@ function expandToWordBoundaries(text: string, start: number, end: number): { sta
 }
 
 /**
+ * Expand to sentence/line boundaries for more contextual highlights.
+ * Used when collapsing all Q6 labels into a single Radiology span.
+ */
+function expandToSentenceBoundaries(text: string, start: number, end: number): { start: number; end: number } {
+  let s = start
+  while (s > 0) {
+    const prev = text[s - 1]
+    if (prev === '\n' || prev === '.' || prev === '!' || prev === '?') break
+    s--
+  }
+  while (s < start && /\s/.test(text[s])) s++
+
+  let e = end
+  while (e < text.length) {
+    const ch = text[e]
+    if (ch === '\n' || ch === '.' || ch === '!' || ch === '?') { e++; break }
+    e++
+  }
+
+  return expandToWordBoundaries(text, s, e)
+}
+
+/**
  * Chain merge spans of the same type until we hit a gap of N consecutive O labels
  * This ensures cohesive spans that don't break mid-phrase
  */
@@ -148,7 +183,8 @@ function chainMergeSpans(
   starts: number[],
   ends: number[],
   text: string,
-  gapTolerance: number = 3  // Max consecutive O tokens before breaking chain
+  gapTolerance: number = 6,  // Max consecutive O tokens before breaking chain
+  collapseAll: boolean = COLLAPSE_ALL_POSITIVE
 ): RadiologyEntity[] {
   const entities: RadiologyEntity[] = []
   
@@ -163,7 +199,7 @@ function chainMergeSpans(
     }
     
     // Found start of entity - begin chain merging
-    const entityType = ENTITY_LABELS[pred]
+    const entityType = collapseAll ? 'RADIOLOGY' : (labelList[pred] ?? 'RADIOLOGY')
     let chainStart = starts[i]
     let chainEnd = ends[i]
     let totalConfidence = 1
@@ -186,7 +222,14 @@ function chainMergeSpans(
           break
         }
         i++
-      } else if (ENTITY_LABELS[nextPred] === entityType) {
+      } else if (collapseAll) {
+        // Any positive label extends the Radiology chain
+        chainEnd = ends[i]
+        totalConfidence++
+        tokenCount++
+        consecutiveOs = 0
+        i++
+      } else if ((labelList[nextPred] ?? 'RADIOLOGY') === entityType) {
         // Same entity type - extend chain and reset gap counter
         chainEnd = ends[i]
         totalConfidence++
@@ -271,24 +314,48 @@ export async function extractRadiologyEntities(text: string): Promise<RadiologyE
   const results = await session.run({ input_ids: inputTensor })
   const logits = results.logits.data as Float32Array
   
+  // Determine label dimension. Prefer vocab labels, but fall back to inferring from logits.
+  let numLabels = labelList.length
+  if (tokens.length > 0 && logits.length % tokens.length === 0) {
+    const inferred = logits.length / tokens.length
+    if (inferred > 1 && inferred !== numLabels) {
+      numLabels = inferred
+    }
+  }
+
   // Get predictions for each token
   const predictions: number[] = []
   for (let i = 0; i < tokens.length; i++) {
-    const logitSlice = Array.from({ length: ENTITY_LABELS.length }, (_, j) => logits[i * ENTITY_LABELS.length + j])
+    const logitSlice = Array.from({ length: numLabels }, (_, j) => logits[i * numLabels + j])
     const probs = softmax(logitSlice)
     
     let maxIdx = 0
-    for (let j = 1; j < ENTITY_LABELS.length; j++) {
+    for (let j = 1; j < numLabels; j++) {
       if (probs[j] > probs[maxIdx]) maxIdx = j
     }
     predictions.push(maxIdx)
   }
   
-  // Step 1: Chain merge with gap tolerance (bridges small O gaps within same entity type)
-  const chainMerged = chainMergeSpans(tokens, predictions, starts, ends, text, 3)
+  // Step 1: Chain merge with gap tolerance (bridges small O gaps)
+  const chainMerged = chainMergeSpans(tokens, predictions, starts, ends, text, 6, COLLAPSE_ALL_POSITIVE)
   
-  // Step 2: Merge adjacent spans of same type (catches nearby related phrases)
-  const fullyMerged = mergeAdjacentSpans(chainMerged, text, 30)
+  // Step 2: Merge adjacent spans (when collapsed this will merge across minor gaps)
+  const maxCharGap = COLLAPSE_ALL_POSITIVE ? 120 : 30
+  const fullyMerged = mergeAdjacentSpans(chainMerged, text, maxCharGap)
+
+  if (COLLAPSE_ALL_POSITIVE) {
+    const expanded = fullyMerged.map(ent => {
+      const ex = expandToSentenceBoundaries(text, ent.start, ent.end)
+      return {
+        ...ent,
+        start: ex.start,
+        end: ex.end,
+        text: text.slice(ex.start, ex.end).trim()
+      }
+    })
+    // Merge overlaps after expansion
+    return mergeAdjacentSpans(expanded, text, 0)
+  }
   
   return fullyMerged
 }
