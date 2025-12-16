@@ -18,3 +18,6 @@ bun.lockb
 # Mobile build outputs
 src-tauri/gen/
 releases/
+
+# Local backups (e.g., old ONNX artifacts)
+public/archive_*/

@@ -2,6 +2,12 @@
 
 All notable changes to Nota are documented in this file.
 
+## [0.5.79] - 2025-12-16
+
+### Model Update: Radiology Q6 Span Labeler
+- **Updated radiology span model** - Improved highlighting for kidney/ureter/bladder findings and dose report lines
+- **Reduced false positives** - Avoids capturing unrelated organs (e.g., liver/pancreas/spleen/adrenal/aorta/IVC/GI) that should not be highlighted for Q6
+
 ## [0.5.70] - 2025-12-07
 
 ### Feature: BiLSTM Section Detection in Annotate Mode
