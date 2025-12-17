@@ -8,6 +8,12 @@ All notable changes to Nota are documented in this file.
 - **Updated radiology span model** - Improved highlighting for kidney/ureter/bladder findings and dose report lines
 - **Reduced false positives** - Avoids capturing unrelated organs (e.g., liver/pancreas/spleen/adrenal/aorta/IVC/GI) that should not be highlighted for Q6
 
+## [0.5.80] - 2025-12-16
+
+### Fix: Radiology Q6 Highlight Over-Capture
+- **Improved span expansion/merging** - Prevents highlights from swallowing adjacent sentences/section headers
+- **Trims out-of-scope organs in highlights** - Removes liver/pancreas/spleen/adrenal/aorta/IVC/GI text when accidentally included by span expansion
+
 ## [0.5.70] - 2025-12-07
 
 ### Feature: BiLSTM Section Detection in Annotate Mode

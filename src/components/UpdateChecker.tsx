@@ -4,7 +4,7 @@ import { isTauri } from '../lib/platform'
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'up-to-date' | 'error'
 
-const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.5.79'
+const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '0.5.80'
 const GITHUB_REPO = 'editnori/nota'
 
 interface ReleaseAsset {

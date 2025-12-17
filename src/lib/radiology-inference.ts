@@ -29,6 +29,16 @@ const DEFAULT_LABELS = ['O', 'RADIOLOGY']
 // Keeps inference robust and prevents fragmented highlights.
 const COLLAPSE_ALL_POSITIVE = true
 
+// Q6 anchors (kidney/ureter/bladder + stones/hydro/cysts + numeric dose report).
+// Used only for UI span trimming; the model is still token-level.
+const Q6_KEYWORDS_RE =
+  /\b(kidneys?|renal|ureter\w*|uvj|upj|calculus|calculi|stone\w*|hydronephrosis|hydroureter\w*|obstruction|obstruct\w*|nonobstruct\w*|cyst\w*|bosniak|bladder|dlp|ctdi(?:vol)?|dose\s*report|mgy\*?cm)\b|\b(nephrolith|urolith)\w*/i
+
+// Organs/sections that should not be highlighted for Q6 unless directly tied to urinary findings.
+// We trim spans at the earliest occurrence of these after a Q6 keyword.
+const Q6_BANNED_PHRASE_RE =
+  /\b(?:the\s+)?(pancreas|hepatic|liver|spleen|adrenal|aorta|ivc|gi\s*tract|stomach|small\s*bowel|colon)\b/i
+
 // Model state
 let session: ort.InferenceSession | null = null
 let vocab: { stoi: Record<string, number>; unk_idx: number; labels?: string[] } | null = null
@@ -150,6 +160,11 @@ function expandToWordBoundaries(text: string, start: number, end: number): { sta
   return { start, end }
 }
 
+function expandStartToWordBoundary(text: string, start: number): number {
+  while (start > 0 && !/\s/.test(text[start - 1])) start--
+  return start
+}
+
 /**
  * Expand to sentence/line boundaries for more contextual highlights.
  * Used when collapsing all Q6 labels into a single Radiology span.
@@ -164,13 +179,54 @@ function expandToSentenceBoundaries(text: string, start: number, end: number): {
   while (s < start && /\s/.test(text[s])) s++
 
   let e = end
-  while (e < text.length) {
-    const ch = text[e]
-    if (ch === '\n' || ch === '.' || ch === '!' || ch === '?') { e++; break }
-    e++
+
+  // If the span already ends at a sentence/line boundary, do not pull in the next sentence.
+  const last = end > 0 ? text[end - 1] : ''
+  const alreadyAtBoundary = last === '\n' || last === '.' || last === '!' || last === '?'
+  if (!alreadyAtBoundary) {
+    while (e < text.length) {
+      const ch = text[e]
+      if (ch === '\n') break // do not include newline (prevents capturing next-line headers)
+      if (ch === '.' || ch === '!' || ch === '?') { e++; break }
+      e++
+    }
   }
 
   return expandToWordBoundaries(text, s, e)
+}
+
+function trimSpanToQ6(text: string, start: number, end: number): { start: number; end: number } | null {
+  const seg = text.slice(start, end)
+  const keyword = seg.match(Q6_KEYWORDS_RE)
+  if (!keyword || keyword.index == null) return null
+
+  const keywordIdx = keyword.index
+  const bannedFirst = seg.match(Q6_BANNED_PHRASE_RE)
+
+  // Only shift the start forward when the span begins with unrelated organs before the first Q6 keyword.
+  let s = start
+  if (bannedFirst && bannedFirst.index != null && bannedFirst.index < keywordIdx) {
+    s = start + keywordIdx
+  }
+
+  // Trim the end at the first banned organ mention AFTER the (possibly shifted) start.
+  const segAfter = text.slice(s, end)
+  const bannedAfter = segAfter.match(Q6_BANNED_PHRASE_RE)
+  let e = end
+  const cutAtBanned = Boolean(bannedAfter && bannedAfter.index != null)
+  if (cutAtBanned) {
+    e = s + (bannedAfter!.index as number)
+    while (e > s && /\s/.test(text[e - 1])) e--
+  }
+
+  s = expandStartToWordBoundary(text, s)
+  if (!cutAtBanned) {
+    // Normal expansion when we didn't cut at a banned phrase.
+    e = expandToWordBoundaries(text, s, e).end
+  }
+
+  if (s >= e) return null
+  return { start: s, end: e }
 }
 
 /**
@@ -269,9 +325,12 @@ function mergeAdjacentSpans(entities: RadiologyEntity[], text: string, maxCharGa
   for (let i = 1; i < entities.length; i++) {
     const next = entities[i]
     const gap = next.start - current.end
+    const gapText = gap > 0 ? text.slice(current.end, next.start) : ''
+    const gapHasWord = /\w/.test(gapText)
     
     // Merge if same type and within gap tolerance
-    if (next.type === current.type && gap <= maxCharGap) {
+    // Only merge across whitespace/punctuation gaps (prevents swallowing unrelated section text).
+    if (next.type === current.type && gap <= maxCharGap && !gapHasWord) {
       // Extend current to include the gap text and next span
       const expanded = expandToWordBoundaries(text, current.start, next.end)
       current = {
@@ -353,8 +412,23 @@ export async function extractRadiologyEntities(text: string): Promise<RadiologyE
         text: text.slice(ex.start, ex.end).trim()
       }
     })
-    // Merge overlaps after expansion
-    return mergeAdjacentSpans(expanded, text, 0)
+
+    // Trim out-of-scope organs that can be pulled in by sentence expansion.
+    const trimmed = expanded
+      .map(ent => {
+        const t = trimSpanToQ6(text, ent.start, ent.end)
+        if (!t) return null
+        return {
+          ...ent,
+          start: t.start,
+          end: t.end,
+          text: text.slice(t.start, t.end).trim()
+        }
+      })
+      .filter((x): x is RadiologyEntity => Boolean(x))
+
+    // Merge overlaps after trimming
+    return mergeAdjacentSpans(trimmed, text, 0)
   }
   
   return fullyMerged
