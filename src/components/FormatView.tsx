@@ -6,6 +6,7 @@ import { formatNote, isModelReady, initializeModel } from '../lib/bilstm-formatt
 import type { Note, FormatterMode, FormatExplanation, TokenExplanation, SectionType } from '../lib/types'
 import { SECTION_STYLES, DEFAULT_SECTION_STYLE } from '../lib/sections'
 import { FORMATTER_MODE_CONFIG as MODE_CONFIG } from '../lib/formatterModes'
+import { autoSuggestRadiologyAnnotations } from '../lib/autoSuggest'
 
 interface ProcessedNote {
   name: string
@@ -163,6 +164,8 @@ export function FormatView() {
 
     useStore.getState().setMode('annotate')
     setBulkOperation(false)
+
+    await autoSuggestRadiologyAnnotations(formattedNotes)
   }
 
   // Toggle section selection and scroll to it

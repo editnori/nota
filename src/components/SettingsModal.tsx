@@ -6,6 +6,7 @@ import { UpdateChecker } from './UpdateChecker'
 import { useStore } from '../hooks/useStore'
 import type { Question, FormatterMode } from '../lib/types'
 import { FORMATTER_MODE_CONFIG as MODE_INFO } from '../lib/formatterModes'
+import { isAutoSuggestEnabled, setAutoSuggestEnabled } from '../lib/autoSuggest'
 
 interface Props {
   onClose: () => void
@@ -16,6 +17,7 @@ export function SettingsModal({ onClose }: Props) {
   const setFormatterMode = useStore(s => s.setFormatterMode)
   const [questions, setQuestions] = useState<Question[]>(loadQuestions)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [autoSuggest, setAutoSuggest] = useState(isAutoSuggestEnabled)
 
   function handleSave() {
     saveQuestions(questions)
@@ -49,6 +51,11 @@ export function SettingsModal({ onClose }: Props) {
 
   function handleRemove(id: string) {
     setQuestions(qs => qs.filter(q => q.id !== id))
+  }
+
+  function handleAutoSuggestToggle(value: boolean) {
+    setAutoSuggest(value)
+    setAutoSuggestEnabled(value)
   }
 
   return (
@@ -153,6 +160,25 @@ export function SettingsModal({ onClose }: Props) {
                 </div>
               ))}
             </div>
+          </section>
+
+          {/* Automation */}
+          <section>
+            <h3 className="text-[11px] font-medium text-maple-500 dark:text-maple-400 uppercase tracking-wide mb-3">
+              Automation
+            </h3>
+            <label className="flex items-center gap-2 text-xs text-maple-700 dark:text-maple-200">
+              <input
+                type="checkbox"
+                checked={autoSuggest}
+                onChange={e => handleAutoSuggestToggle(e.target.checked)}
+                className="accent-maple-700"
+              />
+              Auto-suggest radiology (Q6) after import
+            </label>
+            <p className="text-[10px] text-maple-500 dark:text-maple-400 mt-1">
+              Runs the Q6 model after formatting and adds suggested spans for review.
+            </p>
           </section>
 
           {/* Updates */}

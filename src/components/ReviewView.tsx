@@ -3,7 +3,8 @@ import { useStore } from '../hooks/useStore'
 import { useDebounce } from '../hooks/useDebounce'
 import { loadQuestions, getQuestion } from '../lib/questions'
 import { ConfirmModal } from './ConfirmModal'
-import { X, ExternalLink, Search, Wand2, Loader2, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, ExternalLink, Search, Wand2, Loader2, MessageSquare, ChevronLeft, ChevronRight, Check } from 'lucide-react'
+import { ENTITY_TYPES, ENTITY_TYPE_META, entityLabel } from '../lib/entityTypes'
 
 const PAGE_SIZE = 50
 
@@ -12,13 +13,19 @@ export function ReviewView() {
   const notes = useStore(s => s.notes)
   const annotations = useStore(s => s.annotations)
   const removeAnnotation = useStore(s => s.removeAnnotation)
+  const updateAnnotation = useStore(s => s.updateAnnotation)
   const setMode = useStore(s => s.setMode)
   const setCurrentNoteIndex = useStore(s => s.setCurrentNoteIndex)
   const addBulkAnnotations = useStore(s => s.addBulkAnnotations)
   const setHighlightedAnnotation = useStore(s => s.setHighlightedAnnotation)
   const [selectedQ, setSelectedQ] = useState<string | null>(null)
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'auto'>('all')
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'auto'>('auto')
   const [commentFilter, setCommentFilter] = useState<'all' | 'with' | 'without'>('all')
+  const [entityTypeFilter, setEntityTypeFilter] = useState<'all' | 'POSITIVE' | 'ANATOMY' | 'DOSE'>('all')
+  const [minConfidence, setMinConfidence] = useState<number>(0)
+  const [showModelFilters, setShowModelFilters] = useState(false)
+  const [compactView, setCompactView] = useState(false)
+  const [bulkReviewAction, setBulkReviewAction] = useState<'approve' | 'reject' | null>(null)
   const [searchText, setSearchText] = useState('')
   const [showBulkTag, setShowBulkTag] = useState(false)
   const [bulkSearch, setBulkSearch] = useState('')
@@ -67,6 +74,16 @@ export function ReviewView() {
       filtered = filtered.filter(a => !a.comment || a.comment.trim().length === 0)
     }
     
+    // Entity type filter
+    if (entityTypeFilter !== 'all') {
+      filtered = filtered.filter(a => a.entityType === entityTypeFilter)
+    }
+    
+    // Confidence threshold filter
+    if (minConfidence > 0) {
+      filtered = filtered.filter(a => (a.confidence ?? 1) >= minConfidence)
+    }
+    
     // Question filter
     if (selectedQ) {
       filtered = filtered.filter(a => a.questions.includes(selectedQ))
@@ -82,11 +99,13 @@ export function ReviewView() {
     }
     
     return filtered
-  }, [annotations, selectedQ, sourceFilter, commentFilter, debouncedSearchText])
+  }, [annotations, selectedQ, sourceFilter, commentFilter, entityTypeFilter, minConfidence, debouncedSearchText])
 
   // Pagination
   const totalPages = Math.ceil(filteredAnnotations.length / PAGE_SIZE)
   const pagedAnnotations = filteredAnnotations.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const pagedSuggested = pagedAnnotations.filter(a => a.source === 'suggested')
+  const hasPagedSuggested = pagedSuggested.length > 0
 
   // Bulk tag matches - optimized with early termination
   const bulkMatches = useMemo(() => {
@@ -217,6 +236,33 @@ export function ReviewView() {
     return { manualCount: manual, suggestedCount: suggested, withCommentCount: withComment }
   }, [annotations])
 
+  const modelFiltersActive = entityTypeFilter !== 'all' || minConfidence > 0
+  const isDefaultReview = sourceFilter === 'auto' &&
+    !searchText &&
+    !selectedQ &&
+    commentFilter === 'all' &&
+    entityTypeFilter === 'all' &&
+    minConfidence === 0
+
+  function promoteAnnotation(id: string) {
+    updateAnnotation(id, { source: 'manual' })
+  }
+
+  function confirmBulkReview(action: 'approve' | 'reject') {
+    if (!hasPagedSuggested) return
+    setBulkReviewAction(action)
+  }
+
+  function runBulkReview() {
+    if (!bulkReviewAction) return
+    if (bulkReviewAction === 'approve') {
+      pagedSuggested.forEach(a => updateAnnotation(a.id, { source: 'manual' }))
+    } else {
+      pagedSuggested.forEach(a => removeAnnotation(a.id))
+    }
+    setBulkReviewAction(null)
+  }
+
   return (
     <div className="flex-1 flex">
       {/* Sidebar */}
@@ -251,15 +297,18 @@ export function ReviewView() {
           
           {/* Source filter */}
           <div className="flex text-[9px] border border-maple-200 dark:border-maple-600 rounded-lg overflow-hidden">
-            {(['all', 'manual', 'auto'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => { setSourceFilter(f); setPage(0) }}
-                className={`flex-1 py-1 capitalize ${sourceFilter === f ? 'bg-maple-800 dark:bg-maple-600 text-white' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'}`}
-              >
-                {f}
-              </button>
-            ))}
+            {(['all', 'manual', 'auto'] as const).map(f => {
+              const label = f === 'auto' ? 'needs review' : f
+              return (
+                <button
+                  key={f}
+                  onClick={() => { setSourceFilter(f); setPage(0) }}
+                  className={`flex-1 py-1 ${sourceFilter === f ? 'bg-maple-800 dark:bg-maple-600 text-white' : 'text-maple-500 dark:text-maple-400 hover:bg-maple-50 dark:hover:bg-maple-700'}`}
+                >
+                  {label}
+                </button>
+              )
+            })}
           </div>
 
           {/* Comment filter */}
@@ -286,6 +335,73 @@ export function ReviewView() {
               None
             </button>
           </div>
+
+          <button
+            onClick={() => {
+              setSelectedQ(null)
+              setSourceFilter('auto')
+              setCommentFilter('all')
+              setEntityTypeFilter('all')
+              setMinConfidence(0)
+              setSearchText('')
+              setPage(0)
+            }}
+            className="w-full text-[9px] text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200 text-left"
+          >
+            Reset filters
+          </button>
+
+          <button
+            onClick={() => setShowModelFilters(s => !s)}
+            className="w-full text-[9px] text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200 text-left"
+          >
+            {showModelFilters ? 'Hide model filters' : modelFiltersActive ? 'Model filters (active)' : 'Show model filters'}
+          </button>
+
+          {showModelFilters && (
+            <>
+              {/* Entity type filter */}
+              <div className="text-[9px] text-maple-500 dark:text-maple-400 mb-1">Type</div>
+              <div className="flex flex-wrap gap-1">
+                {(['all', ...ENTITY_TYPES] as const).map(f => {
+                  const isActive = entityTypeFilter === f
+                  return (
+                    <button
+                      key={f}
+                      onClick={() => { setEntityTypeFilter(f); setPage(0) }}
+                      className={`text-[9px] px-2 py-0.5 rounded-full border transition-all ${
+                        isActive ? 'border-solid ring-1 ring-offset-1' : 'border-dashed opacity-70 hover:opacity-100'
+                      }`}
+                      style={f !== 'all' ? { 
+                        backgroundColor: ENTITY_TYPE_META[f].bg,
+                        color: ENTITY_TYPE_META[f].text,
+                        borderColor: ENTITY_TYPE_META[f].text,
+                        ...(isActive ? { ringColor: ENTITY_TYPE_META[f].text } : {})
+                      } : {}}
+                    >
+                      {f === 'all' ? 'all' : ENTITY_TYPE_META[f].label}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Confidence threshold slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[9px] text-maple-500 dark:text-maple-400">
+                  <span>Min Confidence</span>
+                  <span className="font-mono">{Math.round(minConfidence * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={minConfidence * 100}
+                  onChange={(e) => { setMinConfidence(Number(e.target.value) / 100); setPage(0) }}
+                  className="w-full h-1.5 bg-maple-200 dark:bg-maple-600 rounded-lg appearance-none cursor-pointer accent-maple-600"
+                />
+              </div>
+            </>
+          )}
         </div>
         
         <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
@@ -441,6 +557,42 @@ export function ReviewView() {
           </div>
         )}
 
+        <div className="max-w-2xl mx-auto mb-2 flex items-center justify-between gap-2">
+          <div className="text-[10px] text-maple-500 dark:text-maple-400">
+            Needs review: <span className="font-medium text-maple-700 dark:text-maple-200">{suggestedCount}</span>
+            {sourceFilter !== 'auto' && suggestedCount > 0 && (
+              <button
+                onClick={() => { setSourceFilter('auto'); setPage(0) }}
+                className="ml-2 text-maple-500 hover:text-maple-700 dark:hover:text-maple-200 underline"
+              >
+                show
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCompactView(v => !v)}
+              className="text-[10px] px-2 py-1 rounded bg-white dark:bg-maple-800 border border-maple-200 dark:border-maple-800"
+            >
+              {compactView ? 'Show context' : 'Span only'}
+            </button>
+            <button
+              onClick={() => confirmBulkReview('approve')}
+              disabled={!hasPagedSuggested}
+              className="text-[10px] px-2 py-1 rounded bg-green-600 text-white disabled:bg-maple-300"
+            >
+              Approve page ({pagedSuggested.length})
+            </button>
+            <button
+              onClick={() => confirmBulkReview('reject')}
+              disabled={!hasPagedSuggested}
+              className="text-[10px] px-2 py-1 rounded bg-red-600 text-white disabled:bg-maple-300"
+            >
+              Reject page ({pagedSuggested.length})
+            </button>
+          </div>
+        </div>
+
         {/* Pagination */}
         {filteredAnnotations.length > PAGE_SIZE && (
           <div className="max-w-2xl mx-auto mb-2 flex items-center justify-center gap-2">
@@ -472,12 +624,10 @@ export function ReviewView() {
                 <span className="text-lg text-maple-400 dark:text-maple-500">A</span>
               </div>
               <p className="text-sm text-maple-600 dark:text-maple-300 font-medium">
-                {searchText || selectedQ || sourceFilter !== 'all' || commentFilter !== 'all' ? 'No matches found' : 'No annotations yet'}
+                {isDefaultReview ? 'No suggestions yet' : 'No matches found'}
               </p>
               <p className="text-xs text-maple-500 dark:text-maple-400 mt-1">
-                {searchText || selectedQ || sourceFilter !== 'all' || commentFilter !== 'all' 
-                  ? 'Try adjusting your filters' 
-                  : 'Highlight text in Annotate mode to create annotations'}
+                {isDefaultReview ? 'Auto suggestions will appear here after import' : 'Try adjusting your filters'}
               </p>
             </div>
           </div>
@@ -514,8 +664,34 @@ export function ReviewView() {
                         )
                       })}
                       {isSuggested && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-maple-100 dark:bg-maple-700 text-maple-500 dark:text-maple-400 border border-maple-200 dark:border-maple-600 border-dashed">
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium border border-dashed ${
+                            ann.entityType ? '' : 'bg-maple-100 dark:bg-maple-700 text-maple-500 dark:text-maple-400 border-maple-200 dark:border-maple-600'
+                          }`}
+                          style={ann.entityType && ENTITY_TYPE_META[ann.entityType] ? {
+                            backgroundColor: ENTITY_TYPE_META[ann.entityType].bg,
+                            color: ENTITY_TYPE_META[ann.entityType].text,
+                            borderColor: ENTITY_TYPE_META[ann.entityType].text
+                          } : undefined}
+                          title={`Auto suggestion${ann.entityType ? ` • ${entityLabel(ann.entityType)}` : ''}${ann.confidence !== undefined ? ` • ${Math.round(ann.confidence * 100)}%` : ''}`}
+                        >
                           auto
+                          {ann.entityType && ` · ${entityLabel(ann.entityType)}`}
+                          {ann.confidence !== undefined && ` · ${Math.round(ann.confidence * 100)}%`}
+                        </span>
+                      )}
+                      {!isSuggested && ann.entityType && ENTITY_TYPE_META[ann.entityType] && (
+                        <span
+                          className="text-[9px] px-1.5 py-0.5 rounded-full font-medium border border-dashed"
+                          style={{
+                            backgroundColor: ENTITY_TYPE_META[ann.entityType].bg,
+                            color: ENTITY_TYPE_META[ann.entityType].text,
+                            borderColor: ENTITY_TYPE_META[ann.entityType].text
+                          }}
+                          title={`Type: ${entityLabel(ann.entityType)}${ann.confidence !== undefined ? ` • ${Math.round(ann.confidence * 100)}%` : ''}`}
+                        >
+                          type · {entityLabel(ann.entityType)}
+                          {ann.confidence !== undefined && ` · ${Math.round(ann.confidence * 100)}%`}
                         </span>
                       )}
                       {ann.comment && (
@@ -531,33 +707,99 @@ export function ReviewView() {
                     >
                       <ExternalLink size={12} />
                     </button>
-                    <button
-                      onClick={() => removeAnnotation(ann.id)}
-                      className="p-1 text-maple-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                      title="Delete"
-                    >
-                      <X size={12} />
-                    </button>
+                    {isSuggested ? (
+                      <>
+                        <button
+                          onClick={() => promoteAnnotation(ann.id)}
+                          className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                          title="Approve"
+                        >
+                          <Check size={12} />
+                        </button>
+                        <button
+                          onClick={() => removeAnnotation(ann.id)}
+                          className="p-1 text-maple-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                          title="Reject"
+                        >
+                          <X size={12} />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => removeAnnotation(ann.id)}
+                        className="p-1 text-maple-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                        title="Delete"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
                   </div>
                   
-                  <div className="text-[10px] text-maple-600 dark:text-maple-300 font-mono leading-relaxed">
-                    <span className="text-maple-400 dark:text-maple-500">...{before}</span>
-                    <mark 
-                      className="px-0.5 rounded"
-                      style={{ 
-                        backgroundColor: `${getQuestion(ann.questions[0])?.color}25`,
-                        color: getQuestion(ann.questions[0])?.color 
-                      }}
-                    >
-                      {ann.text}
-                    </mark>
-                    <span className="text-maple-400 dark:text-maple-500">{after}...</span>
-                  </div>
+                  {compactView ? (
+                    <div className="text-[10px] text-maple-600 dark:text-maple-300 font-mono leading-relaxed">
+                      <mark 
+                        className="px-0.5 rounded"
+                        style={{ 
+                          backgroundColor: `${getQuestion(ann.questions[0])?.color}25`,
+                          color: getQuestion(ann.questions[0])?.color 
+                        }}
+                      >
+                        {ann.text}
+                      </mark>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-maple-600 dark:text-maple-300 font-mono leading-relaxed">
+                      <span className="text-maple-400 dark:text-maple-500">...{before}</span>
+                      <mark 
+                        className="px-0.5 rounded"
+                        style={{ 
+                          backgroundColor: `${getQuestion(ann.questions[0])?.color}25`,
+                          color: getQuestion(ann.questions[0])?.color 
+                        }}
+                      >
+                        {ann.text}
+                      </mark>
+                      <span className="text-maple-400 dark:text-maple-500">{after}...</span>
+                    </div>
+                  )}
 
                   <div className="mt-1.5 text-[9px] text-maple-400 dark:text-maple-500">
                     {ann.noteId}
                     {ann.comment && <span className="ml-2 italic text-amber-600 dark:text-amber-400">"{ann.comment}"</span>}
                   </div>
+
+                  {(ann.questions.includes('Q6') || ann.entityType) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1">
+                      <span className="text-[9px] text-maple-400 dark:text-maple-500">Type:</span>
+                      {ENTITY_TYPES.map(type => {
+                        const active = ann.entityType === type
+                        const style = ENTITY_TYPE_META[type]
+                        return (
+                          <button
+                            key={type}
+                            onClick={() => updateAnnotation(ann.id, { entityType: type })}
+                            className={`text-[9px] px-2 py-0.5 rounded-full border ${
+                              active ? 'border-solid' : 'border-dashed opacity-60 hover:opacity-100'
+                            }`}
+                            style={{
+                              backgroundColor: style.bg,
+                              color: style.text,
+                              borderColor: style.text
+                            }}
+                          >
+                            {style.label}
+                          </button>
+                        )
+                      })}
+                      <button
+                        onClick={() => updateAnnotation(ann.id, { entityType: undefined })}
+                        className="text-[9px] px-2 py-0.5 rounded-full border border-dashed text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200"
+                        title="Clear type"
+                      >
+                        clear
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -573,6 +815,24 @@ export function ReviewView() {
         variant="default"
         onConfirm={confirmBulkTag}
         onCancel={() => setBulkTagConfirm(null)}
+      />
+
+      <ConfirmModal
+        isOpen={bulkReviewAction !== null}
+        title={bulkReviewAction === 'approve' ? 'Approve Suggestions' : 'Reject Suggestions'}
+        message={
+          bulkReviewAction === 'approve'
+            ? `Approve ${pagedSuggested.length} suggested annotations on this page?`
+            : `Reject ${pagedSuggested.length} suggested annotations on this page?`
+        }
+        confirmText={
+          bulkReviewAction === 'approve'
+            ? `Approve ${pagedSuggested.length}`
+            : `Reject ${pagedSuggested.length}`
+        }
+        variant={bulkReviewAction === 'approve' ? 'default' : 'danger'}
+        onConfirm={runBulkReview}
+        onCancel={() => setBulkReviewAction(null)}
       />
     </div>
   )

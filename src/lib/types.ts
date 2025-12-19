@@ -9,6 +9,9 @@ export interface Note {
   }
 }
 
+// Entity types from the 4-class radiology model
+export type EntityType = 'POSITIVE' | 'ANATOMY' | 'DOSE'
+
 export interface Annotation {
   id: string
   noteId: string
@@ -19,6 +22,8 @@ export interface Annotation {
   comment?: string
   createdAt: number
   source?: 'manual' | 'suggested'  // manual = Ryan's work, suggested = bulk/pattern
+  entityType?: EntityType  // Model-detected entity class
+  confidence?: number  // Model confidence (0-1)
 }
 
 export interface Question {

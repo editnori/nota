@@ -15,6 +15,7 @@ import { Loader2, Upload, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { Note, FormatterMode } from './lib/types'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { isTauri } from './lib/platform'
+import { autoSuggestRadiologyAnnotations } from './lib/autoSuggest'
 
 function AppContent() {
   const { 
@@ -121,6 +122,7 @@ function AppContent() {
     
     if (pendingImport.type === 'files') {
       // Files were already extracted from DataTransfer
+      let importedNotes: Note[] = []
       await handleImportWithProgress(() => 
         importFiles(pendingImport.data, (progress) => {
           if (progress.phase === 'scanning') {
@@ -131,7 +133,13 @@ function AppContent() {
             setImporting(true, `${progress.current} notes`)
           }
         }, mode)
-      )
+      , {
+        onSuccess: (notes) => { importedNotes = notes }
+      })
+      
+      if (importedNotes.length > 0) {
+        await autoSuggestRadiologyAnnotations(importedNotes)
+      }
     } else if (pendingImport.type === 'tauri') {
       // Handle Tauri drop with mode
       await handleTauriDropWithMode(pendingImport.data, mode)
@@ -261,6 +269,8 @@ function AppContent() {
             }, 500)
           })
         })
+
+        await autoSuggestRadiologyAnnotations(importedNotes)
       } else {
         setBulkOperation(false)
         setImporting(false)

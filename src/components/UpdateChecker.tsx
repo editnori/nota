@@ -50,9 +50,9 @@ function findAssetForPlatform(assets: ReleaseAsset[]): ReleaseAsset | null {
   const platform = getPlatform()
   
   const patterns: Record<string, RegExp[]> = {
-    windows: [/\.msi$/i, /-setup\.exe$/i],
-    macos: [/_x64\.dmg$/i, /\.dmg$/i],
-    linux: [/\.AppImage$/i, /\.deb$/i]
+    windows: [/\.msi$/i, /-setup\.exe$/i, /\.exe$/i],
+    macos: [/\.pkg$/i, /_x64\.dmg$/i, /\.dmg$/i, /\.zip$/i],
+    linux: [/\.AppImage$/i, /\.deb$/i, /\.rpm$/i]
   }
   
   const platformPatterns = patterns[platform] || []
@@ -71,11 +71,71 @@ function formatBytes(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
+type AssetKind = 'msi' | 'exe' | 'dmg' | 'pkg' | 'zip' | 'appimage' | 'deb' | 'rpm' | 'unknown'
+
+function getAssetKind(name: string): AssetKind {
+  const lower = name.toLowerCase()
+  if (lower.endsWith('.msi')) return 'msi'
+  if (lower.endsWith('.exe')) return 'exe'
+  if (lower.endsWith('.dmg')) return 'dmg'
+  if (lower.endsWith('.pkg')) return 'pkg'
+  if (lower.endsWith('.zip')) return 'zip'
+  if (lower.endsWith('.appimage')) return 'appimage'
+  if (lower.endsWith('.deb')) return 'deb'
+  if (lower.endsWith('.rpm')) return 'rpm'
+  return 'unknown'
+}
+
+async function streamDownloadToFile(
+  url: string,
+  filePath: string,
+  writeFile: (path: string, data: Uint8Array | ReadableStream<Uint8Array>, options?: { append?: boolean }) => Promise<void>,
+  onProgress: (pct: number) => void
+): Promise<void> {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`Download failed: ${response.status}`)
+
+  const total = parseInt(response.headers.get('content-length') || '0', 10)
+  const body = response.body
+  if (!body) throw new Error('No response body')
+
+  if (typeof TransformStream !== 'undefined' && total > 0 && typeof body.pipeThrough === 'function') {
+    let loaded = 0
+    const progressStream = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        loaded += chunk.length
+        onProgress(Math.round((loaded / total) * 100))
+        controller.enqueue(chunk)
+      }
+    })
+    await writeFile(filePath, body.pipeThrough(progressStream))
+    return
+  }
+
+  // Fallback: manual reader with append (keeps memory low)
+  const reader = body.getReader()
+  let loaded = 0
+  let first = true
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) {
+      await writeFile(filePath, value, { append: !first })
+      first = false
+      loaded += value.length
+      if (total > 0) {
+        onProgress(Math.round((loaded / total) * 100))
+      }
+    }
+  }
+}
+
 export function UpdateChecker() {
   const [status, setStatus] = useState<UpdateStatus>('idle')
   const [release, setRelease] = useState<ReleaseInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
+  const inTauri = isTauri()
 
   async function checkForUpdates() {
     setStatus('checking')
@@ -127,8 +187,6 @@ export function UpdateChecker() {
     setProgress(0)
     
     try {
-      const inTauri = isTauri()
-      
       if (inTauri) {
         const [{ Command }, { downloadDir, join }, { writeFile }] = await Promise.all([
           import('@tauri-apps/plugin-shell'),
@@ -142,62 +200,36 @@ export function UpdateChecker() {
         
         console.log('[Update] Downloading to:', filePath)
         
-        // Download with progress
-        const response = await fetch(asset.browser_download_url)
-        if (!response.ok) throw new Error(`Download failed: ${response.status}`)
-        
-        const contentLength = response.headers.get('content-length')
-        const total = contentLength ? parseInt(contentLength, 10) : 0
-        
-        const reader = response.body?.getReader()
-        if (!reader) throw new Error('No response body')
-        
-        const chunks: Uint8Array[] = []
-        let loaded = 0
-        
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          chunks.push(value)
-          loaded += value.length
-          if (total > 0) {
-            setProgress(Math.round((loaded / total) * 100))
-          }
-        }
-        
-        // Combine chunks
-        const data = new Uint8Array(loaded)
-        let offset = 0
-        for (const chunk of chunks) {
-          data.set(chunk, offset)
-          offset += chunk.length
-        }
-        
-        // Write file
-        await writeFile(filePath, data)
-        console.log('[Update] File written, size:', data.length)
+        // Download with progress (stream to disk to avoid large buffers)
+        await streamDownloadToFile(asset.browser_download_url, filePath, writeFile, setProgress)
+        console.log('[Update] File written:', filePath)
         
         setStatus('installing')
         
         // Run the installer based on platform
         const platform = getPlatform()
+        const kind = getAssetKind(asset.name)
         console.log('[Update] Platform:', platform, 'File:', asset.name)
         
         if (platform === 'windows') {
-          // Windows - run msiexec for .msi or just execute .exe
-          if (asset.name.endsWith('.msi')) {
+          // Windows - run msiexec for .msi, execute .exe directly
+          if (kind === 'msi') {
             await Command.create('msiexec', ['/i', filePath]).execute()
+          } else if (kind === 'exe') {
+            await Command.create(filePath, []).execute()
           } else {
             await Command.create('cmd', ['/c', 'start', '', filePath]).execute()
           }
         } else if (platform === 'macos') {
-          // macOS - open the dmg
+          // macOS - open dmg/pkg/zip
           await Command.create('open', [filePath]).execute()
         } else if (platform === 'linux') {
-          // Linux - make executable and run
-          await Command.create('chmod', ['+x', filePath]).execute()
-          // Open file manager to show the file instead of auto-running
-          await Command.create('xdg-open', [downloadsPath]).execute()
+          if (kind === 'appimage') {
+            await Command.create('chmod', ['+x', filePath]).execute()
+            await Command.create(filePath, []).execute()
+          } else {
+            await Command.create('xdg-open', [filePath]).execute()
+          }
         }
         
         // Don't auto-close - let user handle the installer
@@ -301,7 +333,7 @@ export function UpdateChecker() {
                 className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-maple-400 rounded-md transition-colors"
               >
                 <Download size={12} />
-                {asset ? 'Download' : 'No installer'}
+                {asset ? (inTauri ? 'Download & Install' : 'Download') : 'No installer'}
               </button>
               <button
                 onClick={openReleasePage}

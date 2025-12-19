@@ -3,7 +3,7 @@ import { useStore } from '../hooks/useStore'
 import { useDebounce } from '../hooks/useDebounce'
 import { Search, ChevronUp, ChevronDown, Filter, X, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { SmartFilter } from './SmartFilter'
-import type { Note } from '../lib/types'
+import type { Note, EntityType } from '../lib/types'
 
 const PAGE_SIZE = 50
 
@@ -61,6 +61,8 @@ interface MatchLocation {
   start: number
   end: number
   questionId: string
+  entityType?: EntityType
+  confidence?: number
 }
 
 export function NotesList() {
@@ -327,17 +329,43 @@ export function NotesList() {
       
       // Small delay to let UI update
       await new Promise(r => setTimeout(r, 50))
+
+      const existingByNote = new Map<string, Set<string>>()
+      if (annotationsByNote && typeof annotationsByNote.entries === 'function') {
+        for (const [noteId, anns] of annotationsByNote) {
+          const keys = new Set<string>()
+          for (const ann of anns || []) {
+            for (const qid of ann.questions) {
+              keys.add(`${ann.start}:${ann.end}:${qid}`)
+            }
+          }
+          existingByNote.set(noteId, keys)
+        }
+      }
+
+      const seen = new Set<string>()
+      const bulkAnns = matches.flatMap(m => {
+        const key = `${m.noteId}:${m.start}:${m.end}:${m.questionId}`
+        if (seen.has(key)) return []
+        seen.add(key)
+        const existing = existingByNote.get(m.noteId)
+        if (existing?.has(`${m.start}:${m.end}:${m.questionId}`)) return []
+        return [{
+          noteId: m.noteId,
+          text: m.term,
+          start: m.start,
+          end: m.end,
+          questions: [m.questionId],  // Tag with the question that found this match
+          entityType: m.entityType,
+          confidence: m.confidence
+        }]
+      })
+
+      if (bulkAnns.length > 0) {
+        addBulkAnnotations(bulkAnns)
+      }
       
-      const bulkAnns = matches.map(m => ({
-        noteId: m.noteId,
-        text: m.term,
-        start: m.start,
-        end: m.end,
-        questions: [m.questionId]  // Tag with the question that found this match
-      }))
-      addBulkAnnotations(bulkAnns)
-      
-      setImporting(true, `Created ${matches.length} annotations`)
+      setImporting(true, `Created ${bulkAnns.length} annotations`)
       setTimeout(() => setImporting(false), 1000)
     }
   }

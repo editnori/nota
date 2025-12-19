@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { X, Search, ChevronRight, Ban, Plus, Trash2, Check } from 'lucide-react'
 import { loadQuestions } from '../lib/questions'
 import { ConfirmModal } from './ConfirmModal'
-import type { Note } from '../lib/types'
+import type { Note, EntityType } from '../lib/types'
 import { extractRadiologyEntities, initRadiologyModel, type RadiologyEntity } from '../lib/radiology-inference'
 
 // Default patterns per question
@@ -56,6 +56,8 @@ interface Match {
   start: number
   end: number
   questionId: string  // Which question found this match
+  entityType?: EntityType
+  confidence?: number
 }
 
 interface Props {
@@ -274,12 +276,20 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
         if (collectMatches) {
           const entities = modelEntities.get(note.id)!
           for (const ent of entities) {
+            const rawType = String(ent.type || '').toUpperCase()
+            const entityType: EntityType | undefined =
+              rawType === 'POSITIVE' ? 'POSITIVE' :
+              rawType === 'ANATOMY' ? 'ANATOMY' :
+              rawType === 'DOSE' ? 'DOSE' :
+              undefined
             allMatches.push({
               noteId: note.id,
               term: ent.text,  // Just the text, no type prefix
               start: ent.start,
               end: ent.end,
-              questionId: 'Q6'
+              questionId: 'Q6',
+              entityType,
+              confidence: ent.confidence
             })
           }
         }
@@ -469,23 +479,26 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
                       <div className="p-2 bg-maple-100 dark:bg-maple-700/50 rounded-lg space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-maple-700 dark:text-maple-200 font-medium">BiLSTM Span Model</span>
+                            <span className="text-maple-700 dark:text-maple-200 font-medium">Radiology model (Q6)</span>
                           </div>
                           {!useModel ? (
                             <button
                               onClick={runModelInference}
                               className="btn btn-xs btn-primary"
                             >
-                              Run Model
+                              Scan notes
                             </button>
                           ) : (
                             <button
                               onClick={clearModelResults}
                               className="btn btn-xs btn-secondary"
                             >
-                              Clear Results
+                              Clear scan
                             </button>
                           )}
+                        </div>
+                          <div className="text-[9px] text-maple-500 dark:text-maple-400">
+                          Scan notes uses the ONNX model to find Q6 spans. To save as suggestions, enable "Create suggested annotations" below and click Show matches.
                         </div>
                         {useModel && modelEntities.size > 0 && (
                           <div className="text-[9px] text-maple-600 dark:text-maple-300 flex items-center gap-1">
@@ -575,36 +588,38 @@ export function SmartFilter({ notes, onApply, onDeleteNonMatching, onClose }: Pr
         <div className="px-3 py-2 border-t border-maple-100 dark:border-maple-800">
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={autoTag} onChange={e => setAutoTag(e.target.checked)} className="rounded border-maple-300 text-maple-600" />
-            <span className="text-[10px] text-maple-600 dark:text-maple-300">Auto-tag matches with their question</span>
+            <span className="text-[10px] text-maple-600 dark:text-maple-300">
+              Create suggested annotations from matches{useModel ? ' (adds type + confidence for model hits)' : ''}
+            </span>
           </label>
         </div>
 
-        <div className="flex items-center justify-between px-3 py-2 border-t border-maple-200 dark:border-maple-800 bg-maple-50 dark:bg-maple-700/50">
-          <span className="text-[11px]">
-            <b className="text-maple-700 dark:text-maple-200">{matchingNotes.size}</b>
-            <span className="text-maple-400"> / {notes.length} notes</span>
-            {excludedCount > 0 && <span className="text-maple-400"> ({excludedCount} excluded)</span>}
-            {useModel && modelMatchCount > 0 && (
-              <span className="text-maple-500 dark:text-maple-400 ml-1">
+          <div className="flex items-center justify-between px-3 py-2 border-t border-maple-200 dark:border-maple-800 bg-maple-50 dark:bg-maple-700/50">
+            <span className="text-[11px]">
+              <b className="text-maple-700 dark:text-maple-200">{matchingNotes.size}</b>
+              <span className="text-maple-400"> / {notes.length} notes</span>
+              {excludedCount > 0 && <span className="text-maple-400"> ({excludedCount} excluded)</span>}
+              {useModel && modelMatchCount > 0 && (
+                <span className="text-maple-500 dark:text-maple-400 ml-1">
                 ({modelMatchCount} via model)
-              </span>
-            )}
-          </span>
-          <div className="flex items-center gap-2">
-            {onDeleteNonMatching && matchingNotes.size > 0 && matchingNotes.size < notes.length && (
-              <button 
-                onClick={() => setShowDeleteConfirm(true)} 
-                className="btn btn-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full"
-                title="Permanently delete notes that don't match filter"
-              >
-                <Trash2 size={10} /> Delete {notes.length - matchingNotes.size}
+                </span>
+              )}
+            </span>
+            <div className="flex items-center gap-2">
+              {onDeleteNonMatching && matchingNotes.size > 0 && matchingNotes.size < notes.length && (
+                <button 
+                  onClick={() => setShowDeleteConfirm(true)} 
+                  className="btn btn-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full"
+                  title="Permanently delete notes that don't match filter"
+                >
+                  <Trash2 size={10} /> Delete {notes.length - matchingNotes.size}
+                </button>
+              )}
+              <button onClick={apply} className="btn btn-sm btn-primary">
+                <Search size={11} /> Show matches
               </button>
-            )}
-            <button onClick={apply} className="btn btn-sm btn-primary">
-              <Search size={11} /> Filter
-            </button>
+            </div>
           </div>
-        </div>
       </div>
 
       <ConfirmModal

@@ -1,9 +1,10 @@
 import React, { useCallback, useRef, useState, useMemo, useEffect } from 'react'
 import { useStore, getPendingAnnotationsForNote } from '../hooks/useStore'
 import { getQuestion, loadQuestions } from '../lib/questions'
-import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus, Check, Trash2, LayoutList, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, SkipForward, Minus, Plus, Check, Trash2, LayoutList, Loader2, List } from 'lucide-react'
 import { formatWithModel, initModel, isModelLoaded } from '../lib/bilstm-inference'
-import type { SectionType, TokenExplanation } from '../lib/types'
+import type { SectionType, TokenExplanation, EntityType } from '../lib/types'
+import { ENTITY_TYPES, ENTITY_TYPE_META, entityLabel } from '../lib/entityTypes'
 import { SECTION_STYLES, DEFAULT_SECTION_STYLE } from '../lib/sections'
 
 interface Props {
@@ -51,6 +52,16 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     if (!note || !annotationsByNote?.get) return []
     return annotationsByNote.get(note.id) || []
   }, [note?.id, annotationsByNote])
+
+  const entityTypesInNote = useMemo(() => {
+    const types = new Set<EntityType>()
+    for (const ann of noteAnnotations) {
+      if (ann.entityType && ENTITY_TYPE_META[ann.entityType]) {
+        types.add(ann.entityType)
+      }
+    }
+    return Array.from(types)
+  }, [noteAnnotations])
   
   // For hasUnannotated check - just need size comparison
   // Defensive: handle case where annotationsByNote might not have size property
@@ -64,6 +75,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   const [spanEditor, setSpanEditor] = useState<SpanEditor | null>(null)
   const [overlapPrompt, setOverlapPrompt] = useState<OverlapPrompt | null>(null)
   const [showSections, setShowSections] = useState(false) // Section badges toggle
+  const [spansOnly, setSpansOnly] = useState(false) // Show only annotated spans
   const [sectionTokens, setSectionTokens] = useState<TokenExplanation[] | null>(null)
   const [sectionsLoading, setSectionsLoading] = useState(false)
   const sectionCacheRef = useRef<Map<string, TokenExplanation[]>>(new Map())
@@ -105,7 +117,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
 
   // Run BiLSTM section detection when sections are enabled
   useEffect(() => {
-    if (!showSections || !note) {
+    if (!showSections || spansOnly || !note) {
       setSectionTokens(null)
       return
     }
@@ -143,7 +155,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     }
 
     runDetection()
-  }, [showSections, note?.id, note?.text])
+  }, [showSections, spansOnly, note?.id, note?.text])
 
   // Build section info from BiLSTM output
   const { sectionsInOrder, sectionBadges } = useMemo(() => {
@@ -251,6 +263,10 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   }, [])
 
   const handleTextSelect = useCallback((e: React.MouseEvent) => {
+    if (spansOnly) {
+      window.getSelection()?.removeAllRanges()
+      return
+    }
     // Skip if we just dismissed a popup to prevent accidental annotation creation
     if (justDismissedPopupRef.current) {
       justDismissedPopupRef.current = false
@@ -322,7 +338,7 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     
     onCreateAnnotation(text, start, end)
     window.getSelection()?.removeAllRanges()
-  }, [getSelectionCoords, onCreateAnnotation, spanEditor, noteAnnotations, overlapPrompt])
+  }, [getSelectionCoords, onCreateAnnotation, spanEditor, noteAnnotations, overlapPrompt, spansOnly])
 
   function handleOverlapExtend() {
     if (!overlapPrompt || !note) return
@@ -476,6 +492,10 @@ export function DocumentView({ onCreateAnnotation }: Props) {
     return buildSegments(note.text, noteAnnotations)
   }, [note.text, noteAnnotations])
 
+  const spanSnippets = useMemo(() => {
+    return buildSpanSnippets(note.text, noteAnnotations, 60)
+  }, [note.text, noteAnnotations])
+
   // Calculate cumulative positions for each segment
   const segmentPositions = useMemo(() => {
     const positions: number[] = []
@@ -488,6 +508,11 @@ export function DocumentView({ onCreateAnnotation }: Props) {
   }, [segments])
   
   const questions = loadQuestions()
+  const singleAnnId = activeSpan?.annotationIds.length === 1 ? activeSpan.annotationIds[0] : null
+  const singleAnn = singleAnnId ? annotationMap.get(singleAnnId) : null
+  const showTypeEditor = Boolean(
+    singleAnn && (singleAnn.questions.includes('Q6') || singleAnn.entityType || singleAnn.source === 'suggested')
+  )
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
@@ -519,6 +544,26 @@ export function DocumentView({ onCreateAnnotation }: Props) {
             {note.meta.type}
           </span>
         )}
+
+        {entityTypesInNote.length > 0 && (
+          <div className="hidden md:flex items-center gap-1 text-[9px] text-maple-500 dark:text-maple-400">
+            <span>Types:</span>
+            {entityTypesInNote.map(type => {
+              const meta = ENTITY_TYPE_META[type]
+              return (
+                <span
+                  key={type}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border"
+                  style={{ backgroundColor: meta.bg, color: meta.text, borderColor: meta.text }}
+                  title={meta.label}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: meta.text }} />
+                  {meta.label}
+                </span>
+              )
+            })}
+          </div>
+        )}
         
         <div className="flex-1" />
 
@@ -544,13 +589,13 @@ export function DocumentView({ onCreateAnnotation }: Props) {
         {/* Section toggle */}
         <button
           onClick={() => setShowSections(!showSections)}
-          disabled={sectionsLoading}
+          disabled={sectionsLoading || spansOnly}
           className={`flex items-center gap-1 px-2 py-1 text-[9px] rounded-full transition-colors ${
             showSections 
               ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' 
               : 'bg-maple-100 dark:bg-maple-700 text-maple-500 dark:text-maple-400'
           }`}
-          title={showSections ? 'Hide sections (BiLSTM)' : 'Detect sections (BiLSTM)'}
+          title={spansOnly ? 'Sections unavailable in spans-only view' : showSections ? 'Hide sections (BiLSTM)' : 'Detect sections (BiLSTM)'}
         >
           {sectionsLoading ? (
             <Loader2 size={11} className="animate-spin" />
@@ -558,6 +603,19 @@ export function DocumentView({ onCreateAnnotation }: Props) {
             <LayoutList size={11} />
           )}
           <span className="hidden sm:inline">Sections</span>
+        </button>
+
+        <button
+          onClick={() => setSpansOnly(s => !s)}
+          className={`flex items-center gap-1 px-2 py-1 text-[9px] rounded-full transition-colors ${
+            spansOnly 
+              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' 
+              : 'bg-maple-100 dark:bg-maple-700 text-maple-500 dark:text-maple-400'
+          }`}
+          title={spansOnly ? 'Show full note' : 'Show spans only'}
+        >
+          <List size={11} />
+          <span className="hidden sm:inline">Spans</span>
         </button>
 
         {/* Font size control */}
@@ -621,117 +679,204 @@ export function DocumentView({ onCreateAnnotation }: Props) {
               }}
               onMouseUp={handleTextSelect}
             >
-              {segments.map((seg, i) => {
-                const segStart = segmentPositions[i]
-                const segEnd = segStart + seg.text.length
-                
-                // Find any section badges that should appear in this segment
-                const badgesInSeg = getBadgesInRange(segStart, segEnd)
-                
-                // Render section badge inline (with data-section for scroll targeting)
-                const renderBadge = (section: SectionType, key: string) => {
-                  const style = SECTION_STYLES[section] || DEFAULT_SECTION_STYLE
-                  return (
-                    <span
-                      key={key}
-                      data-section={section}
-                      className={`inline-block text-[8px] px-1 py-0.5 rounded font-medium border align-middle mr-0.5 ${style.pill}`}
-                      title={section}
-                    >
-                      {section}
-                    </span>
-                  )
-                }
-                
-                // For plain segments
-                if (seg.type === 'plain') {
-                  // If there are badges in this segment, we need to split the text
-                  if (badgesInSeg.length > 0) {
-                    const parts: React.ReactNode[] = []
-                    let lastPos = 0
-                    
-                    for (let bi = 0; bi < badgesInSeg.length; bi++) {
-                      const badge = badgesInSeg[bi]
-                      const relativePos = badge.pos - segStart
-                      
-                      // Text before badge
-                      if (relativePos > lastPos) {
-                        parts.push(<span key={`t${bi}`}>{seg.text.slice(lastPos, relativePos)}</span>)
-                      }
-                      
-                      // Badge
-                      parts.push(renderBadge(badge.section, `b${bi}`))
-                      lastPos = relativePos
-                    }
-                    
-                    // Remaining text
-                    if (lastPos < seg.text.length) {
-                      parts.push(<span key="end">{seg.text.slice(lastPos)}</span>)
-                    }
-                    
-                    return <span key={i}>{parts}</span>
+              {spansOnly ? (
+                spanSnippets.length === 0 ? (
+                  <div className="text-xs text-maple-500 dark:text-maple-400">No annotations to show yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {spanSnippets.map((snippet, si) => {
+                      const snippetSegments = buildSegments(snippet.text, snippet.annotations)
+                      const prefix = snippet.start > 0 ? '…' : ''
+                      const suffix = snippet.end < note.text.length ? '…' : ''
+                      return (
+                        <div key={`${snippet.start}-${snippet.end}-${si}`} className="rounded-lg border border-maple-200 dark:border-maple-700 bg-maple-50 dark:bg-maple-800/40 px-3 py-2">
+                          <div className="text-[9px] text-maple-400 dark:text-maple-500 mb-1">Span {si + 1} • {snippet.annotations.length} highlight{snippet.annotations.length > 1 ? 's' : ''}</div>
+                          <div className="text-maple-600 dark:text-maple-300">
+                            {prefix && <span className="text-maple-400 dark:text-maple-500">{prefix}</span>}
+                            {snippetSegments.map((seg, i) => {
+                              if (seg.type === 'plain') {
+                                return <span key={i} className="text-maple-500 dark:text-maple-400">{seg.text}</span>
+                              }
+                              const colors = seg.questions.map(qid => getQuestion(qid)?.color || '#888')
+                              const primaryColor = colors[0]
+                              const isSuggested = seg.isSuggested
+                              const isGlowing = seg.annotationIds.some(id => id === glowingMarkId)
+                              const borderStyle = colors.length > 1
+                                ? `linear-gradient(90deg, ${colors.join(', ')})`
+                                : primaryColor
+                              const typeMeta = seg.entityType ? ` • ${entityLabel(seg.entityType as EntityType)}` : ''
+                              const autoMeta = isSuggested
+                                ? `${typeMeta}${seg.confidence !== undefined ? ` • ${Math.round(seg.confidence * 100)}%` : ''}`
+                                : typeMeta
+
+                              return (
+                                <span key={i} className="relative inline">
+                                  <mark
+                                    data-ann-ids={seg.annotationIds.join(',')}
+                                    className={`rounded px-0.5 py-0.5 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-maple-400 transition-all ${
+                                      isGlowing ? 'animate-glow' : ''
+                                    }`}
+                                    style={{
+                                      backgroundColor: `${primaryColor}${isSuggested ? '15' : '20'}`,
+                                      borderBottom: colors.length > 1 ? 'none' : `2px ${isSuggested ? 'dashed' : 'solid'} ${primaryColor}`,
+                                      color: 'inherit',
+                                      opacity: isSuggested ? 0.85 : 1
+                                    }}
+                                    title={`${seg.questions.map(qid => getQuestion(qid)?.name || qid).join(' + ')}${autoMeta ? `${isSuggested ? ' (auto' : ' (type'}${autoMeta})` : ''}\nClick: edit questions | Double-click: edit span`}
+                                    onClick={(e) => handleSpanClick(e, seg.annotationIds)}
+                                    onDoubleClick={(e) => handleSpanDoubleClick(e, seg.annotationIds)}
+                                    onMouseEnter={() => isGlowing && setGlowingMarkId(null)}
+                                  >
+                                    {seg.text}
+                                    {colors.length > 1 && (
+                                      <span 
+                                        className="absolute bottom-0 left-0 right-0 h-0.5"
+                                        style={{ background: borderStyle }}
+                                      />
+                                    )}
+                                  </mark>
+                                  {seg.entityType && (
+                                    <span
+                                      className="inline-flex items-center ml-1 align-middle"
+                                      title={`Type: ${entityLabel(seg.entityType as EntityType)}`}
+                                    >
+                                      <span
+                                        className="w-2 h-2 rounded-full border"
+                                        style={{
+                                          backgroundColor: ENTITY_TYPE_META[seg.entityType as EntityType].bg,
+                                          borderColor: ENTITY_TYPE_META[seg.entityType as EntityType].text
+                                        }}
+                                      />
+                                    </span>
+                                  )}
+                                </span>
+                              )
+                            })}
+                            {suffix && <span className="text-maple-400 dark:text-maple-500">{suffix}</span>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              ) : (
+                segments.map((seg, i) => {
+                  const segStart = segmentPositions[i]
+                  const segEnd = segStart + seg.text.length
+                  
+                  // Find any section badges that should appear in this segment
+                  const badgesInSeg = getBadgesInRange(segStart, segEnd)
+                  
+                  // Render section badge inline (with data-section for scroll targeting)
+                  const renderBadge = (section: SectionType, key: string) => {
+                    const style = SECTION_STYLES[section] || DEFAULT_SECTION_STYLE
+                    return (
+                      <span
+                        key={key}
+                        data-section={section}
+                        className={`inline-block text-[8px] px-1 py-0.5 rounded font-medium border align-middle mr-0.5 ${style.pill}`}
+                        title={section}
+                      >
+                        {section}
+                      </span>
+                    )
                   }
                   
-                  return <span key={i}>{seg.text}</span>
-                }
-                
-                // Annotated segments
-                const colors = seg.questions.map(qid => getQuestion(qid)?.color || '#888')
-                const primaryColor = colors[0]
-                const isSuggested = seg.isSuggested
-                const isGlowing = seg.annotationIds.some(id => id === glowingMarkId)
-                
-                // Create gradient border for multiple questions
-                const borderStyle = colors.length > 1
-                  ? `linear-gradient(90deg, ${colors.join(', ')})`
-                  : primaryColor
-                
-                // Check for badges at segment start
-                const badgesAtStart = badgesInSeg.filter(b => b.pos === segStart)
-                
-                return (
-                  <span key={i} className="relative inline">
-                    {badgesAtStart.map((b, bi) => renderBadge(b.section, `badge${bi}`))}
-                    <mark
-                      data-ann-ids={seg.annotationIds.join(',')}
-                      className={`rounded px-0.5 py-0.5 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-maple-400 transition-all ${
-                        isGlowing ? 'animate-glow' : ''
-                      }`}
-                      style={{
-                        backgroundColor: `${primaryColor}${isSuggested ? '15' : '20'}`,
-                        borderBottom: colors.length > 1 ? 'none' : `2px ${isSuggested ? 'dashed' : 'solid'} ${primaryColor}`,
-                        color: 'inherit',
-                        opacity: isSuggested ? 0.8 : 1
-                      }}
-                      title={`${seg.questions.map(qid => getQuestion(qid)?.name || qid).join(' + ')}${isSuggested ? ' (auto)' : ''}\nClick: edit questions | Double-click: edit span`}
-                      onClick={(e) => handleSpanClick(e, seg.annotationIds)}
-                      onDoubleClick={(e) => handleSpanDoubleClick(e, seg.annotationIds)}
-                      onMouseEnter={() => isGlowing && setGlowingMarkId(null)}
-                    >
-                      {seg.text}
-                      {colors.length > 1 && (
-                        <span 
-                          className="absolute bottom-0 left-0 right-0 h-0.5"
-                          style={{ background: borderStyle }}
-                        />
-                      )}
-                    </mark>
-                    {/* Show question indicators */}
-                    {colors.length > 0 && (
-                      <span className="inline-flex gap-px ml-0.5 align-middle">
-                        {colors.map((color, ci) => (
-                          <span
-                            key={ci}
-                            className={`w-1.5 h-1.5 rounded-full inline-block ${isSuggested ? 'opacity-60' : ''}`}
-                            style={{ backgroundColor: color }}
-                            title={getQuestion(seg.questions[ci])?.name}
+                  // For plain segments
+                  if (seg.type === 'plain') {
+                    // If there are badges in this segment, we need to split the text
+                    if (badgesInSeg.length > 0) {
+                      const parts: React.ReactNode[] = []
+                      let lastPos = 0
+                      
+                      for (let bi = 0; bi < badgesInSeg.length; bi++) {
+                        const badge = badgesInSeg[bi]
+                        const relativePos = badge.pos - segStart
+                        
+                        // Text before badge
+                        if (relativePos > lastPos) {
+                          parts.push(<span key={`t${bi}`}>{seg.text.slice(lastPos, relativePos)}</span>)
+                        }
+                        
+                        // Badge
+                        parts.push(renderBadge(badge.section, `b${bi}`))
+                        lastPos = relativePos
+                      }
+                      
+                      // Remaining text
+                      if (lastPos < seg.text.length) {
+                        parts.push(<span key="end">{seg.text.slice(lastPos)}</span>)
+                      }
+                      
+                      return <span key={i}>{parts}</span>
+                    }
+                    
+                    return <span key={i}>{seg.text}</span>
+                  }
+                  
+                  // Annotated segments
+                  const colors = seg.questions.map(qid => getQuestion(qid)?.color || '#888')
+                  const primaryColor = colors[0]
+                  const isSuggested = seg.isSuggested
+                  const isGlowing = seg.annotationIds.some(id => id === glowingMarkId)
+                  
+                  // Create gradient border for multiple questions
+                  const borderStyle = colors.length > 1
+                    ? `linear-gradient(90deg, ${colors.join(', ')})`
+                    : primaryColor
+                  
+                  // Check for badges at segment start
+                  const badgesAtStart = badgesInSeg.filter(b => b.pos === segStart)
+                  const typeMeta = seg.entityType ? ` • ${entityLabel(seg.entityType as EntityType)}` : ''
+                  const autoMeta = isSuggested
+                    ? `${typeMeta}${seg.confidence !== undefined ? ` • ${Math.round(seg.confidence * 100)}%` : ''}`
+                    : typeMeta
+                  
+                  return (
+                    <span key={i} className="relative inline">
+                      {badgesAtStart.map((b, bi) => renderBadge(b.section, `badge${bi}`))}
+                      <mark
+                        data-ann-ids={seg.annotationIds.join(',')}
+                        className={`rounded px-0.5 py-0.5 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-maple-400 transition-all ${
+                          isGlowing ? 'animate-glow' : ''
+                        }`}
+                        style={{
+                          backgroundColor: `${primaryColor}${isSuggested ? '15' : '20'}`,
+                          borderBottom: colors.length > 1 ? 'none' : `2px ${isSuggested ? 'dashed' : 'solid'} ${primaryColor}`,
+                          color: 'inherit',
+                          opacity: isSuggested ? 0.85 : 1
+                        }}
+                        title={`${seg.questions.map(qid => getQuestion(qid)?.name || qid).join(' + ')}${autoMeta ? `${isSuggested ? ' (auto' : ' (type'}${autoMeta})` : ''}\nClick: edit questions | Double-click: edit span`}
+                        onClick={(e) => handleSpanClick(e, seg.annotationIds)}
+                        onDoubleClick={(e) => handleSpanDoubleClick(e, seg.annotationIds)}
+                        onMouseEnter={() => isGlowing && setGlowingMarkId(null)}
+                      >
+                        {seg.text}
+                        {colors.length > 1 && (
+                          <span 
+                            className="absolute bottom-0 left-0 right-0 h-0.5"
+                            style={{ background: borderStyle }}
                           />
-                        ))}
-                      </span>
-                    )}
-                  </span>
-                )
-              })}
+                        )}
+                      </mark>
+                      {seg.entityType && (
+                        <span
+                          className="inline-flex items-center ml-1 align-middle"
+                          title={`Type: ${entityLabel(seg.entityType as EntityType)}`}
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full border"
+                            style={{
+                              backgroundColor: ENTITY_TYPE_META[seg.entityType as EntityType].bg,
+                              borderColor: ENTITY_TYPE_META[seg.entityType as EntityType].text
+                            }}
+                          />
+                        </span>
+                      )}
+                    </span>
+                  )
+                })
+              )}
             </div>
           </div>
         </div>
@@ -784,6 +929,41 @@ export function DocumentView({ onCreateAnnotation }: Props) {
               )
             })}
           </div>
+
+          {showTypeEditor && singleAnn && (
+            <div className="mt-2 pt-2 border-t border-maple-100 dark:border-maple-800">
+              <div className="text-[10px] text-maple-500 dark:text-maple-400 mb-1">Type</div>
+              <div className="flex flex-wrap gap-1">
+                {ENTITY_TYPES.map(type => {
+                  const active = singleAnn.entityType === type
+                  const style = ENTITY_TYPE_META[type]
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => updateAnnotation(singleAnn.id, { entityType: type })}
+                      className={`text-[9px] px-2 py-0.5 rounded-full border ${
+                        active ? 'border-solid' : 'border-dashed opacity-60 hover:opacity-100'
+                      }`}
+                      style={{
+                        backgroundColor: style.bg,
+                        color: style.text,
+                        borderColor: style.text
+                      }}
+                    >
+                      {style.label}
+                    </button>
+                  )
+                })}
+                <button
+                  onClick={() => updateAnnotation(singleAnn.id, { entityType: undefined })}
+                  className="text-[9px] px-2 py-0.5 rounded-full border border-dashed text-maple-500 dark:text-maple-400 hover:text-maple-700 dark:hover:text-maple-200"
+                  title="Clear type"
+                >
+                  clear
+                </button>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between mt-2 pt-2 border-t border-maple-100 dark:border-maple-800">
             <button
               onClick={handleDeleteSpan}
@@ -983,12 +1163,22 @@ interface Segment {
   questions: string[]
   annotationIds: string[]
   isSuggested: boolean
+  entityType?: 'POSITIVE' | 'ANATOMY' | 'DOSE'
+  confidence?: number
+}
+
+
+interface SpanSnippet {
+  start: number
+  end: number
+  text: string
+  annotations: { id: string; start: number; end: number; questions: string[]; source?: string; entityType?: string; confidence?: number }[]
 }
 
 // Optimized segment building - annotations already have source field
 function buildSegments(
   text: string, 
-  noteAnnotations: { id: string; start: number; end: number; questions: string[]; source?: string }[]
+  noteAnnotations: { id: string; start: number; end: number; questions: string[]; source?: string; entityType?: string; confidence?: number }[]
 ): Segment[] {
   if (noteAnnotations.length === 0) {
     return [{ type: 'plain', text, questions: [], annotationIds: [], isSuggested: false }]
@@ -1033,6 +1223,8 @@ function buildSegments(
       const questionsSet = new Set<string>()
       const annotationIds: string[] = []
       let isSuggested = false
+      let entityType: Segment['entityType'] = undefined
+      let confidence: number | undefined = undefined
       
       for (const c of covering) {
         annotationIds.push(c.id)
@@ -1042,6 +1234,13 @@ function buildSegments(
         if (c.source === 'suggested') {
           isSuggested = true
         }
+        // Use first annotation's entityType and confidence
+        if (!entityType && c.entityType) {
+          entityType = c.entityType as Segment['entityType']
+        }
+        if (confidence === undefined && c.confidence !== undefined) {
+          confidence = c.confidence
+        }
       }
       
       segments.push({ 
@@ -1049,10 +1248,57 @@ function buildSegments(
         text: segText, 
         questions: Array.from(questionsSet), 
         annotationIds, 
-        isSuggested 
+        isSuggested,
+        entityType,
+        confidence
       })
     }
   }
 
   return segments
+}
+
+function buildSpanSnippets(
+  text: string,
+  noteAnnotations: { id: string; start: number; end: number; questions: string[]; source?: string; entityType?: string; confidence?: number }[],
+  context: number = 60
+): SpanSnippet[] {
+  if (noteAnnotations.length === 0) return []
+
+  const sorted = [...noteAnnotations].sort((a, b) => a.start - b.start)
+  const windows = sorted.map(ann => ({
+    start: Math.max(0, ann.start - context),
+    end: Math.min(text.length, ann.end + context),
+    ann
+  }))
+
+  const merged: { start: number; end: number; anns: typeof noteAnnotations }[] = []
+  const mergeGap = 8
+
+  for (const win of windows) {
+    const last = merged[merged.length - 1]
+    if (!last || win.start > last.end + mergeGap) {
+      merged.push({ start: win.start, end: win.end, anns: [win.ann] })
+      continue
+    }
+    last.end = Math.max(last.end, win.end)
+    last.anns.push(win.ann)
+  }
+
+  return merged.map(block => {
+    const blockAnns = sorted.filter(a => a.start < block.end && a.end > block.start)
+    const snippetText = text.slice(block.start, block.end)
+    const relAnns = blockAnns.map(a => ({
+      ...a,
+      start: Math.max(0, a.start - block.start),
+      end: Math.min(block.end - block.start, a.end - block.start)
+    }))
+
+    return {
+      start: block.start,
+      end: block.end,
+      text: snippetText,
+      annotations: relAnns
+    }
+  })
 }

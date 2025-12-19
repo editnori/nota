@@ -22,12 +22,23 @@ export interface RadiologyEntity {
   confidence: number
 }
 
+export interface RadiologyInferenceConfig {
+  /** Minimum probability required to keep a non-O label. Defaults to vocab threshold if present. */
+  threshold?: number
+  /** Max consecutive O tokens allowed inside a span before breaking it. */
+  gapTolerance?: number
+  /** Max character gap for merging adjacent spans of the same type. */
+  maxCharGap?: number
+  /** Collapse all non-O labels into a single RADIOLOGY span. */
+  collapseAll?: boolean
+}
+
 // Default labels fallback (older binary model)
 const DEFAULT_LABELS = ['O', 'RADIOLOGY']
 
 // Collapse all positive labels into a single Radiology span for Q6 UI.
-// Keeps inference robust and prevents fragmented highlights.
-const COLLAPSE_ALL_POSITIVE = true
+// Set to false to show the 4 distinct classes: POSITIVE, ANATOMY, DOSE
+const COLLAPSE_ALL_POSITIVE = false
 
 // Q6 anchors (kidney/ureter/bladder + stones/hydro/cysts + numeric dose report).
 // Used only for UI span trimming; the model is still token-level.
@@ -43,11 +54,14 @@ const Q6_BANNED_PHRASE_RE =
 let session: ort.InferenceSession | null = null
 let vocab: { stoi: Record<string, number>; unk_idx: number; labels?: string[] } | null = null
 let labelList: string[] = DEFAULT_LABELS
+let modelThreshold: number | null = null
 let loadPromise: Promise<void> | null = null
 let loadError: string | null = null
 
-const MODEL_PATH = '/radiology-span.onnx'
-const VOCAB_PATH = '/radiology-vocab.json'
+// Cache-busting: append timestamp to force fresh fetch after model updates
+const CACHE_BUST = '?v=4class-20251218'
+const MODEL_PATH = `/radiology-span.onnx${CACHE_BUST}`
+const VOCAB_PATH = `/radiology-vocab.json${CACHE_BUST}`
 
 /**
  * Initialize the radiology model
@@ -74,6 +88,11 @@ export async function initRadiologyModel(): Promise<void> {
         console.log(`[Radiology] Labels loaded: ${labelList.join(', ')}`)
       } else {
         labelList = DEFAULT_LABELS
+      }
+
+      const maybeThreshold = (vocab as any)?.threshold
+      if (typeof maybeThreshold === 'number' && Number.isFinite(maybeThreshold)) {
+        modelThreshold = maybeThreshold
       }
       
       // Configure ONNX Runtime
@@ -236,6 +255,7 @@ function trimSpanToQ6(text: string, start: number, end: number): { start: number
 function chainMergeSpans(
   tokens: string[],
   predictions: number[],
+  confidences: number[],
   starts: number[],
   ends: number[],
   text: string,
@@ -258,7 +278,7 @@ function chainMergeSpans(
     const entityType = collapseAll ? 'RADIOLOGY' : (labelList[pred] ?? 'RADIOLOGY')
     let chainStart = starts[i]
     let chainEnd = ends[i]
-    let totalConfidence = 1
+    let totalConfidence = Math.max(0, confidences[i] ?? 0)
     let tokenCount = 1
     let consecutiveOs = 0
     
@@ -281,14 +301,14 @@ function chainMergeSpans(
       } else if (collapseAll) {
         // Any positive label extends the Radiology chain
         chainEnd = ends[i]
-        totalConfidence++
+        totalConfidence += Math.max(0, confidences[i] ?? 0)
         tokenCount++
         consecutiveOs = 0
         i++
       } else if ((labelList[nextPred] ?? 'RADIOLOGY') === entityType) {
         // Same entity type - extend chain and reset gap counter
         chainEnd = ends[i]
-        totalConfidence++
+        totalConfidence += Math.max(0, confidences[i] ?? 0)
         tokenCount++
         consecutiveOs = 0
         i++
@@ -306,7 +326,7 @@ function chainMergeSpans(
       text: text.slice(expanded.start, expanded.end).trim(),
       start: expanded.start,
       end: expanded.end,
-      confidence: totalConfidence / tokenCount
+      confidence: tokenCount > 0 ? totalConfidence / tokenCount : 0
     })
   }
   
@@ -353,7 +373,10 @@ function mergeAdjacentSpans(entities: RadiologyEntity[], text: string, maxCharGa
 /**
  * Extract entities from text using the model
  */
-export async function extractRadiologyEntities(text: string): Promise<RadiologyEntity[]> {
+export async function extractRadiologyEntities(
+  text: string,
+  config: RadiologyInferenceConfig = {}
+): Promise<RadiologyEntity[]> {
   await initRadiologyModel()
   
   if (!session || !vocab) {
@@ -382,8 +405,13 @@ export async function extractRadiologyEntities(text: string): Promise<RadiologyE
     }
   }
 
-  // Get predictions for each token
+  const threshold = typeof config.threshold === 'number'
+    ? config.threshold
+    : (modelThreshold ?? 0)
+
+  // Get predictions and confidences for each token
   const predictions: number[] = []
+  const confidences: number[] = []
   for (let i = 0; i < tokens.length; i++) {
     const logitSlice = Array.from({ length: numLabels }, (_, j) => logits[i * numLabels + j])
     const probs = softmax(logitSlice)
@@ -392,17 +420,30 @@ export async function extractRadiologyEntities(text: string): Promise<RadiologyE
     for (let j = 1; j < numLabels; j++) {
       if (probs[j] > probs[maxIdx]) maxIdx = j
     }
-    predictions.push(maxIdx)
+    const maxProb = probs[maxIdx] ?? 0
+    const useIdx = maxIdx !== 0 && threshold > 0 && maxProb < threshold ? 0 : maxIdx
+    predictions.push(useIdx)
+    confidences.push(maxProb)
   }
   
   // Step 1: Chain merge with gap tolerance (bridges small O gaps)
-  const chainMerged = chainMergeSpans(tokens, predictions, starts, ends, text, 6, COLLAPSE_ALL_POSITIVE)
+  const chainMerged = chainMergeSpans(
+    tokens,
+    predictions,
+    confidences,
+    starts,
+    ends,
+    text,
+    config.gapTolerance ?? 6,
+    config.collapseAll ?? COLLAPSE_ALL_POSITIVE
+  )
   
   // Step 2: Merge adjacent spans (when collapsed this will merge across minor gaps)
-  const maxCharGap = COLLAPSE_ALL_POSITIVE ? 120 : 30
-  const fullyMerged = mergeAdjacentSpans(chainMerged, text, maxCharGap)
+  const maxCharGap = (config.collapseAll ?? COLLAPSE_ALL_POSITIVE) ? 120 : 30
+  const mergeGap = config.maxCharGap ?? maxCharGap
+  const fullyMerged = mergeAdjacentSpans(chainMerged, text, mergeGap)
 
-  if (COLLAPSE_ALL_POSITIVE) {
+  if (config.collapseAll ?? COLLAPSE_ALL_POSITIVE) {
     const expanded = fullyMerged.map(ent => {
       const ex = expandToSentenceBoundaries(text, ent.start, ent.end)
       return {

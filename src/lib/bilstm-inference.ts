@@ -10,12 +10,14 @@ import type { FormatExplanation, TokenExplanation, SectionType, LineType } from 
 
 // Model and vocab will be loaded once
 let session: ort.InferenceSession | null = null
-let vocab: { stoi: Record<string, number>; itos: string[]; pad_idx: number; unk_idx: number } | null = null
+// v2 vocab format: simple token -> id dict
+let vocab: Record<string, number> | null = null
 let loadPromise: Promise<void> | null = null
 let loadError: string | null = null
 
-const MODEL_PATH = '/bilstm-formatter.onnx'
-const VOCAB_PATH = '/bilstm-vocab.json'
+// v2 model: multi-task (structure + break)
+const MODEL_PATH = '/bilstm-formatter-v2.onnx'
+const VOCAB_PATH = '/bilstm-vocab-v2.json'
 
 /**
  * Initialize the ONNX model and vocabulary
@@ -31,10 +33,11 @@ export async function initModel(): Promise<void> {
       console.log('[BiLSTM] Loading model...')
       
       // Load vocabulary first (it's smaller and faster)
+      // v2 format: simple token -> id dict
       const vocabResponse = await fetch(VOCAB_PATH)
       if (!vocabResponse.ok) throw new Error(`Failed to load vocab: ${vocabResponse.status}`)
       vocab = await vocabResponse.json()
-      console.log(`[BiLSTM] Vocab loaded: ${vocab!.itos.length} tokens`)
+      console.log(`[BiLSTM] Vocab loaded: ${Object.keys(vocab!).length} tokens`)
       
       // Configure ONNX Runtime
       // Point to node_modules during dev, public folder in production
@@ -80,10 +83,12 @@ export function isModelLoaded(): boolean {
 
 /**
  * Encode tokens to IDs using vocabulary
+ * v2: vocab is simple dict, <UNK> is at index 1
  */
 function encodeTokens(tokens: string[]): number[] {
   if (!vocab) throw new Error('Vocab not loaded')
-  return tokens.map(t => vocab!.stoi[t] ?? vocab!.unk_idx)
+  const unkIdx = vocab['<UNK>'] ?? 1
+  return tokens.map(t => vocab![t.toLowerCase()] ?? unkIdx)
 }
 
 /**
@@ -219,17 +224,21 @@ export async function formatWithModel(rawText: string): Promise<{
   // Create tensor - use int64 (BigInt64Array)
   const inputTensor = new ort.Tensor('int64', BigInt64Array.from(inputIds.map(BigInt)), [1, inputIds.length])
   
-  // Run inference
+  // Run inference - v2 model has 2 outputs: structure (11 classes) and break (3 classes)
   const results = await session.run({ input_ids: inputTensor })
-  const logits = results.logits.data as Float32Array
   
-  // Process outputs: logits shape is [1, seq_len, 3]
+  // v2 model outputs: 'structure' and 'break'
+  const breakLogits = results.break?.data as Float32Array || results.logits?.data as Float32Array
+  const structureLogits = results.structure?.data as Float32Array || null
+  
+  // Process outputs: break shape is [1, seq_len, 3]
   const seqLen = tokens.length
   const predictions: number[] = []
   const confidences: number[] = []
   const explanations: TokenExplanation[] = []
   
   const LABEL_NAMES: ('space' | 'newline' | 'blank_line')[] = ['space', 'newline', 'blank_line']
+  const STRUCTURE_NAMES = ['narrative', 'major_header', 'minor_header', 'list_item', 'vital', 'lab', 'signature', 'separator', 'metadata', 'fixed_text', 'misspelled']
   
   // Track current section and line context
   let currentSection: SectionType = 'NONE'
@@ -239,11 +248,24 @@ export async function formatWithModel(rawText: string): Promise<{
   let listItemCount = 0
   
   for (let i = 0; i < seqLen; i++) {
+    // Get break logits (3 classes)
     const logitSlice = [
-      logits[i * 3],
-      logits[i * 3 + 1],
-      logits[i * 3 + 2]
+      breakLogits[i * 3],
+      breakLogits[i * 3 + 1],
+      breakLogits[i * 3 + 2]
     ]
+    
+    // Get structure prediction if available (11 classes)
+    let structurePred = 0 // default: narrative
+    if (structureLogits) {
+      let maxStructIdx = 0
+      for (let j = 1; j < 11; j++) {
+        if (structureLogits[i * 11 + j] > structureLogits[i * 11 + maxStructIdx]) {
+          maxStructIdx = j
+        }
+      }
+      structurePred = maxStructIdx
+    }
     
     // Get prediction (argmax)
     let maxIdx = 0
@@ -307,6 +329,9 @@ export async function formatWithModel(rawText: string): Promise<{
     const sortedProbs = [...probs].sort((a, b) => b - a)
     const isAmbiguous = sortedProbs[1] >= sortedProbs[0] * 0.8 // 2nd best within 20%
     
+    // Use model's structure prediction if available, otherwise use heuristic
+    const modelStructure = structureLogits ? STRUCTURE_NAMES[structurePred] : null
+    
     explanations.push({
       token,
       decision,
@@ -321,7 +346,8 @@ export async function formatWithModel(rawText: string): Promise<{
       ambiguous: isAmbiguous,
       lineType: isAtLineStart ? lineType : 'NARRATIVE',
       section: currentSection,
-      isLineStart: isAtLineStart
+      isLineStart: isAtLineStart,
+      modelStructure // v2: model's structure prediction
     })
     
     // Update line start tracking
